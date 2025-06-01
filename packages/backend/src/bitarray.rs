@@ -87,6 +87,13 @@ impl BitArray {
     pub fn new() -> Self {
         Default::default()
     }
+    pub fn floating(len: u8) -> Self {
+        Self {
+            data: 0,
+            spec: u64::MAX,
+            len: len.min(64)
+        }
+    }
     pub fn len(&self) -> u8 {
         self.len.min(64)
     }
