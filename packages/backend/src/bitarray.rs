@@ -1,29 +1,42 @@
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BitState {
-    Low, High, Imped, Err
+    Low = 0b00, High = 0b01, Imped = 0b10, Unk = 0b11
 }
-
 impl BitState {
-    pub fn try_as_bool(self) -> Option<bool> {
-        let (data, spec) = self.split();
-        (!spec).then_some(data)
-    }
-
     fn split(self) -> (bool /* data */, bool /* spec */) {
-        match self {
-            BitState::Low   => (false, false),
-            BitState::High  => (true,  false),
-            BitState::Imped => (false, true),
-            BitState::Err   => (true,  true),
-        }
+        ((self as u8) & 0b01 != 0, (self as u8) & 0b10 != 0)
     }
     fn join(data: bool, spec: bool) -> Self {
         match (data, spec) {
             (false, false) => BitState::Low,
             (true,  false) => BitState::High,
             (false, true)  => BitState::Imped,
-            (true,  true)  => BitState::Err,
+            (true,  true)  => BitState::Unk,
+        }
+    }
+}
+impl std::fmt::Display for BitState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write;
+        match self {
+            BitState::Low   => f.write_char('0'),
+            BitState::High  => f.write_char('1'),
+            BitState::Imped => f.write_char('Z'),
+            BitState::Unk   => f.write_char('X'),
+        }
+    }
+}
+
+pub struct NotTwoValuedErr(());
+impl TryFrom<BitState> for bool {
+    type Error = NotTwoValuedErr;
+
+    fn try_from(value: BitState) -> Result<Self, Self::Error> {
+        match value {
+            BitState::Low   => Ok(false),
+            BitState::High  => Ok(true),
+            BitState::Imped => Err(NotTwoValuedErr(())),
+            BitState::Unk   => Err(NotTwoValuedErr(())),
         }
     }
 }
@@ -35,13 +48,19 @@ impl From<bool> for BitState {
         }
     }
 }
+
 impl std::ops::BitAnd for BitState {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        match self.try_as_bool().zip(rhs.try_as_bool()) {
-            Some((a, b)) => Self::from(a & b),
-            None => Self::Err,
+        // Identities:
+        // F & a = F
+        // T & a = a
+        // X, o.w.
+        match (self, rhs) {
+            (BitState::Low, _) | (_, BitState::Low) => BitState::Low,
+            (BitState::High, a) | (a, BitState::High) => a,
+            _ => BitState::Unk
         }
     }
 }
@@ -49,9 +68,14 @@ impl std::ops::BitOr for BitState {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        match self.try_as_bool().zip(rhs.try_as_bool()) {
-            Some((a, b)) => Self::from(a | b),
-            None => Self::Err,
+        // Identities:
+        // F & a = a
+        // T & a = T
+        // X, o.w.
+        match (self, rhs) {
+            (BitState::Low, a) | (a, BitState::Low) => a,
+            (BitState::High, _) | (_, BitState::High) => BitState::High,
+            _ => BitState::Unk
         }
     }
 }
@@ -59,9 +83,9 @@ impl std::ops::BitXor for BitState {
     type Output = Self;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        match self.try_as_bool().zip(rhs.try_as_bool()) {
+        match Option::zip(bool::try_from(self).ok(), bool::try_from(rhs).ok()) {
             Some((a, b)) => Self::from(a ^ b),
-            None => Self::Err,
+            None => Self::Unk,
         }
     }
 }
@@ -72,7 +96,7 @@ impl std::ops::Not for BitState {
         match self {
             BitState::High  => Self::Low,
             BitState::Low   => Self::High,
-            _               => Self::Err,
+            _               => Self::Unk,
         }
     }
 }
