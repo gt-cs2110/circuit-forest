@@ -141,8 +141,11 @@ impl BitArray {
     pub(crate) fn to_u64(&self) -> u64 {
         self.data
     }
-    fn normalize(&self) -> (u64, u64) {
-        let mask = 1u64.wrapping_shl(u32::from(self.len())).wrapping_sub(1);
+    pub (crate) fn normalize(&self) -> (u64, u64) {
+        let mask = match self.len() {
+            len @ 0..64 => (1 << len) - 1,
+            _ => u64::MAX
+        };
         (self.data & mask, self.spec & mask)
     }
 
