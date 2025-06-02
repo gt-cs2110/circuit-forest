@@ -1,10 +1,13 @@
 
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use bitarray::BitArray;
-use node::{Node, NodeFnType};
+use node::{Component, Node, NodeFnType, PortTrigger};
 use petgraph::csr::DefaultIx;
 use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Direction, Graph};
 
 pub mod bitarray;
@@ -15,10 +18,17 @@ type CircuitIndex = DefaultIx;
 #[derive(Default)]
 struct Circuit {
     graph: Graph<Node, Edge, Directed, CircuitIndex>,
+    state: TransientState
 }
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Default)]
+struct TransientState {
+    triggers: HashMap<ValueIx, BitArray>,
+    frontier: HashSet<FunctionIx>
+}
+
+#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Debug)]
 pub struct ValueIx(NodeIndex<CircuitIndex>);
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Debug)]
 pub struct FunctionIx(NodeIndex<CircuitIndex>);
 
 impl Circuit {
@@ -32,9 +42,11 @@ impl Circuit {
         FunctionIx(self.graph.add_node(Node::Function(f)))
     }
     fn inputs(&self) -> impl Iterator<Item=ValueIx> {
+        // TODO: this consumes all orphan nodes, include FunctionIx nodes
         self.graph.externals(Direction::Incoming).map(ValueIx)
     }
     fn outputs(&self) -> impl Iterator<Item=ValueIx> {
+        // TODO: this consumes all orphan nodes, include FunctionIx nodes
         self.graph.externals(Direction::Outgoing).map(ValueIx)
     }
 
@@ -66,7 +78,48 @@ impl Circuit {
             .collect()
     }
     fn run(&mut self) {
-        // TODO
+        self.state.triggers.extend(self.inputs()
+            .map(|node| (node, self[node].clone()))
+            .collect::<Vec<_>>());
+        self.state.frontier.clear();
+
+        while !self.state.triggers.is_empty() || !self.state.frontier.is_empty() {
+            // 1. Update circuit state at start of cycle, save functions to waken in frontier
+            for (node, value) in std::mem::take(&mut self.state.triggers) {
+                self[node] = value;
+                self.state.frontier.extend({
+                    self.graph.neighbors(node.0).map(FunctionIx)
+                });
+            }
+            // 2. For all functions to waken, apply function and save triggers for next cycle
+            for node in std::mem::take(&mut self.state.frontier) {
+                let mut nodes: Vec<_> = self.graph.edges_directed(node.0, Direction::Incoming)
+                    .map(|e| (ValueIx(e.source()), *e.weight()))
+                    .collect();
+                nodes.sort_by_key(|&(_, i)| i);
+                let inputs: Vec<_> = nodes.into_iter()
+                    .map(|(i, _)| self[i].clone())
+                    .collect();
+                
+                for PortTrigger { port, value } in self[node].run(&inputs) {
+                    // todo: optimize
+                    let val_node = self.graph.edges(node.0)
+                        .find(|e| *e.weight() == port)
+                        .map(|e| ValueIx(e.target()))
+                        .unwrap();
+                    
+                    // Don't trigger if value didn't change
+                    // todo: this could be put in the trigger logic
+                    if self[val_node] != value {
+                        match self.state.triggers.entry(val_node) {
+                            Entry::Occupied(e) if e.get() == &value => {},
+                            Entry::Occupied(_) => todo!("short circuit"),
+                            Entry::Vacant(e) => { e.insert(value); },
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 type Edge = usize; // port
@@ -129,7 +182,7 @@ mod tests {
 
         let left = a ^ b;
         let right = circuit.get_outputs()[0].to_u64();
-        assert_eq!(left, right, "0x{left:16X} != 0x{right:16X}");
+        assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
     }
 
     #[test]
@@ -158,6 +211,27 @@ mod tests {
 
         let left = a ^ b ^ c ^ d;
         let right = circuit.get_outputs()[0].to_u64();
-        assert_eq!(left, right, "0x{left:16X} != 0x{right:16X}");
+        assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
+    }
+
+    #[test]
+    fn metastable() {
+        let mut circuit = Circuit::new();
+        let a = 0x98A85409_19182A9F;
+        let nodes = (
+            circuit.add_value_node(BitArray::from_u64(a)),
+            circuit.add_value_node(BitArray::floating(64)),
+            circuit.add_function_node(NodeFnType::Not),
+            circuit.add_function_node(NodeFnType::Not),
+        );
+        circuit.connect(nodes.2, &[nodes.0], &[nodes.1]);
+        circuit.connect(nodes.3, &[nodes.1], &[nodes.0]);
+        circuit.state.triggers.insert(nodes.0, circuit[nodes.0].clone());
+        circuit.run();
+
+        let (l1, r1) = (a, circuit[nodes.0].to_u64());
+        let (l2, r2) = (!a, circuit[nodes.1].to_u64());
+        assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
+        assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
     }
 }
