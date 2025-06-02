@@ -3,16 +3,11 @@ pub enum BitState {
     Low = 0b00, High = 0b01, Imped = 0b10, Unk = 0b11
 }
 impl BitState {
-    fn split(self) -> (bool /* data */, bool /* spec */) {
+    pub(crate) fn split(self) -> (bool /* data */, bool /* spec */) {
         ((self as u8) & 0b01 != 0, (self as u8) & 0b10 != 0)
     }
-    fn join(data: bool, spec: bool) -> Self {
-        match (data, spec) {
-            (false, false) => BitState::Low,
-            (true,  false) => BitState::High,
-            (false, true)  => BitState::Imped,
-            (true,  true)  => BitState::Unk,
-        }
+    pub(crate) fn join(data: bool, spec: bool) -> Self {
+        Self::try_from((u8::from(spec) << 1) | u8::from(data)).unwrap()
     }
 }
 impl std::fmt::Display for BitState {
@@ -48,17 +43,31 @@ impl From<bool> for BitState {
         }
     }
 }
+impl TryFrom<u8> for BitState {
+    type Error = ();
 
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0b00 => Ok(BitState::Low),
+            0b01 => Ok(BitState::High),
+            0b10 => Ok(BitState::Imped),
+            0b11 => Ok(BitState::Unk),
+            _ => Err(())
+        }
+    }
+}
 impl std::ops::BitAnd for BitState {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
         // Identities:
         // F & a = F
+        // T & Z = X
         // T & a = a
         // X, o.w.
         match (self, rhs) {
             (BitState::Low, _) | (_, BitState::Low) => BitState::Low,
+            (BitState::High, BitState::Imped) | (BitState::Imped, BitState::High) => BitState::Unk,
             (BitState::High, a) | (a, BitState::High) => a,
             _ => BitState::Unk
         }
@@ -69,10 +78,12 @@ impl std::ops::BitOr for BitState {
 
     fn bitor(self, rhs: Self) -> Self::Output {
         // Identities:
+        // F & Z = X
         // F & a = a
         // T & a = T
         // X, o.w.
         match (self, rhs) {
+            (BitState::Low, BitState::Imped) | (BitState::Imped, BitState::Low) => BitState::Unk,
             (BitState::Low, a) | (a, BitState::Low) => a,
             (BitState::High, _) | (_, BitState::High) => BitState::High,
             _ => BitState::Unk
@@ -142,28 +153,43 @@ impl BitArray {
             BitState::join(data, spec)
         })
     }
+    fn set_raw(&mut self, i: u8, st: BitState) {
+        let (data, spec) = st.split();
+        self.data &= !(1 << i);
+        self.data |= u64::from(data) << i;
+        self.spec &= !(1 << i);
+        self.spec |= u64::from(spec) << i;
+    }
+    pub fn set(&mut self, i: u8, st: BitState) {
+        if i < self.len() {
+            self.set_raw(i, st);
+        }
+    }
+    pub fn push(&mut self, st: BitState) {
+        if let len @ ..64 = self.len() {
+            self.set_raw(len, st);
+            self.len += 1;
+        }
+    }
     pub fn pop(&mut self) -> Option<BitState> {
-        if !self.is_empty() {
+        (!self.is_empty()).then(|| {
             self.len -= 1;
             let data = self.data & 1 != 0;
             let spec = self.spec & 1 != 0;
             self.data >>= 1;
             self.spec >>= 1;
-            Some(BitState::join(data, spec))
-        } else {
-            None
-        }
+            BitState::join(data, spec)
+        })
     }
 }
 impl FromIterator<BitState> for BitArray {
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
-        let (len, data, spec) = iter.into_iter()
-            .map(BitState::split)
-            .fold((0, 0, 0), |(l, data, spec), (d, s)| {
-                (l + 1, data | (u64::from(d) << l), spec | (u64::from(s) << l))
-            });
-        
-        Self { len, data, spec }
+        iter.into_iter()
+            .take(64)
+            .fold(BitArray::new(), |mut arr, st| {
+                arr.push(st);
+                arr
+            })
     }
 }
 
@@ -174,6 +200,10 @@ impl Iterator for BitArrayIntoIter {
     fn next(&mut self) -> Option<Self::Item> {
         self.0.pop()
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
 }
 impl IntoIterator for BitArray {
     type Item = <Self::IntoIter as Iterator>::Item;
@@ -183,10 +213,15 @@ impl IntoIterator for BitArray {
         BitArrayIntoIter(self)
     }
 }
+impl ExactSizeIterator for BitArrayIntoIter {
+    fn len(&self) -> usize {
+        usize::from(self.0.len())
+    }
+}
 
 impl PartialEq for BitArray {
     fn eq(&self, other: &Self) -> bool {
-        self.normalize() == other.normalize()
+        self.normalize() == other.normalize() && self.len() == other.len()
     }
 }
 impl Eq for BitArray {}
@@ -211,9 +246,18 @@ impl std::ops::BitAnd for BitArray {
     type Output = Self;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        let spec = self.spec | rhs.spec;
-        let data = spec | (self.data & rhs.data);
-        let len = self.len;
+        // __ | 00 | 01 | 10 | 11
+        // 00 | 00 | 00 | 00 | 00
+        // 01 | 00 | 01 | 11 | 11
+        // 10 | 00 | 11 | 11 | 11
+        // 11 | 00 | 11 | 11 | 11
+
+        let any_false = (!self.data & !self.spec) | (!rhs.data & !rhs.spec);
+        let all_true = (self.data & !self.spec) & (rhs.data & !rhs.spec);
+
+        let data = !any_false;
+        let spec = !any_false & !all_true;
+        let len = self.len();
         Self { spec, data, len }
     }
 }
@@ -221,8 +265,17 @@ impl std::ops::BitOr for BitArray {
     type Output = Self;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        let spec = self.spec | rhs.spec;
-        let data = spec | (self.data | rhs.data);
+        // __ | 00 | 01 | 10 | 11
+        // 00 | 00 | 01 | 11 | 11
+        // 01 | 01 | 01 | 01 | 01
+        // 10 | 11 | 01 | 11 | 11
+        // 11 | 11 | 01 | 11 | 11
+
+        let any_true = (self.data & !self.spec) | (rhs.data & !rhs.spec);
+        let all_false = (!self.data & !self.spec) & (!rhs.data & !rhs.spec);
+
+        let data = !all_false;
+        let spec = !all_false & !any_true;
         let len = self.len;
         Self { spec, data, len }
     }
@@ -231,8 +284,15 @@ impl std::ops::BitXor for BitArray {
     type Output = Self;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        let spec = self.spec | rhs.spec;
-        let data = spec | (self.data ^ rhs.data);
+        // __ | 00 | 01 | 10 | 11
+        // 00 | 00 | 01 | 11 | 11
+        // 01 | 01 | 00 | 11 | 11
+        // 10 | 11 | 11 | 11 | 11
+        // 11 | 11 | 11 | 11 | 11
+        let any_ntv = self.spec | rhs.spec;
+
+        let data = any_ntv | (self.data ^ rhs.data);
+        let spec = any_ntv | (self.spec ^ rhs.spec);
         let len = self.len;
         Self { spec, data, len }
     }
@@ -241,8 +301,12 @@ impl std::ops::Not for BitArray {
     type Output = Self;
 
     fn not(self) -> Self::Output {
+        // 00 | 01
+        // 01 | 00
+        // 10 | 11
+        // 11 | 11
         let spec = self.spec;
-        let data = spec | !self.data;
+        let data = self.spec | !self.data;
         let len = self.len;
         Self { spec, data, len }
     }
