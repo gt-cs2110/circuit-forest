@@ -18,7 +18,7 @@ type CircuitIndex = DefaultIx;
 #[derive(Default)]
 struct Circuit {
     graph: Graph<Node, Edge, Directed, CircuitIndex>,
-    state: TransientState
+    transient: TransientState
 }
 #[derive(Default)]
 struct TransientState {
@@ -78,21 +78,21 @@ impl Circuit {
             .collect()
     }
     fn run(&mut self) {
-        self.state.triggers.extend(self.inputs()
+        self.transient.triggers.extend(self.inputs()
             .map(|node| (node, self[node].clone()))
             .collect::<Vec<_>>());
-        self.state.frontier.clear();
+        self.transient.frontier.clear();
 
-        while !self.state.triggers.is_empty() || !self.state.frontier.is_empty() {
+        while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, value) in std::mem::take(&mut self.state.triggers) {
+            for (node, value) in std::mem::take(&mut self.transient.triggers) {
                 self[node] = value;
-                self.state.frontier.extend({
+                self.transient.frontier.extend({
                     self.graph.neighbors(node.0).map(FunctionIx)
                 });
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
-            for node in std::mem::take(&mut self.state.frontier) {
+            for node in std::mem::take(&mut self.transient.frontier) {
                 let mut nodes: Vec<_> = self.graph.edges_directed(node.0, Direction::Incoming)
                     .map(|e| (ValueIx(e.source()), *e.weight()))
                     .collect();
@@ -111,7 +111,7 @@ impl Circuit {
                     // Don't trigger if value didn't change
                     // todo: this could be put in the trigger logic
                     if self[val_node] != value {
-                        match self.state.triggers.entry(val_node) {
+                        match self.transient.triggers.entry(val_node) {
                             Entry::Occupied(e) if e.get() == &value => {},
                             Entry::Occupied(_) => todo!("short circuit"),
                             Entry::Vacant(e) => { e.insert(value); },
@@ -234,7 +234,7 @@ mod tests {
 
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
         circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
-        circuit.state.triggers.insert(wires[0], circuit[wires[0]].clone());
+        circuit.transient.triggers.insert(wires[0], circuit[wires[0]].clone());
         circuit.run();
 
         let (l1, r1) = (a, circuit[wires[0]].to_u64());
