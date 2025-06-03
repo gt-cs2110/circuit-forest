@@ -170,14 +170,15 @@ mod tests {
         let mut circuit = Circuit::new();
         let a = 0x9A3B2174_94093211;
         let b = 0x19182934_19AFFC94;
-        let nodes = (
+
+        let wires = [
             circuit.add_value_node(BitArray::from_u64(a)),
             circuit.add_value_node(BitArray::from_u64(b)),
-            circuit.add_function_node(NodeFnType::Xor),
             circuit.add_value_node(BitArray::floating(64)),
-        );
+        ];
+        let gates = [circuit.add_function_node(NodeFnType::Xor)];
 
-        circuit.connect(nodes.2, &[nodes.0, nodes.1], &[nodes.3]);
+        circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[2]]);
         circuit.run();
 
         let left = a ^ b;
@@ -192,21 +193,24 @@ mod tests {
         let b = 0x19182934_19AFFC94;
         let c = 0x92821734_182A9A9A;
         let d = 0xA8293129_FC03919D;
-        let nodes = (
+
+        let wires = [
             circuit.add_value_node(BitArray::from_u64(a)),
             circuit.add_value_node(BitArray::from_u64(b)),
             circuit.add_value_node(BitArray::from_u64(c)),
             circuit.add_value_node(BitArray::from_u64(d)),
-            circuit.add_function_node(NodeFnType::Xor),
-            circuit.add_function_node(NodeFnType::Xor),
-            circuit.add_function_node(NodeFnType::Xor),
             circuit.add_value_node(BitArray::floating(64)),
             circuit.add_value_node(BitArray::floating(64)),
             circuit.add_value_node(BitArray::floating(64)),
-        );
-        circuit.connect(nodes.4, &[nodes.0, nodes.1], &[nodes.7]);
-        circuit.connect(nodes.5, &[nodes.2, nodes.3], &[nodes.8]);
-        circuit.connect(nodes.6, &[nodes.7, nodes.8], &[nodes.9]);
+        ];
+        let gates = [
+            circuit.add_function_node(NodeFnType::Xor),
+            circuit.add_function_node(NodeFnType::Xor),
+            circuit.add_function_node(NodeFnType::Xor),
+        ];
+        circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[4]]);
+        circuit.connect(gates[1], &[wires[2], wires[3]], &[wires[5]]);
+        circuit.connect(gates[2], &[wires[4], wires[5]], &[wires[6]]);
         circuit.run();
 
         let left = a ^ b ^ c ^ d;
@@ -218,19 +222,23 @@ mod tests {
     fn metastable() {
         let mut circuit = Circuit::new();
         let a = 0x98A85409_19182A9F;
-        let nodes = (
+
+        let wires = [
             circuit.add_value_node(BitArray::from_u64(a)),
             circuit.add_value_node(BitArray::floating(64)),
+        ];
+        let gates = [
             circuit.add_function_node(NodeFnType::Not),
             circuit.add_function_node(NodeFnType::Not),
-        );
-        circuit.connect(nodes.2, &[nodes.0], &[nodes.1]);
-        circuit.connect(nodes.3, &[nodes.1], &[nodes.0]);
-        circuit.state.triggers.insert(nodes.0, circuit[nodes.0].clone());
+        ];
+
+        circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
+        circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
+        circuit.state.triggers.insert(wires[0], circuit[wires[0]].clone());
         circuit.run();
 
-        let (l1, r1) = (a, circuit[nodes.0].to_u64());
-        let (l2, r2) = (!a, circuit[nodes.1].to_u64());
+        let (l1, r1) = (a, circuit[wires[0]].to_u64());
+        let (l2, r2) = (!a, circuit[wires[1]].to_u64());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
         assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
     }
