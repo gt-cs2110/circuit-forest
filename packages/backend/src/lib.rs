@@ -182,7 +182,7 @@ mod tests {
         circuit.run();
 
         let left = a ^ b;
-        let right = circuit.get_outputs()[0].to_u64();
+        let right = circuit.get_outputs()[0].to_u64().unwrap();
         assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
     }
 
@@ -214,7 +214,7 @@ mod tests {
         circuit.run();
 
         let left = a ^ b ^ c ^ d;
-        let right = circuit.get_outputs()[0].to_u64();
+        let right = circuit.get_outputs()[0].to_u64().unwrap();
         assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
     }
 
@@ -237,8 +237,8 @@ mod tests {
         circuit.transient.triggers.insert(wires[0], circuit[wires[0]].clone());
         circuit.run();
 
-        let (l1, r1) = (a, circuit[wires[0]].to_u64());
-        let (l2, r2) = (!a, circuit[wires[1]].to_u64());
+        let (l1, r1) = (a, circuit[wires[0]].to_u64().unwrap());
+        let (l2, r2) = (!a, circuit[wires[1]].to_u64().unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
         assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
     }

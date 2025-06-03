@@ -1,5 +1,4 @@
-use crate::bitarray::BitArray;
-use Sensitivity::*;
+use crate::bitarray::{BitArray, BitState};
 
 pub struct PortTrigger {
     pub port: usize,
@@ -9,10 +8,17 @@ impl PortTrigger {
     pub fn new(port: usize, value: BitArray) -> Self {
         Self { port, value }
     }
+    fn seq(n: impl IntoIterator<Item=BitArray>) -> Vec<Self> {
+        Self::seq_opt(n.into_iter().map(Some))
+    }
+    fn seq_opt(n: impl IntoIterator<Item=Option<BitArray>>) -> Vec<Self> {
+        n.into_iter()
+            .enumerate()
+            .filter_map(|(port, v)| Some(PortTrigger { port, value: v? }))
+            .collect()
+    }
 }
 pub trait Component {
-    fn num_inputs(&self) -> usize;
-    fn num_outputs(&self) -> usize;
     #[must_use]
     fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger>;
 }
@@ -21,59 +27,73 @@ pub trait Component {
 pub enum Sensitivity {
     Anyedge, Posedge, Negedge, DontCare
 }
-fn on_update<I, F, const N: usize>(inp: &[BitArray], sensitivities: [Sensitivity; N], apply: F) -> Vec<PortTrigger>
-    where 
-        I: IntoIterator<Item=PortTrigger>,
-        F: FnOnce([BitArray; N]) -> I
-{
-    // TODO: use sensitivities arg
-    if true {
-        let inp_arr = <&[_; N]>::try_from(inp).unwrap().clone();
-        apply(inp_arr).into_iter().collect()
-    } else {
-        vec![]
-    }
-}
 pub enum Node {
     Value(BitArray),
     Function(NodeFnType)
 }
 pub enum NodeFnType {
-    And, Or, Xor, Nand, Nor, Xnor, Not
+    Transistor, Splitter,
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
+    Mux, Decoder
 }
 impl Component for NodeFnType {
-    fn num_inputs(&self) -> usize {
-        match self {
-            NodeFnType::And  => 2,
-            NodeFnType::Or   => 2,
-            NodeFnType::Xor  => 2,
-            NodeFnType::Nand => 2,
-            NodeFnType::Nor  => 2,
-            NodeFnType::Xnor => 2,
-            NodeFnType::Not  => 1,
-        }
-    }
-    fn num_outputs(&self) -> usize {
-        match self {
-            NodeFnType::And  => 1,
-            NodeFnType::Or   => 1,
-            NodeFnType::Xor  => 1,
-            NodeFnType::Nand => 1,
-            NodeFnType::Nor  => 1,
-            NodeFnType::Xnor => 1,
-            NodeFnType::Not  => 1,
-        }
-    }
-
     fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
+        fn reduce(inp: &[BitArray], bitsize: u8, f: impl FnMut(BitArray, BitArray) -> BitArray) -> BitArray {
+            inp.iter()
+                .cloned()
+                .reduce(f)
+                .unwrap_or_else(|| BitArray::repeat(BitState::Unk, bitsize))
+        }
+        fn one(t: BitArray) -> Vec<PortTrigger> {
+            PortTrigger::seq([t])
+        }
+        // TODO: bitsize
+
         match self {
-            NodeFnType::And  => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, a & b)]),
-            NodeFnType::Or   => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, a | b)]),
-            NodeFnType::Xor  => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, a ^ b)]),
-            NodeFnType::Nand => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, !(a & b))]),
-            NodeFnType::Nor  => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, !(a | b))]),
-            NodeFnType::Xnor => on_update(inp, [Anyedge; 2], |[a, b]| [PortTrigger::new(0, !(a ^ b))]),
-            NodeFnType::Not  => on_update(inp, [Anyedge; 1], |[a]|    [PortTrigger::new(0, !a)]),
+            NodeFnType::Transistor => todo!(),
+            NodeFnType::Splitter => todo!(),
+
+            NodeFnType::And  => one(reduce(inp, 64, |a, b| a & b)),
+            NodeFnType::Or   => one(reduce(inp, 64, |a, b| a | b)),
+            NodeFnType::Xor  => one(reduce(inp, 64, |a, b| a ^ b)),
+            NodeFnType::Nand => one(reduce(inp, 64, |a, b| !(a & b))),
+            NodeFnType::Nor  => one(reduce(inp, 64, |a, b| !(a | b))),
+            NodeFnType::Xnor => one(reduce(inp, 64, |a, b| !(a ^ b))),
+            NodeFnType::Not  => one(!inp[0].clone()),
+            NodeFnType::TriState => {
+                let gate = inp[0].index(0);
+                let input = inp[1].clone();
+                let bitsize = input.len();
+
+                one(match gate {
+                    BitState::Low | BitState::Imped => BitArray::repeat(BitState::Imped, bitsize),
+                    BitState::High => input,
+                    BitState::Unk => BitArray::repeat(BitState::Unk, bitsize),
+                })
+            },
+
+            NodeFnType::Mux => {
+                let m_sel = inp[0].to_u64();
+                let bitsize = inp[1].len();
+                match m_sel {
+                    Ok(sel) => one(inp[sel as usize + 1].clone()),
+                    Err(e) => one(BitArray::repeat(e.bit_state(), bitsize)),
+                }
+            },
+            NodeFnType::Decoder => {
+                let m_sel = inp[0].to_u64();
+                let n_outputs = inp[0].len();
+
+                match m_sel {
+                    Ok(sel) => (0..n_outputs)
+                        .map(|i| (i, u64::from(i) == sel))
+                        .map(|(i, b)| PortTrigger { port: usize::from(i), value: BitArray::repeat(b.into(), 1) })
+                        .collect(),
+                    Err(e) => (0..n_outputs)
+                        .map(|i| PortTrigger { port: usize::from(i), value: BitArray::repeat(e.bit_state(), 1) })
+                        .collect(),
+                }
+            },
         }
     }
 }

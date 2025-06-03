@@ -22,7 +22,13 @@ impl std::fmt::Display for BitState {
     }
 }
 
-pub struct NotTwoValuedErr(());
+#[derive(Debug)]
+pub struct NotTwoValuedErr(BitState);
+impl NotTwoValuedErr {
+    pub fn is_imped(&self) -> bool { self.0 == BitState::Imped }
+    pub fn is_unk(&self) -> bool { self.0 == BitState::Unk }
+    pub fn bit_state(&self) -> BitState { self.0 }
+}
 impl TryFrom<BitState> for bool {
     type Error = NotTwoValuedErr;
 
@@ -30,8 +36,7 @@ impl TryFrom<BitState> for bool {
         match value {
             BitState::Low   => Ok(false),
             BitState::High  => Ok(true),
-            BitState::Imped => Err(NotTwoValuedErr(())),
-            BitState::Unk   => Err(NotTwoValuedErr(())),
+            st => Err(NotTwoValuedErr(st))
         }
     }
 }
@@ -142,10 +147,25 @@ impl BitArray {
     pub(crate) fn from_u64(data: u64) -> Self {
         Self { data, spec: 0, len: 64 }
     }
-    pub(crate) fn to_u64(&self) -> u64 {
-        self.data
+    pub fn to_u64(&self) -> Result<u64, NotTwoValuedErr> {
+        let (data, spec) = self.normalize();
+        match spec == 0 {
+            true => Ok(data),
+            false => {
+                let is_imped = self.clone()
+                    .into_iter()
+                    .all(|st| st == BitState::Imped);
+                let err_st = if is_imped {
+                    BitState::Imped
+                } else {
+                    BitState::Unk
+                };
+
+                Err(NotTwoValuedErr(err_st))
+            }
+        }
     }
-    pub (crate) fn normalize(&self) -> (u64, u64) {
+    pub(crate) fn normalize(&self) -> (u64, u64) {
         let mask = match self.len() {
             len @ 0..64 => (1 << len) - 1,
             _ => u64::MAX
@@ -187,6 +207,10 @@ impl BitArray {
             self.spec >>= 1;
             BitState::join(data, spec)
         })
+    }
+
+    pub fn index(&self, i: u8) -> BitState {
+        self.get(i).expect("index to be in bounds")
     }
 }
 impl FromIterator<BitState> for BitArray {
