@@ -122,12 +122,16 @@ impl BitArray {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn floating(len: u8) -> Self {
+    pub fn repeat(st: BitState, len: u8) -> Self {
+        let (data, spec) = st.split();
         Self {
-            data: 0,
-            spec: u64::MAX,
+            data: if data { u64::MAX } else { 0 },
+            spec: if spec { u64::MAX } else { 0 },
             len: len.min(64)
         }
+    }
+    pub fn floating(len: u8) -> Self {
+        Self::repeat(BitState::Imped, len)
     }
     pub fn len(&self) -> u8 {
         self.len.min(64)
