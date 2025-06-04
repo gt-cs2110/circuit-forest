@@ -162,12 +162,25 @@ impl BitArray {
             }
         }
     }
-    pub(crate) fn normalize(&self) -> (u64, u64) {
-        let mask = match self.len() {
+
+    fn norm_mask(&self) -> u64 {
+        match self.len() {
             len @ 0..64 => (1 << len) - 1,
             _ => u64::MAX
-        };
+        }
+    }
+    pub(crate) fn normalize(&self) -> (u64, u64) {
+        let mask = self.norm_mask();
         (self.data & mask, self.spec & mask)
+    }
+    pub(crate) fn all_low(&self) -> bool {
+        let (data, spec) = self.normalize();
+        data == 0 && spec == 0
+    }
+    pub(crate) fn all_high(&self) -> bool {
+        let mask = self.norm_mask();
+        let (data, spec) = self.normalize();
+        data == mask && spec == 0
     }
 
     pub fn get(&self, i: u8) -> Option<BitState> {

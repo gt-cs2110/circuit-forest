@@ -27,6 +27,25 @@ pub trait Component {
 pub enum Sensitivity {
     Anyedge, Posedge, Negedge, DontCare
 }
+impl Sensitivity {
+    pub fn activated(self, old: &BitArray, new: &BitArray) -> bool {
+        assert_eq!(old.len(), new.len(), "Bit length should be the same");
+        match self {
+            Sensitivity::Anyedge  => old != new,
+            Sensitivity::Posedge  => old.all_low() && new.all_high(),
+            Sensitivity::Negedge  => old.all_high() && new.all_low(),
+            Sensitivity::DontCare => false,
+        }
+    }
+}
+fn activated(old: &[BitArray], new: &[BitArray], sensitivities: &[Sensitivity]) -> bool {
+    assert_eq!(old.len(), new.len(), "Array size should be the same");
+    assert_eq!(old.len(), sensitivities.len(), "Array size should be the same");
+    old.iter()
+        .zip(new)
+        .zip(sensitivities)
+        .any(|((o, n), s)| s.activated(o, n))
+}
 pub enum Node {
     Value(BitArray),
     Function(NodeFnType)
