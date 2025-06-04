@@ -19,6 +19,8 @@ impl PortTrigger {
     }
 }
 pub trait Component {
+    fn inputs(&self) -> Vec<u8>;
+    fn outputs(&self) -> Vec<u8>;
     #[must_use]
     fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger>;
 }
@@ -56,6 +58,13 @@ pub enum NodeFnType {
     Mux, Decoder
 }
 impl Component for NodeFnType {
+    fn inputs(&self) -> Vec<u8> {
+        vec![64; 2]
+    }
+    fn outputs(&self) -> Vec<u8> {
+        vec![64; 1]
+    }
+
     fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
         fn reduce(inp: &[BitArray], bitsize: u8, f: impl FnMut(BitArray, BitArray) -> BitArray) -> BitArray {
             inp.iter()
@@ -114,5 +123,119 @@ impl Component for NodeFnType {
                 }
             },
         }
+    }
+}
+
+macro_rules! decl_component_enum {
+    ($ComponentEnum:ident: $($Component:ident),*$(,)?) => {
+        pub enum $ComponentEnum {
+            $($Component($Component)),*
+        }
+        impl Component for $ComponentEnum {
+            fn inputs(&self) -> Vec<u8> {
+                match self {
+                    $(
+                        Self::$Component(c) => c.inputs(),
+                    )*
+                }
+            }
+            fn outputs(&self) -> Vec<u8> {
+                match self {
+                    $(
+                        Self::$Component(c) => c.outputs(),
+                    )*
+                }
+            }
+            fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
+                match self {
+                    $(
+                        Self::$Component(c) => c.run(inp),
+                    )*
+                }
+            }
+        }
+    }
+}
+decl_component_enum!(NodeFn: And, Or, Xor, Nand, Nor, Xnor, Not, TriState);
+pub struct GateProperties {
+    bitsize: u8,
+    n_inputs: u8
+}
+
+macro_rules! gates {
+    ($($Id:ident: $f:expr),*$(,)?) => {
+        $(
+            pub struct $Id {
+                props: GateProperties
+            }
+            impl Component for $Id {
+                fn inputs(&self) -> Vec<u8> {
+                    vec![self.props.bitsize; usize::from(self.props.n_inputs)]
+                }
+                fn outputs(&self) -> Vec<u8> {
+                    vec![self.props.bitsize]
+                }
+                fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
+                    let value = inp.iter()
+                        .cloned()
+                        .reduce($f)
+                        .unwrap_or_else(|| BitArray::repeat(BitState::Unk, self.props.bitsize));
+    
+                    vec![PortTrigger { port: 0, value }]
+                }
+            }
+        )*
+    }
+}
+
+gates! {
+    And:  |a, b| a & b,
+    Or:   |a, b| a | b,
+    Xor:  |a, b| a ^ b,
+    Nand: |a, b| !(a & b),
+    Nor:  |a, b| !(a | b),
+    Xnor: |a, b| !(a ^ b),
+}
+
+pub struct BufNotProperties {
+    bitsize: u8
+}
+pub struct Not {
+    props: BufNotProperties
+}
+impl Component for Not {
+    fn inputs(&self) -> Vec<u8> {
+        vec![self.props.bitsize]
+    }
+
+    fn outputs(&self) -> Vec<u8> {
+        vec![self.props.bitsize]
+    }
+
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
+        vec![PortTrigger { port: 0, value: !inp[0].clone() }]
+    }
+}
+
+pub struct TriState {
+    props: BufNotProperties
+}
+impl Component for TriState {
+    fn inputs(&self) -> Vec<u8> {
+        vec![1, self.props.bitsize]
+    }
+
+    fn outputs(&self) -> Vec<u8> {
+        vec![self.props.bitsize]
+    }
+
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortTrigger> {
+        let gate = inp[0].index(0);
+        let result = match gate {
+            BitState::High => inp[1].clone(),
+            BitState::Low | BitState::Imped => BitArray::repeat(BitState::Imped, self.props.bitsize),
+            BitState::Unk => BitArray::repeat(BitState::Unk, self.props.bitsize),
+        };
+        vec![PortTrigger { port: 0, value: result }]
     }
 }
