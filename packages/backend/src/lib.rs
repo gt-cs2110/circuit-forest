@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
-use bitarray::BitArray;
+use bitarray::{BitArray, BitState};
 use node::{Component, Node, NodeFnType, PortTrigger};
 use petgraph::csr::DefaultIx;
 use petgraph::graph::NodeIndex;
@@ -18,6 +18,8 @@ type CircuitIndex = DefaultIx;
 #[derive(Default)]
 struct Circuit {
     graph: Graph<Node, Edge, Directed, CircuitIndex>,
+    inputs: Vec<ValueIx>,
+    outputs: Vec<ValueIx>,
     transient: TransientState
 }
 #[derive(Default)]
@@ -38,16 +40,24 @@ impl Circuit {
     fn add_value_node(&mut self, arr: BitArray) -> ValueIx {
         ValueIx(self.graph.add_node(Node::Value(arr)))
     }
+    fn add_input_node(&mut self, arr: BitArray) -> ValueIx {
+        let ix = self.add_value_node(arr);
+        self.inputs.push(ix);
+        ix
+    }
+    fn add_output_node(&mut self, len: u8) -> ValueIx {
+        let ix = self.add_value_node(BitArray::repeat(BitState::Imped, len));
+        self.outputs.push(ix);
+        ix
+    }
     fn add_function_node(&mut self, f: NodeFnType) -> FunctionIx {
         FunctionIx(self.graph.add_node(Node::Function(f)))
     }
-    fn inputs(&self) -> impl Iterator<Item=ValueIx> {
-        // TODO: this consumes all orphan nodes, include FunctionIx nodes
-        self.graph.externals(Direction::Incoming).map(ValueIx)
+    fn inputs(&self) -> &[ValueIx] {
+        &self.inputs
     }
-    fn outputs(&self) -> impl Iterator<Item=ValueIx> {
-        // TODO: this consumes all orphan nodes, include FunctionIx nodes
-        self.graph.externals(Direction::Outgoing).map(ValueIx)
+    fn outputs(&self) -> &[ValueIx] {
+        &self.outputs
     }
 
     fn connect_in(&mut self, gate: FunctionIx, source: ValueIx, port: Edge) {
@@ -68,19 +78,19 @@ impl Circuit {
     }
 
     fn set_inputs(&mut self, values: Vec<BitArray>) {
-        for (i, val) in std::iter::zip(Vec::from_iter(self.inputs()), values) {
+        for (i, val) in std::iter::zip(self.inputs().to_vec(), values) {
             self[i] = val;
         }
     }
     fn get_outputs(&self) -> Vec<BitArray> {
-        self.outputs()
-            .map(|n| self[n].clone())
+        self.outputs().iter()
+            .map(|&n| self[n].clone())
             .collect()
     }
     fn run(&mut self) {
-        self.transient.triggers.extend(self.inputs()
-            .map(|node| (node, self[node].clone()))
-            .collect::<Vec<_>>());
+        self.transient.triggers = self.inputs().iter()
+            .map(|&n| (n, self[n].clone()))
+            .collect();
         self.transient.frontier.clear();
 
         while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
@@ -172,9 +182,9 @@ mod tests {
         let b = 0x19182934_19AFFC94;
 
         let wires = [
-            circuit.add_value_node(BitArray::from_u64(a)),
-            circuit.add_value_node(BitArray::from_u64(b)),
-            circuit.add_value_node(BitArray::floating(64)),
+            circuit.add_input_node(BitArray::from_u64(a)),
+            circuit.add_input_node(BitArray::from_u64(b)),
+            circuit.add_output_node(64),
         ];
         let gates = [circuit.add_function_node(NodeFnType::Xor)];
 
@@ -195,13 +205,13 @@ mod tests {
         let d = 0xA8293129_FC03919D;
 
         let wires = [
-            circuit.add_value_node(BitArray::from_u64(a)),
-            circuit.add_value_node(BitArray::from_u64(b)),
-            circuit.add_value_node(BitArray::from_u64(c)),
-            circuit.add_value_node(BitArray::from_u64(d)),
-            circuit.add_value_node(BitArray::floating(64)),
-            circuit.add_value_node(BitArray::floating(64)),
-            circuit.add_value_node(BitArray::floating(64)),
+            circuit.add_input_node(BitArray::from_u64(a)),
+            circuit.add_input_node(BitArray::from_u64(b)),
+            circuit.add_input_node(BitArray::from_u64(c)),
+            circuit.add_input_node(BitArray::from_u64(d)),
+            circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
+            circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
+            circuit.add_output_node(64),
         ];
         let gates = [
             circuit.add_function_node(NodeFnType::Xor),
@@ -224,8 +234,8 @@ mod tests {
         let a = 0x98A85409_19182A9F;
 
         let wires = [
-            circuit.add_value_node(BitArray::from_u64(a)),
-            circuit.add_value_node(BitArray::floating(64)),
+            circuit.add_input_node(BitArray::from_u64(a)),
+            circuit.add_output_node(64),
         ];
         let gates = [
             circuit.add_function_node(NodeFnType::Not),

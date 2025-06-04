@@ -135,9 +135,6 @@ impl BitArray {
             len: len.min(64)
         }
     }
-    pub fn floating(len: u8) -> Self {
-        Self::repeat(BitState::Imped, len)
-    }
     pub fn len(&self) -> u8 {
         self.len.min(64)
     }
