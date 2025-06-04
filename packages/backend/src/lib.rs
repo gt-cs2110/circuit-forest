@@ -122,8 +122,13 @@ impl Circuit {
                     // todo: this could be put in the trigger logic
                     if self[val_node] != value {
                         match self.transient.triggers.entry(val_node) {
-                            Entry::Occupied(e) if e.get() == &value => {},
-                            Entry::Occupied(_) => todo!("short circuit"),
+                            Entry::Occupied(mut e) => {
+                                let joined_wires = BitArray::try_join(e.get().clone(), value.clone());
+                                match joined_wires {
+                                    Some(w) => { e.insert(w); },
+                                    None => todo!("short circuit {:?}!={:?}", e.get(), value),
+                                }
+                            },
                             Entry::Vacant(e) => { e.insert(value); },
                         }
                     }
@@ -272,5 +277,42 @@ mod tests {
         assert_eq!(0, circuit[wires[0]].to_u64().unwrap());
         assert_eq!(1, circuit[wires[1]].to_u64().unwrap());
         assert_eq!(1, circuit[wires[2]].to_u64().unwrap());
+    }
+
+    #[test]
+    fn conflict_pass_z() {
+        let mut circuit = Circuit::new();
+        let wires = [
+            circuit.add_input_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_input_node(BitArray::from_iter([BitState::High])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Unk])),
+        ];
+        let gates = [
+            circuit.add_function_node(NodeFnType::TriState),
+            circuit.add_function_node(NodeFnType::TriState),
+        ];
+        circuit.connect(gates[0], &[wires[0], wires[0]], &[wires[2]]);
+        circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
+        circuit.run();
+
+        assert_eq!(1, circuit[wires[2]].to_u64().unwrap());
+    }
+
+    #[test]
+    #[should_panic]
+    fn conflict_fail() {
+        let mut circuit = Circuit::new();
+        let wires = [
+            circuit.add_input_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_input_node(BitArray::from_iter([BitState::High])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Unk])),
+        ];
+        let gates = [
+            circuit.add_function_node(NodeFnType::TriState),
+            circuit.add_function_node(NodeFnType::TriState),
+        ];
+        circuit.connect(gates[0], &[wires[1], wires[0]], &[wires[2]]);
+        circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
+        circuit.run();
     }
 }
