@@ -135,8 +135,11 @@ impl BitArray {
             len: len.min(64)
         }
     }
-    pub fn len(&self) -> u8 {
-        self.len.min(64)
+    pub const fn len(&self) -> u8 {
+        match self.len {
+            len @ ..64 => len,
+            _ => 64,
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.len == 0
@@ -163,7 +166,7 @@ impl BitArray {
         }
     }
 
-    fn norm_mask(&self) -> u64 {
+    const fn norm_mask(&self) -> u64 {
         match self.len() {
             len @ 0..64 => (1 << len) - 1,
             _ => u64::MAX
@@ -172,6 +175,19 @@ impl BitArray {
     pub(crate) fn normalize(&self) -> (u64, u64) {
         let mask = self.norm_mask();
         (self.data & mask, self.spec & mask)
+    }
+
+    const fn is_0(&self) -> u64 {
+        !self.data & !self.spec & self.norm_mask()
+    }
+    const fn is_1(&self) -> u64 {
+        self.data & !self.spec & self.norm_mask()
+    }
+    const fn is_z(&self) -> u64 {
+        !self.data & self.spec & self.norm_mask()
+    }
+    const fn is_x(&self) -> u64 {
+        self.data & self.spec & self.norm_mask()
     }
     pub(crate) fn all_low(&self) -> bool {
         let (data, spec) = self.normalize();
@@ -221,6 +237,29 @@ impl BitArray {
 
     pub fn index(&self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
+    }
+    pub fn try_join(self, rhs: BitArray) -> Option<BitArray> {
+        // TODO: assert size
+        // TODO: Result
+        // __ | 00 | 01 | 10 | 11
+        // 00 | -- | 00 | -- | --
+        // 01 | 00 | 01 | 10 | 11
+        // 10 | -- | 10 | -- | --
+        // 11 | -- | 11 | -- | --
+        let mask = self.norm_mask();
+        let len = self.len();
+
+        let lz = self.is_z();
+        let rz = rhs.is_z();
+        let any_z = lz | rz;
+        let none_z = !any_z;
+
+        // no instances are both z
+        (len == 0 || none_z & mask == 0).then(|| {
+            let data = (lz & rhs.data) | (rz & self.data);
+            let spec = (lz & rhs.spec) | (rz & self.spec);
+            Self { data, spec, len }
+        })
     }
 }
 impl FromIterator<BitState> for BitArray {
@@ -293,8 +332,8 @@ impl std::ops::BitAnd for BitArray {
         // 10 | 00 | 11 | 11 | 11
         // 11 | 00 | 11 | 11 | 11
 
-        let any_false = (!self.data & !self.spec) | (!rhs.data & !rhs.spec);
-        let all_true = (self.data & !self.spec) & (rhs.data & !rhs.spec);
+        let any_false = self.is_0() | rhs.is_0();
+        let all_true = self.is_1() & rhs.is_1();
 
         let data = !any_false;
         let spec = !any_false & !all_true;
@@ -312,8 +351,8 @@ impl std::ops::BitOr for BitArray {
         // 10 | 11 | 01 | 11 | 11
         // 11 | 11 | 01 | 11 | 11
 
-        let any_true = (self.data & !self.spec) | (rhs.data & !rhs.spec);
-        let all_false = (!self.data & !self.spec) & (!rhs.data & !rhs.spec);
+        let any_true = self.is_1() | rhs.is_1();
+        let all_false = self.is_0() & rhs.is_0();
 
         let data = !all_false;
         let spec = !all_false & !any_true;
