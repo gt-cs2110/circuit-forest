@@ -244,12 +244,33 @@ mod tests {
 
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
         circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
-        circuit.transient.triggers.insert(wires[0], circuit[wires[0]].clone());
         circuit.run();
 
         let (l1, r1) = (a, circuit[wires[0]].to_u64().unwrap());
         let (l2, r2) = (!a, circuit[wires[1]].to_u64().unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
         assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
+    }
+
+    #[test]
+    fn nand_propagate() {
+        let mut circuit = Circuit::new();
+        let wires = [
+            circuit.add_input_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+        ];
+        let gates = [
+            circuit.add_function_node(NodeFnType::Nand),
+            circuit.add_function_node(NodeFnType::Nand),
+        ];
+
+        circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[2]]);
+        circuit.connect(gates[1], &[wires[0], wires[2]], &[wires[1]]);
+        circuit.run();
+
+        assert_eq!(0, circuit[wires[0]].to_u64().unwrap());
+        assert_eq!(1, circuit[wires[1]].to_u64().unwrap());
+        assert_eq!(1, circuit[wires[2]].to_u64().unwrap());
     }
 }
