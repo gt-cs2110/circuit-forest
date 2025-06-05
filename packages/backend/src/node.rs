@@ -40,7 +40,7 @@ impl Sensitivity {
         }
     }
 }
-fn activated(old: &[BitArray], new: &[BitArray], sensitivities: &[Sensitivity]) -> bool {
+fn any_activated(old: &[BitArray], new: &[BitArray], sensitivities: &[Sensitivity]) -> bool {
     assert_eq!(old.len(), new.len(), "Array size should be the same");
     assert_eq!(old.len(), sensitivities.len(), "Array size should be the same");
     old.iter()
