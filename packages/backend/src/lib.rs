@@ -4,77 +4,181 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use bitarray::{BitArray, BitState};
-use node::{Component, Node, NodeFnType, PortTrigger};
-use petgraph::csr::DefaultIx;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::EdgeRef;
-use petgraph::{Directed, Direction, Graph};
+use node::{Component, NodeFnType, PortTrigger};
+use slotmap::{new_key_type, SlotMap};
 
 pub mod bitarray;
 pub mod node;
 
-type CircuitIndex = DefaultIx;
+new_key_type! {
+    pub struct ValueKey;
+    pub struct FunctionKey;
+}
+struct ValueNode {
+    value: BitArray,
+    inputs: HashSet<FunctionKey>,
+    outputs: HashSet<FunctionKey>,
+}
+struct FunctionNode {
+    func: NodeFnType,
+    inputs: Vec<Option<ValueKey>>,
+    outputs: Vec<Option<ValueKey>>,
+}
+#[derive(Default)]
+struct Graph {
+    values: SlotMap<ValueKey, ValueNode>,
+    functions: SlotMap<FunctionKey, FunctionNode>,
+}
+impl Graph {
+    pub fn new() -> Self {
+        Default::default()
+    }
 
+    pub fn add_value(&mut self, value: BitArray) -> ValueKey {
+        self.values.insert(ValueNode {
+            value, inputs: HashSet::new(), outputs: HashSet::new()
+        })
+    }
+    pub fn add_function(&mut self, func: NodeFnType) -> FunctionKey {
+        let inputs = func.inputs().len();
+        let outputs = func.outputs().len();
+        self.functions.insert(FunctionNode {
+            func, inputs: vec![None; inputs], outputs: vec![None; outputs]
+        })
+    }
+
+    pub fn connect_in(&mut self, gate: FunctionKey, source: ValueKey, port: usize) {
+        self.disconnect_in(gate, port);
+        self.functions[gate].inputs[port].replace(source);
+        self.values[source].outputs.insert(gate);
+    }
+    pub fn connect_out(&mut self, gate: FunctionKey, sink: ValueKey, port: usize) {
+        self.disconnect_out(gate, port);
+        self.functions[gate].outputs[port].replace(sink);
+        self.values[sink].inputs.insert(gate);
+    }
+
+    pub fn disconnect_in(&mut self, gate: FunctionKey, port: usize) {
+        let old_input = self.functions[gate].inputs[port].take();
+        // If there was something there, remove it from the other side:
+        if let Some(source) = old_input {
+            let result = self.values[source].outputs.remove(&gate);
+            debug_assert!(result, "Gate should've been removed from source value's outputs");
+        }
+    }
+    pub fn disconnect_out(&mut self, gate: FunctionKey, port: usize) {
+        let old_output = self.functions[gate].outputs[port].take();
+        // If there was something there, remove it from the other side:
+        if let Some(sink) = old_output {
+            let result = self.values[sink].inputs.remove(&gate);
+            debug_assert!(result, "Gate should've been removed from sink value's inputs");
+        }
+    }
+
+    pub fn clear_inputs(&mut self, gate: FunctionKey) {
+        self.functions[gate].inputs.iter_mut()
+            .filter_map(|inp| inp.take())
+            .for_each(|source| {
+                let result = self.values[source].outputs.remove(&gate);
+                debug_assert!(result, "Gate should've been removed from source value's outputs");
+            });
+        }
+    pub fn clear_outputs(&mut self, gate: FunctionKey) {
+        self.functions[gate].outputs.iter_mut()
+            .filter_map(|outp| outp.take())
+            .for_each(|sink| {
+                let result = self.values[sink].inputs.remove(&gate);
+                debug_assert!(result, "Gate should've been removed from sink value's inputs");
+            });
+
+    }
+    pub fn clear_edges(&mut self, gate: FunctionKey) {
+        self.clear_inputs(gate);
+        self.clear_outputs(gate);
+    }
+}
+impl Index<ValueKey> for Graph {
+    type Output = ValueNode;
+
+    fn index(&self, index: ValueKey) -> &Self::Output {
+        &self.values[index]
+    }
+}
+impl IndexMut<ValueKey> for Graph {
+    fn index_mut(&mut self, index: ValueKey) -> &mut Self::Output {
+        &mut self.values[index]
+    }
+}
+impl Index<FunctionKey> for Graph {
+    type Output = FunctionNode;
+
+    fn index(&self, index: FunctionKey) -> &Self::Output {
+        &self.functions[index]
+    }
+}
+impl IndexMut<FunctionKey> for Graph {
+    fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
+        &mut self.functions[index]
+    }
+}
 #[derive(Default)]
 struct Circuit {
-    graph: Graph<Node, Edge, Directed, CircuitIndex>,
-    inputs: Vec<ValueIx>,
-    outputs: Vec<ValueIx>,
+    graph: Graph,
+    inputs: Vec<ValueKey>,
+    outputs: Vec<ValueKey>,
     transient: TransientState
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PortType { Input, Output }
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct Port {
+    ty: PortType,
+    gate: FunctionKey,
+    index: usize
 }
 #[derive(Default)]
 struct TransientState {
-    triggers: HashMap<ValueIx, BitArray>,
-    frontier: HashSet<FunctionIx>
+    triggers: HashMap<ValueKey, BitArray>,
+    frontier: HashSet<FunctionKey>
 }
-
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Debug)]
-pub struct ValueIx(NodeIndex<CircuitIndex>);
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Debug)]
-pub struct FunctionIx(NodeIndex<CircuitIndex>);
 
 impl Circuit {
     fn new() -> Self {
         Default::default()
     }
-    fn add_value_node(&mut self, arr: BitArray) -> ValueIx {
-        ValueIx(self.graph.add_node(Node::Value(arr)))
+    fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
+        self.graph.add_value(arr)
     }
-    fn add_input_node(&mut self, arr: BitArray) -> ValueIx {
-        let ix = self.add_value_node(arr);
+    fn add_input_node(&mut self, arr: BitArray) -> ValueKey {
+        let ix = self.graph.add_value(arr);
         self.inputs.push(ix);
         ix
     }
-    fn add_output_node(&mut self, len: u8) -> ValueIx {
-        let ix = self.add_value_node(BitArray::repeat(BitState::Imped, len));
+    fn add_output_node(&mut self, len: u8) -> ValueKey {
+        let ix = self.graph.add_value(BitArray::repeat(BitState::Imped, len));
         self.outputs.push(ix);
         ix
     }
-    fn add_function_node(&mut self, f: NodeFnType) -> FunctionIx {
-        FunctionIx(self.graph.add_node(Node::Function(f)))
+    fn add_function_node(&mut self, f: NodeFnType) -> FunctionKey {
+        self.graph.add_function(f)
     }
-    fn inputs(&self) -> &[ValueIx] {
+    fn inputs(&self) -> &[ValueKey] {
         &self.inputs
     }
-    fn outputs(&self) -> &[ValueIx] {
+    fn outputs(&self) -> &[ValueKey] {
         &self.outputs
     }
 
-    fn connect_in(&mut self, gate: FunctionIx, source: ValueIx, port: Edge) {
-        self.graph.add_edge(source.0, gate.0, port);
+    fn connect_one(&mut self, port: Port, value: ValueKey) {
+        match port {
+            Port { ty: PortType::Input,  gate, index } => self.graph.connect_in(gate, value, index),
+            Port { ty: PortType::Output, gate, index } => self.graph.connect_out(gate, value, index),
+        }
     }
-    fn connect_out(&mut self, gate: FunctionIx, sink: ValueIx, port: Edge) {
-        self.graph.add_edge(gate.0, sink.0, port);
-    }
-    fn connect(&mut self, gate: FunctionIx, inputs: &[ValueIx], outputs: &[ValueIx]) {
-        let incoming = self.graph.neighbors_directed(gate.0, Direction::Incoming).count();
-        let outgoing = self.graph.neighbors_directed(gate.0, Direction::Outgoing).count();
-        inputs.iter()
-            .zip(incoming..)
-            .for_each(|(&wire, port)| self.connect_in(gate, wire, port));
-        outputs.iter()
-            .zip(outgoing..)
-            .for_each(|(&wire, port)| self.connect_out(gate, wire, port));
+    fn connect(&mut self, gate: FunctionKey, inputs: &[ValueKey], outputs: &[ValueKey]) {
+        self.graph.clear_edges(gate);
+        inputs.iter().copied().enumerate().for_each(|(i, source)| self.graph.connect_in(gate, source, i));
+        outputs.iter().copied().enumerate().for_each(|(i, sink)| self.graph.connect_out(gate, sink, i));
     }
 
     fn set_inputs(&mut self, values: Vec<BitArray>) {
@@ -97,36 +201,28 @@ impl Circuit {
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
             for (node, value) in std::mem::take(&mut self.transient.triggers) {
                 self[node] = value;
-                self.transient.frontier.extend({
-                    self.graph.neighbors(node.0).map(FunctionIx)
-                });
+                self.transient.frontier.extend(self.graph[node].outputs.iter().copied());
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
-            for node in std::mem::take(&mut self.transient.frontier) {
-                let mut nodes: Vec<_> = self.graph.edges_directed(node.0, Direction::Incoming)
-                    .map(|e| (ValueIx(e.source()), *e.weight()))
-                    .collect();
-                nodes.sort_by_key(|&(_, i)| i);
-                let inputs: Vec<_> = nodes.into_iter()
-                    .map(|(i, _)| self[i].clone())
+            for gate_idx in std::mem::take(&mut self.transient.frontier) {
+                let gate = &self.graph[gate_idx];
+                let inputs: Vec<_> = std::iter::zip(gate.func.inputs(), gate.inputs.iter())
+                    .map(|(size, &m_node)| match m_node {
+                        Some(n) => self.graph[n].value.clone(),
+                        None => BitArray::repeat(BitState::Imped, size),
+                    })
                     .collect();
                 
-                for PortTrigger { port, value } in self[node].run(&inputs) {
-                    // todo: optimize
-                    let val_node = self.graph.edges(node.0)
-                        .find(|e| *e.weight() == port)
-                        .map(|e| ValueIx(e.target()))
-                        .unwrap();
-                    
-                    // Don't trigger if value didn't change
-                    // todo: this could be put in the trigger logic
-                    if self[val_node] != value {
-                        match self.transient.triggers.entry(val_node) {
+                for PortTrigger { port, value } in self[gate_idx].run(&inputs) {
+                    let Some(sink_idx) = self.graph[gate_idx].outputs[port] else { continue };
+                    // Only trigger if value changed
+                    if self[sink_idx] != value {
+                        match self.transient.triggers.entry(sink_idx) {
                             Entry::Occupied(mut e) => {
-                                let joined_wires = BitArray::try_join(e.get().clone(), value.clone());
-                                match joined_wires {
+                                let join = BitArray::try_join(e.get().clone(), value.clone());
+                                match join {
                                     Some(w) => { e.insert(w); },
-                                    None => todo!("short circuit {:?}!={:?}", e.get(), value),
+                                    None => todo!("short circuit {:?}!={:?}", e.get(), value)
                                 }
                             },
                             Entry::Vacant(e) => { e.insert(value); },
@@ -137,41 +233,28 @@ impl Circuit {
         }
     }
 }
-type Edge = usize; // port
-impl Index<ValueIx> for Circuit {
+impl Index<ValueKey> for Circuit {
     type Output = BitArray;
 
-    fn index(&self, index: ValueIx) -> &Self::Output {
-        match &self.graph[index.0] {
-            Node::Value(n) => n,
-            Node::Function(_) => panic!("expected node with value index to be a value node"),
-        }
+    fn index(&self, index: ValueKey) -> &Self::Output {
+        &self.graph[index].value
     }
 }
-impl IndexMut<ValueIx> for Circuit {
-    fn index_mut(&mut self, index: ValueIx) -> &mut Self::Output {
-        match &mut self.graph[index.0] {
-            Node::Value(n) => n,
-            Node::Function(_) => panic!("expected node with value index to be a value node"),
-        }
+impl IndexMut<ValueKey> for Circuit {
+    fn index_mut(&mut self, index: ValueKey) -> &mut Self::Output {
+        &mut self.graph[index].value
     }
 }
-impl Index<FunctionIx> for Circuit {
+impl Index<FunctionKey> for Circuit {
     type Output = NodeFnType;
 
-    fn index(&self, index: FunctionIx) -> &Self::Output {
-        match &self.graph[index.0] {
-            Node::Value(_) => panic!("expected node with function index to be a function node"),
-            Node::Function(f) => f,
-        }
+    fn index(&self, index: FunctionKey) -> &Self::Output {
+        &self.graph[index].func
     }
 }
-impl IndexMut<FunctionIx> for Circuit {
-    fn index_mut(&mut self, index: FunctionIx) -> &mut Self::Output {
-        match &mut self.graph[index.0] {
-            Node::Value(_) => panic!("expected node with function index to be a function node"),
-            Node::Function(f) => f,
-        }
+impl IndexMut<FunctionKey> for Circuit {
+    fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
+        &mut self.graph[index].func
     }
 }
 

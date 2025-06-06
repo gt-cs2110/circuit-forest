@@ -48,10 +48,6 @@ fn any_activated(old: &[BitArray], new: &[BitArray], sensitivities: &[Sensitivit
         .zip(sensitivities)
         .any(|((o, n), s)| s.activated(o, n))
 }
-pub enum Node {
-    Value(BitArray),
-    Function(NodeFnType)
-}
 pub enum NodeFnType {
     Transistor, Splitter,
     And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
