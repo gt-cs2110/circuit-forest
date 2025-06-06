@@ -398,4 +398,41 @@ mod tests {
         circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
         circuit.run();
     }
+
+    #[test]
+    fn rs_latch() {
+        let mut circuit = Circuit::new();
+        let [r, s, q, qp] = [
+            circuit.add_input_node(BitArray::from_iter([BitState::High])), // R
+            circuit.add_input_node(BitArray::from_iter([BitState::High])), // S
+            circuit.add_value_node(BitArray::from_iter([BitState::High])), // Q
+            circuit.add_value_node(BitArray::from_iter([BitState::Low])), // Q'
+        ];
+        let [rnand, snand] = [
+            circuit.add_function_node(NodeFnType::Nand),
+            circuit.add_function_node(NodeFnType::Nand),
+        ];
+
+        // R = 1, S = 1
+        circuit.connect(rnand, &[r, q], &[qp]);
+        circuit.connect(snand, &[s, qp], &[q]);
+        circuit.run();
+
+        assert_eq!(circuit[q].to_u64().unwrap(), 1);
+        assert_eq!(circuit[qp].to_u64().unwrap(), 0);
+        
+        // R = 0, S = 1
+        circuit.set_inputs(vec![BitArray::from_iter([BitState::Low]), BitArray::from_iter([BitState::High])]);
+        circuit.run();
+
+        assert_eq!(circuit[q].to_u64().unwrap(), 0);
+        assert_eq!(circuit[qp].to_u64().unwrap(), 1);
+
+        // R = 1, S = 0
+        circuit.set_inputs(vec![BitArray::from_iter([BitState::High]), BitArray::from_iter([BitState::Low])]);
+        circuit.run();
+
+        assert_eq!(circuit[q].to_u64().unwrap(), 1);
+        assert_eq!(circuit[qp].to_u64().unwrap(), 0);
+    }
 }
