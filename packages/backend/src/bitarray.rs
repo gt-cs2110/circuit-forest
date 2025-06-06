@@ -144,26 +144,8 @@ impl BitArray {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
-    pub(crate) fn from_u64(data: u64) -> Self {
-        Self { data, spec: 0, len: 64 }
-    }
     pub fn to_u64(&self) -> Result<u64, NotTwoValuedErr> {
-        let (data, spec) = self.normalize();
-        match spec == 0 {
-            true => Ok(data),
-            false => {
-                let is_imped = self.clone()
-                    .into_iter()
-                    .all(|st| st == BitState::Imped);
-                let err_st = if is_imped {
-                    BitState::Imped
-                } else {
-                    BitState::Unk
-                };
-
-                Err(NotTwoValuedErr(err_st))
-            }
-        }
+        self.clone().try_into()
     }
 
     const fn norm_mask(&self) -> u64 {
@@ -261,6 +243,12 @@ impl BitArray {
             Self { data, spec, len }
         })
     }
+    pub fn truncated(mut self, n: u8) -> Self {
+        if n < self.len() {
+            self.len = n;
+        }
+        self
+    }
 }
 impl FromIterator<BitState> for BitArray {
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
@@ -270,6 +258,32 @@ impl FromIterator<BitState> for BitArray {
                 arr.push(st);
                 arr
             })
+    }
+}
+impl From<u64> for BitArray {
+    fn from(data: u64) -> Self {
+        Self { data, spec: 0, len: 64 }
+    }
+}
+impl TryFrom<BitArray> for u64 {
+    type Error = NotTwoValuedErr;
+
+    fn try_from(value: BitArray) -> Result<Self, Self::Error> {
+        let (data, spec) = value.normalize();
+        match spec == 0 {
+            true => Ok(data),
+            false => {
+                let not_unk = value.clone()
+                    .into_iter()
+                    .all(|st| st != BitState::Unk);
+                let err_st = match not_unk {
+                    true => BitState::Imped,
+                    false => BitState::Unk,
+                };
+
+                Err(NotTwoValuedErr(err_st))
+            }
+        }
     }
 }
 

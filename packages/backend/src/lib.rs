@@ -270,8 +270,8 @@ mod tests {
         let b = 0x19182934_19AFFC94;
 
         let wires = [
-            circuit.add_input_node(BitArray::from_u64(a)),
-            circuit.add_input_node(BitArray::from_u64(b)),
+            circuit.add_input_node(BitArray::from(a)),
+            circuit.add_input_node(BitArray::from(b)),
             circuit.add_output_node(64),
         ];
         let gates = [circuit.add_function_node(NodeFnType::Xor)];
@@ -293,10 +293,10 @@ mod tests {
         let d = 0xA8293129_FC03919D;
 
         let wires = [
-            circuit.add_input_node(BitArray::from_u64(a)),
-            circuit.add_input_node(BitArray::from_u64(b)),
-            circuit.add_input_node(BitArray::from_u64(c)),
-            circuit.add_input_node(BitArray::from_u64(d)),
+            circuit.add_input_node(BitArray::from(a)),
+            circuit.add_input_node(BitArray::from(b)),
+            circuit.add_input_node(BitArray::from(c)),
+            circuit.add_input_node(BitArray::from(d)),
             circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
             circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
             circuit.add_output_node(64),
@@ -322,7 +322,7 @@ mod tests {
         let a = 0x98A85409_19182A9F;
 
         let wires = [
-            circuit.add_input_node(BitArray::from_u64(a)),
+            circuit.add_input_node(BitArray::from(a)),
             circuit.add_output_node(64),
         ];
         let gates = [
