@@ -400,6 +400,27 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn delay_conflict() {
+        let mut circuit = Circuit::new();
+        let wires = [
+            circuit.add_input_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
+        ];
+        let gates = [
+            circuit.add_function_node(NodeFnType::Not),
+            circuit.add_function_node(NodeFnType::Not),
+            circuit.add_function_node(NodeFnType::Not),
+        ];
+
+        circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
+        circuit.connect(gates[1], &[wires[1]], &[wires[2]]);
+        circuit.connect(gates[2], &[wires[0]], &[wires[2]]);
+        circuit.run();
+    }
+
+    #[test]
     fn rs_latch() {
         let mut circuit = Circuit::new();
         let [r, s, q, qp] = [
