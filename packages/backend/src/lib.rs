@@ -1,6 +1,5 @@
 
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ops::{Index, IndexMut};
 
 use bitarray::{BitArray, BitState};
@@ -14,15 +13,26 @@ new_key_type! {
     pub struct ValueKey;
     pub struct FunctionKey;
 }
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+struct Port {
+    gate: FunctionKey,
+    index: usize
+}
+impl Port {
+    fn new(gate: FunctionKey, index: usize) -> Self {
+        Self { gate, index }
+    }
+}
 struct ValueNode {
     value: BitArray,
-    inputs: HashSet<FunctionKey>,
-    outputs: HashSet<FunctionKey>,
+    inputs: HashSet<Port>,
+    outputs: HashSet<Port>,
 }
 struct FunctionNode {
     func: NodeFnType,
     inputs: Vec<Option<ValueKey>>,
-    outputs: Vec<Option<ValueKey>>,
+    outputs: Vec<(Option<ValueKey>, BitArray)>,
 }
 #[derive(Default)]
 struct Graph {
@@ -40,54 +50,58 @@ impl Graph {
         })
     }
     pub fn add_function(&mut self, func: NodeFnType) -> FunctionKey {
-        let inputs = func.inputs().len();
-        let outputs = func.outputs().len();
+        let inputs = vec![None; func.inputs().len()];
+        let outputs = func.outputs().into_iter()
+            .map(|size| (None, BitArray::repeat(BitState::Imped, size)))
+            .collect();
         self.functions.insert(FunctionNode {
-            func, inputs: vec![None; inputs], outputs: vec![None; outputs]
+            func, inputs, outputs
         })
     }
 
     pub fn connect_in(&mut self, gate: FunctionKey, source: ValueKey, port: usize) {
         self.disconnect_in(gate, port);
         self.functions[gate].inputs[port].replace(source);
-        self.values[source].outputs.insert(gate);
+        self.values[source].outputs.insert(Port::new(gate, port));
     }
     pub fn connect_out(&mut self, gate: FunctionKey, sink: ValueKey, port: usize) {
         self.disconnect_out(gate, port);
-        self.functions[gate].outputs[port].replace(sink);
-        self.values[sink].inputs.insert(gate);
+        self.functions[gate].outputs[port].0.replace(sink);
+        self.values[sink].inputs.insert(Port::new(gate, port));
     }
 
     pub fn disconnect_in(&mut self, gate: FunctionKey, port: usize) {
         let old_input = self.functions[gate].inputs[port].take();
         // If there was something there, remove it from the other side:
         if let Some(source) = old_input {
-            let result = self.values[source].outputs.remove(&gate);
+            let result = self.values[source].outputs.remove(&Port::new(gate, port));
             debug_assert!(result, "Gate should've been removed from source value's outputs");
         }
     }
     pub fn disconnect_out(&mut self, gate: FunctionKey, port: usize) {
-        let old_output = self.functions[gate].outputs[port].take();
+        let old_output = self.functions[gate].outputs[port].0.take();
         // If there was something there, remove it from the other side:
         if let Some(sink) = old_output {
-            let result = self.values[sink].inputs.remove(&gate);
+            let result = self.values[sink].inputs.remove(&Port::new(gate, port));
             debug_assert!(result, "Gate should've been removed from sink value's inputs");
         }
     }
 
     pub fn clear_inputs(&mut self, gate: FunctionKey) {
         self.functions[gate].inputs.iter_mut()
-            .filter_map(|inp| inp.take())
-            .for_each(|source| {
-                let result = self.values[source].outputs.remove(&gate);
+            .enumerate()
+            .filter_map(|(port, inp)| Some((port, inp.take()?)))
+            .for_each(|(port, source)| {
+                let result = self.values[source].outputs.remove(&Port::new(gate, port));
                 debug_assert!(result, "Gate should've been removed from source value's outputs");
             });
         }
     pub fn clear_outputs(&mut self, gate: FunctionKey) {
         self.functions[gate].outputs.iter_mut()
-            .filter_map(|outp| outp.take())
-            .for_each(|sink| {
-                let result = self.values[sink].inputs.remove(&gate);
+            .enumerate()
+            .filter_map(|(port, outp)| Some((port, outp.0.take()?)))
+            .for_each(|(port, sink)| {
+                let result = self.values[sink].inputs.remove(&Port::new(gate, port));
                 debug_assert!(result, "Gate should've been removed from sink value's inputs");
             });
 
@@ -128,17 +142,9 @@ struct Circuit {
     outputs: Vec<ValueKey>,
     transient: TransientState
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum PortType { Input, Output }
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct Port {
-    ty: PortType,
-    gate: FunctionKey,
-    index: usize
-}
 #[derive(Default)]
 struct TransientState {
-    triggers: HashMap<ValueKey, BitArray>,
+    triggers: HashSet<ValueKey>,
     frontier: HashSet<FunctionKey>
 }
 
@@ -169,10 +175,10 @@ impl Circuit {
         &self.outputs
     }
 
-    fn connect_one(&mut self, port: Port, value: ValueKey) {
-        match port {
-            Port { ty: PortType::Input,  gate, index } => self.graph.connect_in(gate, value, index),
-            Port { ty: PortType::Output, gate, index } => self.graph.connect_out(gate, value, index),
+    fn connect_one(&mut self, port: Port, as_input: bool, value: ValueKey) {
+        match as_input {
+            true  => self.graph.connect_in(port.gate, value, port.index),
+            false => self.graph.connect_out(port.gate, value, port.index),
         }
     }
     fn connect(&mut self, gate: FunctionKey, inputs: &[ValueKey], outputs: &[ValueKey]) {
@@ -192,16 +198,33 @@ impl Circuit {
             .collect()
     }
     fn run(&mut self) {
-        self.transient.triggers = self.inputs().iter()
-            .map(|&n| (n, self[n].clone()))
-            .collect();
-        self.transient.frontier.clear();
+        self.transient.triggers.clear();
+        self.transient.frontier.extend(
+            self.inputs.iter()
+                .flat_map(|&n| &self.graph[n].outputs)
+                .map(|&Port { gate, index: _ }| gate)
+        );
 
         while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, value) in std::mem::take(&mut self.transient.triggers) {
-                self[node] = value;
-                self.transient.frontier.extend(self.graph[node].outputs.iter().copied());
+            for node in std::mem::take(&mut self.transient.triggers) {
+                let mut it = self.graph[node].inputs.iter()
+                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1.clone());
+                if let Some(first) = it.next() {
+                    let Some(result) = it.try_fold(first, BitArray::try_join) else {
+                        todo!("short circuit");
+                    };
+
+                    if self[node] != result {
+                        self[node] = result;
+                        self.transient.frontier.extend({
+                            self.graph[node].outputs
+                                .iter()
+                                .map(|&Port { gate, index: _ }| gate)
+                        });
+                    }
+                }
+
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
             for gate_idx in std::mem::take(&mut self.transient.frontier) {
@@ -214,20 +237,9 @@ impl Circuit {
                     .collect();
                 
                 for (port, value) in self[gate_idx].run(&inputs).into_iter().enumerate() {
-                    let Some(sink_idx) = self.graph[gate_idx].outputs[port] else { continue };
-                    // Only trigger if value changed
-                    if self[sink_idx] != value {
-                        match self.transient.triggers.entry(sink_idx) {
-                            Entry::Occupied(mut e) => {
-                                let join = BitArray::try_join(e.get().clone(), value.clone());
-                                match join {
-                                    Some(w) => { e.insert(w); },
-                                    None => todo!("short circuit {:?}!={:?}", e.get(), value)
-                                }
-                            },
-                            Entry::Vacant(e) => { e.insert(value); },
-                        }
-                    }
+                    let (Some(sink_idx), ref mut out_val) = self.graph[gate_idx].outputs[port] else { continue };
+                    *out_val = value.clone();
+                    self.transient.triggers.insert(sink_idx);
                 }
             }
         }
@@ -334,6 +346,9 @@ mod tests {
         circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
         circuit.run();
 
+        for wire in wires {
+            println!("{:?}", circuit[wire]);
+        }
         let (l1, r1) = (a, circuit[wires[0]].to_u64().unwrap());
         let (l2, r2) = (!a, circuit[wires[1]].to_u64().unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
