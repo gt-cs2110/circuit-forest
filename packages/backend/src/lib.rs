@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use bitarray::{BitArray, BitState};
-use node::{Component, NodeFnType, PortTrigger};
+use node::{Component, NodeFnType};
 use slotmap::{new_key_type, SlotMap};
 
 pub mod bitarray;
@@ -213,7 +213,7 @@ impl Circuit {
                     })
                     .collect();
                 
-                for PortTrigger { port, value } in self[gate_idx].run(&inputs) {
+                for (port, value) in self[gate_idx].run(&inputs).into_iter().enumerate() {
                     let Some(sink_idx) = self.graph[gate_idx].outputs[port] else { continue };
                     // Only trigger if value changed
                     if self[sink_idx] != value {
