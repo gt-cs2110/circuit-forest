@@ -1,8 +1,8 @@
 use crate::bitarray::{BitArray, BitState};
 
 pub trait Component {
-    fn inputs(&self) -> Vec<u8>;
-    fn outputs(&self) -> Vec<u8>;
+    fn input_sizes(&self) -> Vec<u8>;
+    fn output_sizes(&self) -> Vec<u8>;
     #[must_use]
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray>;
 }
@@ -36,10 +36,10 @@ pub enum NodeFnType {
     Mux, Decoder
 }
 impl Component for NodeFnType {
-    fn inputs(&self) -> Vec<u8> {
+    fn input_sizes(&self) -> Vec<u8> {
         vec![64; 2]
     }
-    fn outputs(&self) -> Vec<u8> {
+    fn output_sizes(&self) -> Vec<u8> {
         vec![64; 1]
     }
 
@@ -104,17 +104,17 @@ macro_rules! decl_component_enum {
             $($Component($Component)),*
         }
         impl Component for $ComponentEnum {
-            fn inputs(&self) -> Vec<u8> {
+            fn input_sizes(&self) -> Vec<u8> {
                 match self {
                     $(
-                        Self::$Component(c) => c.inputs(),
+                        Self::$Component(c) => c.input_sizes(),
                     )*
                 }
             }
-            fn outputs(&self) -> Vec<u8> {
+            fn output_sizes(&self) -> Vec<u8> {
                 match self {
                     $(
-                        Self::$Component(c) => c.outputs(),
+                        Self::$Component(c) => c.output_sizes(),
                     )*
                 }
             }
@@ -141,10 +141,10 @@ macro_rules! gates {
                 props: GateProperties
             }
             impl Component for $Id {
-                fn inputs(&self) -> Vec<u8> {
+                fn input_sizes(&self) -> Vec<u8> {
                     vec![self.props.bitsize; usize::from(self.props.n_inputs)]
                 }
-                fn outputs(&self) -> Vec<u8> {
+                fn output_sizes(&self) -> Vec<u8> {
                     vec![self.props.bitsize]
                 }
                 fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
@@ -176,11 +176,11 @@ pub struct Not {
     props: BufNotProperties
 }
 impl Component for Not {
-    fn inputs(&self) -> Vec<u8> {
+    fn input_sizes(&self) -> Vec<u8> {
         vec![self.props.bitsize]
     }
 
-    fn outputs(&self) -> Vec<u8> {
+    fn output_sizes(&self) -> Vec<u8> {
         vec![self.props.bitsize]
     }
 
@@ -193,11 +193,11 @@ pub struct TriState {
     props: BufNotProperties
 }
 impl Component for TriState {
-    fn inputs(&self) -> Vec<u8> {
+    fn input_sizes(&self) -> Vec<u8> {
         vec![1, self.props.bitsize]
     }
 
-    fn outputs(&self) -> Vec<u8> {
+    fn output_sizes(&self) -> Vec<u8> {
         vec![self.props.bitsize]
     }
 

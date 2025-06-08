@@ -50,8 +50,8 @@ impl Graph {
         })
     }
     pub fn add_function(&mut self, func: NodeFnType) -> FunctionKey {
-        let inputs = vec![None; func.inputs().len()];
-        let outputs = func.outputs().into_iter()
+        let inputs = vec![None; func.input_sizes().len()];
+        let outputs = func.output_sizes().into_iter()
             .map(|size| (None, BitArray::floating(size)))
             .collect();
         self.functions.insert(FunctionNode {
@@ -229,7 +229,7 @@ impl Circuit {
             // 2. For all functions to waken, apply function and save triggers for next cycle
             for gate_idx in std::mem::take(&mut self.transient.frontier) {
                 let gate = &self.graph[gate_idx];
-                let inputs: Vec<_> = std::iter::zip(gate.func.inputs(), gate.inputs.iter())
+                let inputs: Vec<_> = std::iter::zip(gate.func.input_sizes(), gate.inputs.iter())
                     .map(|(size, &m_node)| match m_node {
                         Some(n) => self.graph[n].value.clone(),
                         None => BitArray::floating(size),
