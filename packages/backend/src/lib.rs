@@ -200,24 +200,31 @@ impl Circuit {
             for node in std::mem::take(&mut self.transient.triggers) {
                 self.graph[node].issues.clear(); // remove issues bc of update
                 
-                let mut it = self.graph[node].inputs.iter()
-                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1);
-                if let Some(first) = it.next() {
-                    let Ok(result) = it.try_fold(first, BitArray::try_join) else {
-                        self.graph[node].issues.insert(ValueIssue::ShortCircuit);
-                        continue;
-                    };
+                // Iterator of all port values
+                // We join them using a join algorithm.
+                // If the value changes after this join, 
+                // then we know we should propagate the update to the function.
 
-                    if self[node] != result {
-                        self[node] = result;
-                        self.transient.frontier.extend({
-                            self.graph[node].outputs
-                                .iter()
-                                .map(|&Port { gate, index: _ }| gate)
-                        });
-                    }
+                // Get all port values:
+                let it = self.graph[node].inputs.iter()
+                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1); // all port values
+                // Join:
+                let result = it.clone()
+                    .reduce(BitArray::join)
+                    .unwrap_or_else(|| BitArray::floating(self[node].len())); // if no inputs, make bits floating
+                // Short circuit check:
+                if BitArray::short_circuits(it) {
+                    self.graph[node].issues.insert(ValueIssue::ShortCircuit);
                 }
 
+                if self[node] != result {
+                    self[node] = result;
+                    self.transient.frontier.extend({
+                        self.graph[node].outputs
+                            .iter()
+                            .map(|&Port { gate, index: _ }| gate)
+                    });
+                }
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
             for gate_idx in std::mem::take(&mut self.transient.frontier) {
@@ -353,10 +360,7 @@ mod tests {
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
         circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
         circuit.run(&[wires[0]]);
-
-        for wire in wires {
-            println!("{:?}", circuit[wire]);
-        }
+        
         let (l1, r1) = (a, u64::try_from(circuit[wires[0]]).unwrap());
         let (l2, r2) = (!a, u64::try_from(circuit[wires[1]]).unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
@@ -406,7 +410,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn conflict_fail() {
         let mut circuit = Circuit::new();
         
@@ -423,10 +426,11 @@ mod tests {
         circuit.connect(gates[0], &[hi, lo], &[out]);
         circuit.connect(gates[1], &[hi, hi], &[out]);
         circuit.run(&[lo, hi]);
+
+        assert!(circuit.graph[out].issues.contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]
-    #[should_panic]
     fn delay_conflict() {
         let mut circuit = Circuit::new();
         
@@ -445,6 +449,8 @@ mod tests {
         circuit.connect(gates[1], &[mid], &[out]);
         circuit.connect(gates[2], &[inp], &[out]);
         circuit.run(&[inp]);
+
+        assert!(circuit.graph[out].issues.contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]

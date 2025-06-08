@@ -29,8 +29,6 @@ impl NotTwoValuedErr {
     pub fn is_unk(&self) -> bool { self.0 == BitState::Unk }
     pub fn bit_state(&self) -> BitState { self.0 }
 }
-#[derive(Debug)]
-pub struct JoinConflictError(());
 
 impl TryFrom<BitState> for bool {
     type Error = NotTwoValuedErr;
@@ -183,13 +181,10 @@ impl BitArray {
         self.data & self.spec & self.norm_mask()
     }
     pub(crate) fn all_low(self) -> bool {
-        let (data, spec) = self.normalize();
-        data == 0 && spec == 0
+        self.is_0() == self.norm_mask()
     }
     pub(crate) fn all_high(self) -> bool {
-        let mask = self.norm_mask();
-        let (data, spec) = self.normalize();
-        data == mask && spec == 0
+        self.is_1() == self.norm_mask()
     }
 
     fn get_raw(self, i: u8) -> BitState {
@@ -221,30 +216,34 @@ impl BitArray {
     pub fn index(self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
     }
-    pub fn try_join(self, rhs: BitArray) -> Result<BitArray, JoinConflictError> {
+    pub fn join(self, rhs: BitArray) -> BitArray {
         // TODO: assert size
-        // TODO: Result
         // __ | 00 | 01 | 10 | 11
-        // 00 | -- | 00 | -- | --
-        // 01 | 00 | 01 | 10 | 11
-        // 10 | -- | 10 | -- | --
-        // 11 | -- | 11 | -- | --
-        let mask = self.norm_mask();
+        // 00 | 11 | 11 | 00 | 11
+        // 01 | 11 | 11 | 01 | 11
+        // 10 | 00 | 01 | 10 | 11
+        // 11 | 11 | 11 | 11 | 11
         let len = self.len();
-
         let lz = self.is_z();
         let rz = rhs.is_z();
-        let any_z = lz | rz;
 
-        // all instances have Z
-        match any_z & mask == mask {
-            true => {
-                let data = (lz & rhs.data) | (rz & self.data);
-                let spec = (lz & rhs.spec) | (rz & self.spec);
-                Ok(Self { data, spec, len })
-            },
-            false => Err(JoinConflictError(())),
+        let data = (!lz & !rz) | (lz & !rz & rhs.data) | (rz & self.data);
+        let spec = (!lz & !rz) | (lz & !rz & rhs.spec) | (rz & self.spec);
+        
+        Self { data, spec, len }
+    }
+    pub(crate) fn short_circuits(values: impl IntoIterator<Item=BitArray>) -> bool {
+        let mut occupied = 0;
+        for val in values {
+            let not_z = val.is_0() | val.is_1() | val.is_x();
+
+            // Short circuit if multiple bits have non-Z
+            if occupied & not_z != 0 {
+                return true;
+            }
+            occupied |= not_z;
         }
+        false
     }
 }
 impl FromIterator<BitState> for BitArray {
