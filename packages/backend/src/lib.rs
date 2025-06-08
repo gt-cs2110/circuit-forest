@@ -1,5 +1,5 @@
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use bitarray::BitArray;
@@ -148,9 +148,13 @@ struct Circuit {
     graph: Graph,
     transient: TransientState
 }
+#[derive(Clone, Copy)]
+struct TriggerState {
+    recalculate: bool
+}
 #[derive(Default)]
 struct TransientState {
-    triggers: HashSet<ValueKey>,
+    triggers: HashMap<ValueKey, TriggerState>,
     frontier: HashSet<FunctionKey>
 }
 
@@ -176,28 +180,23 @@ impl Circuit {
         outputs.iter().copied().enumerate().for_each(|(i, sink)| self.graph.connect_out(gate, sink, i));
     }
     fn run(&mut self, inputs: &[ValueKey]) {
-        const RUN_LIMIT: usize = 10_000;
+        const RUN_ITER_LIMIT: usize = 10_000;
 
-        self.transient.triggers.clear();
-        for &node in inputs {
-            self.graph[node].issues.clear(); // remove issues bc of update
-        }
-        self.transient.frontier.extend(
-            inputs.iter()
-                .flat_map(|&n| &self.graph[n].outputs)
-                .map(|&Port { gate, index: _ }| gate)
-        );
+        self.transient.triggers = inputs.iter().copied()
+            .map(|k| (k, TriggerState { recalculate: false }))
+            .collect();
+        self.transient.frontier.clear();
 
         let mut iteration = 0;
         while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
-            if iteration > RUN_LIMIT {
-                for key in self.transient.triggers.clone() {
+            if iteration > RUN_ITER_LIMIT {
+                for &key in self.transient.triggers.keys() {
                     self.graph[key].issues.insert(ValueIssue::ShortCircuit);
                 }
                 break;
             }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for node in std::mem::take(&mut self.transient.triggers) {
+            for (node, TriggerState { recalculate }) in std::mem::take(&mut self.transient.triggers) {
                 self.graph[node].issues.clear(); // remove issues bc of update
                 
                 // Iterator of all port values
@@ -205,20 +204,25 @@ impl Circuit {
                 // If the value changes after this join, 
                 // then we know we should propagate the update to the function.
 
-                // Get all port values:
-                let it = self.graph[node].inputs.iter()
-                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1); // all port values
-                // Join:
-                let result = it.clone()
-                    .reduce(BitArray::join)
-                    .unwrap_or_else(|| BitArray::floating(self[node].len())); // if no inputs, make bits floating
-                // Short circuit check:
-                if BitArray::short_circuits(it) {
-                    self.graph[node].issues.insert(ValueIssue::ShortCircuit);
+                let mut propagate_update = true;
+                if recalculate {
+                    // Get all port values:
+                    let it = self.graph[node].inputs.iter()
+                        .map(|&Port { gate, index }| self.graph[gate].outputs[index].1); // all port values
+                    // Join:
+                    let result = it.clone()
+                        .reduce(BitArray::join)
+                        .unwrap_or_else(|| BitArray::floating(self[node].len())); // if no inputs, make bits floating
+                    // Short circuit check:
+                    if BitArray::short_circuits(it) {
+                        self.graph[node].issues.insert(ValueIssue::ShortCircuit);
+                    }
+
+                    propagate_update = self[node] != result;
+                    self[node] = result;
                 }
 
-                if self[node] != result {
-                    self[node] = result;
+                if propagate_update {
                     self.transient.frontier.extend({
                         self.graph[node].outputs
                             .iter()
@@ -247,9 +251,9 @@ impl Circuit {
                     .collect();
                 
                 for (port, value) in self[gate_idx].run(&inputs).into_iter().enumerate() {
-                    let (Some(sink_idx), ref mut out_val) = self.graph[gate_idx].outputs[port] else { continue };
-                    *out_val = value;
-                    self.transient.triggers.insert(sink_idx);
+                    let (Some(sink_idx), ref mut out_port) = self.graph[gate_idx].outputs[port] else { continue };
+                    *out_port = value;
+                    self.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
                 }
             }
 
