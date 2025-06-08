@@ -231,7 +231,8 @@ impl Circuit {
                 let gate = &self.graph[gate_idx];
                 let inputs: Vec<_> = std::iter::zip(gate.func.input_sizes(), gate.inputs.iter())
                     .map(|(size, &m_node)| match m_node {
-                        Some(n) => self.graph[n].value.clone(),
+                        Some(n) if self.graph[n].value.len() == size => self.graph[n].value.clone(),
+                        Some(_) => todo!("size conflict"),
                         None => BitArray::floating(size),
                     })
                     .collect();
