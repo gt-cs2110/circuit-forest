@@ -68,7 +68,10 @@ macro_rules! decl_component_enum {
         )*
     }
 }
-decl_component_enum!(ComponentFn: And, Or, Xor, Nand, Nor, Xnor, Not, TriState);
+decl_component_enum!(ComponentFn: 
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, 
+    Mux, Demux, Decoder,
+);
 
 pub const MIN_GATE_INPUTS: u8 = 2;
 pub const MAX_GATE_INPUTS: u8 = 64;
@@ -173,3 +176,107 @@ impl Component for TriState {
         vec![result]
     }
 }
+
+pub const MIN_SELSIZE: u8 = 1;
+pub const MAX_SELSIZE: u8 = 8;
+pub struct MuxProperties {
+    bitsize: u8,
+    selsize: u8
+}
+pub struct Mux {
+    props: MuxProperties
+}
+impl Mux {
+    pub fn new(mut bitsize: u8, mut selsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
+        Self { props: MuxProperties { bitsize, selsize }}
+    }
+}
+impl Component for Mux {
+    fn input_sizes(&self) -> Vec<u8> {
+        let mut sizes = vec![self.props.selsize];
+        sizes.extend(std::iter::repeat_n(self.props.bitsize, 1 << self.props.selsize));
+        sizes
+    }
+
+    fn output_sizes(&self) -> Vec<u8> {
+        vec![self.props.bitsize]
+    }
+
+    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+        let m_sel = inp[0].clone().to_u64();
+        match m_sel {
+            Ok(sel) => vec![inp[sel as usize + 1].clone()],
+            Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize)],
+        }
+    }
+}
+pub struct Demux {
+    props: MuxProperties
+}
+impl Demux {
+    pub fn new(mut bitsize: u8, mut selsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
+        Self { props: MuxProperties { bitsize, selsize }}
+    }
+}
+impl Component for Demux {
+    fn input_sizes(&self) -> Vec<u8> {
+        vec![self.props.selsize, self.props.bitsize]
+    }
+    
+    fn output_sizes(&self) -> Vec<u8> {
+        vec![self.props.bitsize; 1 << self.props.selsize]
+    }
+
+    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+        let m_sel = inp[0].clone().to_u64();
+        
+        match m_sel {
+            Ok(sel) => {
+                let mut result = vec![BitArray::repeat(BitState::Low, self.props.bitsize); 1 << self.props.selsize];
+                result[sel as usize] = inp[1].clone();
+                result
+            },
+            Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize); 1 << self.props.selsize],
+        }
+    }
+}
+
+pub struct DecoderProperties {
+    selsize: u8
+}
+pub struct Decoder {
+    props: DecoderProperties
+}
+impl Decoder {
+    pub fn new(mut selsize: u8) -> Self {
+        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
+        Self { props: DecoderProperties { selsize }}
+    }
+}
+impl Component for Decoder {
+    fn input_sizes(&self) -> Vec<u8> {
+        vec![self.props.selsize]
+    }
+
+    fn output_sizes(&self) -> Vec<u8> {
+        vec![1; 1 << self.props.selsize]
+    }
+
+    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+        let m_sel = u64::try_from(inp[0].clone());
+
+        match m_sel {
+            Ok(sel) => {
+                let mut result = vec![BitArray::from_iter([BitState::Low]); 1 << self.props.selsize];
+                result[sel as usize] = BitArray::from_iter([BitState::High]);
+                result
+            },
+            Err(e) => vec![BitArray::from_iter([e.bit_state()]); 1 << self.props.selsize],
+        }
+    }
+}
+
