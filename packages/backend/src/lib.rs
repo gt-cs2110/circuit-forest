@@ -24,10 +24,18 @@ impl Port {
         Self { gate, index }
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ValueIssue {
+    ShortCircuit,
+    MismatchedBitsizes { val_size: u8, port_size: u8, port: Port, is_input: bool },
+    OscillationDetected
+}
 struct ValueNode {
     value: BitArray,
     inputs: HashSet<Port>,
     outputs: HashSet<Port>,
+    issues: HashSet<ValueIssue>
 }
 struct FunctionNode {
     func: ComponentFn,
@@ -46,7 +54,7 @@ impl Graph {
 
     pub fn add_value(&mut self, value: BitArray) -> ValueKey {
         self.values.insert(ValueNode {
-            value, inputs: HashSet::new(), outputs: HashSet::new()
+            value, inputs: HashSet::new(), outputs: HashSet::new(), issues: HashSet::new()
         })
     }
     pub fn add_function(&mut self, func: ComponentFn) -> FunctionKey {
@@ -168,21 +176,36 @@ impl Circuit {
         outputs.iter().copied().enumerate().for_each(|(i, sink)| self.graph.connect_out(gate, sink, i));
     }
     fn run(&mut self, inputs: &[ValueKey]) {
+        const RUN_LIMIT: usize = 10_000;
+
         self.transient.triggers.clear();
+        for &node in inputs {
+            self.graph[node].issues.clear(); // remove issues bc of update
+        }
         self.transient.frontier.extend(
             inputs.iter()
                 .flat_map(|&n| &self.graph[n].outputs)
                 .map(|&Port { gate, index: _ }| gate)
         );
 
+        let mut iteration = 0;
         while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
+            if iteration > RUN_LIMIT {
+                for key in self.transient.triggers.clone() {
+                    self.graph[key].issues.insert(ValueIssue::ShortCircuit);
+                }
+                break;
+            }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
             for node in std::mem::take(&mut self.transient.triggers) {
+                self.graph[node].issues.clear(); // remove issues bc of update
+                
                 let mut it = self.graph[node].inputs.iter()
                     .map(|&Port { gate, index }| self.graph[gate].outputs[index].1);
                 if let Some(first) = it.next() {
                     let Ok(result) = it.try_fold(first, BitArray::try_join) else {
-                        todo!("short circuit");
+                        self.graph[node].issues.insert(ValueIssue::ShortCircuit);
+                        continue;
                     };
 
                     if self[node] != result {
@@ -198,12 +221,21 @@ impl Circuit {
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
             for gate_idx in std::mem::take(&mut self.transient.frontier) {
-                let gate = &self.graph[gate_idx];
-                let inputs: Vec<_> = std::iter::zip(gate.func.input_sizes(), gate.inputs.iter())
-                    .map(|(size, &m_node)| match m_node {
-                        Some(n) if self.graph[n].value.len() == size => self.graph[n].value,
-                        Some(_) => todo!("size conflict"),
-                        None => BitArray::floating(size),
+                let gate = &self.graph.functions[gate_idx];
+                let inputs: Vec<_> = std::iter::zip(gate.func.input_sizes(), gate.inputs.iter().enumerate())
+                    .map(|(port_size, (port, &m_node))| match m_node {
+                        Some(n) if self.graph.values[n].value.len() == port_size => self.graph.values[n].value,
+                        Some(n) => {
+                            let val_size = self.graph.values[n].value.len();
+                            self.graph.values[n].issues.insert(ValueIssue::MismatchedBitsizes {
+                                val_size,
+                                port_size,
+                                port: Port { gate: gate_idx, index: port },
+                                is_input: true
+                            });
+                            BitArray::floating(port_size)
+                        },
+                        None => BitArray::floating(port_size),
                     })
                     .collect();
                 
@@ -213,6 +245,8 @@ impl Circuit {
                     self.transient.triggers.insert(sink_idx);
                 }
             }
+
+            iteration += 1;
         }
     }
 }
