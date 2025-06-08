@@ -120,7 +120,7 @@ impl std::ops::Not for BitState {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub struct BitArray {
     data: u64,
     spec: u64,
@@ -148,58 +148,55 @@ impl BitArray {
         Self::repeat(BitState::Unk, len)
     }
 
-    pub const fn len(&self) -> u8 {
+    pub const fn len(self) -> u8 {
         match self.len {
             len @ ..64 => len,
             _ => 64,
         }
     }
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.len == 0
     }
-    pub fn to_u64(&self) -> Result<u64, NotTwoValuedErr> {
-        self.clone().try_into()
-    }
 
-    const fn norm_mask(&self) -> u64 {
+    const fn norm_mask(self) -> u64 {
         match self.len() {
             len @ 0..64 => (1 << len) - 1,
             _ => u64::MAX
         }
     }
-    pub(crate) fn normalize(&self) -> (u64, u64) {
+    pub(crate) fn normalize(self) -> (u64, u64) {
         let mask = self.norm_mask();
         (self.data & mask, self.spec & mask)
     }
 
-    const fn is_0(&self) -> u64 {
+    const fn is_0(self) -> u64 {
         !self.data & !self.spec & self.norm_mask()
     }
-    const fn is_1(&self) -> u64 {
+    const fn is_1(self) -> u64 {
         self.data & !self.spec & self.norm_mask()
     }
-    const fn is_z(&self) -> u64 {
+    const fn is_z(self) -> u64 {
         !self.data & self.spec & self.norm_mask()
     }
-    const fn is_x(&self) -> u64 {
+    const fn is_x(self) -> u64 {
         self.data & self.spec & self.norm_mask()
     }
-    pub(crate) fn all_low(&self) -> bool {
+    pub(crate) fn all_low(self) -> bool {
         let (data, spec) = self.normalize();
         data == 0 && spec == 0
     }
-    pub(crate) fn all_high(&self) -> bool {
+    pub(crate) fn all_high(self) -> bool {
         let mask = self.norm_mask();
         let (data, spec) = self.normalize();
         data == mask && spec == 0
     }
 
-    fn get_raw(&self, i: u8) -> BitState {
+    fn get_raw(self, i: u8) -> BitState {
         let data = (self.data >> i) & 1 != 0;
         let spec = (self.spec >> i) & 1 != 0;
         BitState::join(data, spec)
     }
-    pub fn get(&self, i: u8) -> Option<BitState> {
+    pub fn get(self, i: u8) -> Option<BitState> {
         (i < self.len()).then(|| self.get_raw(i))
     }
 
@@ -210,13 +207,17 @@ impl BitArray {
         self.spec &= !(1 << i);
         self.spec |= u64::from(spec) << i;
     }
-    pub fn set(&mut self, i: u8, st: BitState) {
+    fn set(&mut self, i: u8, st: BitState) {
         if i < self.len() {
             self.set_raw(i, st);
         }
     }
+    pub fn with(mut self, i: u8, st: BitState) -> Self {
+        self.set(i, st);
+        self
+    }
 
-    pub fn index(&self, i: u8) -> BitState {
+    pub fn index(self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
     }
     pub fn try_join(self, rhs: BitArray) -> Result<BitArray, JoinConflictError> {
@@ -243,9 +244,6 @@ impl BitArray {
             },
             false => Err(JoinConflictError(())),
         }
-    }
-    pub fn iter(&self) -> BitArrayIntoIter {
-        self.clone().into_iter()
     }
 }
 impl FromIterator<BitState> for BitArray {
@@ -319,14 +317,6 @@ impl IntoIterator for BitArray {
         BitArrayIntoIter(self)
     }
 }
-impl IntoIterator for &BitArray {
-    type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = BitArrayIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
 impl ExactSizeIterator for BitArrayIntoIter {
     fn len(&self) -> usize {
         usize::from(self.0.len())
@@ -348,13 +338,13 @@ impl std::hash::Hash for BitArray {
 impl std::fmt::Debug for BitArray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
-            .entries(self)
+            .entries(*self)
             .finish()
     }
 }
 impl std::fmt::Display for BitArray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for bit in self.iter().rev() {
+        for bit in self.into_iter().rev() {
             write!(f, "{bit}")?;
         }
         Ok(())

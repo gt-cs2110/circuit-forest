@@ -144,7 +144,7 @@ impl Component for Not {
     }
 
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        vec![!inp[0].clone()]
+        vec![!inp[0]]
     }
 }
 
@@ -169,7 +169,7 @@ impl Component for TriState {
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
         let gate = inp[0].index(0);
         let result = match gate {
-            BitState::High => inp[1].clone(),
+            BitState::High => inp[1],
             BitState::Low | BitState::Imped => BitArray::floating(self.props.bitsize),
             BitState::Unk => BitArray::unknown(self.props.bitsize),
         };
@@ -205,9 +205,9 @@ impl Component for Mux {
     }
 
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        let m_sel = inp[0].clone().to_u64();
+        let m_sel = u64::try_from(inp[0]);
         match m_sel {
-            Ok(sel) => vec![inp[sel as usize + 1].clone()],
+            Ok(sel) => vec![inp[sel as usize + 1]],
             Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize)],
         }
     }
@@ -232,12 +232,12 @@ impl Component for Demux {
     }
 
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        let m_sel = inp[0].clone().to_u64();
+        let m_sel = u64::try_from(inp[0]);
         
         match m_sel {
             Ok(sel) => {
                 let mut result = vec![BitArray::repeat(BitState::Low, self.props.bitsize); 1 << self.props.selsize];
-                result[sel as usize] = inp[1].clone();
+                result[sel as usize] = inp[1];
                 result
             },
             Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize); 1 << self.props.selsize],
@@ -267,7 +267,7 @@ impl Component for Decoder {
     }
 
     fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        let m_sel = u64::try_from(inp[0].clone());
+        let m_sel = u64::try_from(inp[0]);
 
         match m_sel {
             Ok(sel) => {

@@ -194,7 +194,7 @@ impl Circuit {
     }
     fn get_outputs(&self) -> Vec<BitArray> {
         self.outputs().iter()
-            .map(|&n| self[n].clone())
+            .map(|&n| self[n])
             .collect()
     }
     fn run(&mut self) {
@@ -209,7 +209,7 @@ impl Circuit {
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
             for node in std::mem::take(&mut self.transient.triggers) {
                 let mut it = self.graph[node].inputs.iter()
-                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1.clone());
+                    .map(|&Port { gate, index }| self.graph[gate].outputs[index].1);
                 if let Some(first) = it.next() {
                     let Ok(result) = it.try_fold(first, BitArray::try_join) else {
                         todo!("short circuit");
@@ -231,7 +231,7 @@ impl Circuit {
                 let gate = &self.graph[gate_idx];
                 let inputs: Vec<_> = std::iter::zip(gate.func.input_sizes(), gate.inputs.iter())
                     .map(|(size, &m_node)| match m_node {
-                        Some(n) if self.graph[n].value.len() == size => self.graph[n].value.clone(),
+                        Some(n) if self.graph[n].value.len() == size => self.graph[n].value,
                         Some(_) => todo!("size conflict"),
                         None => BitArray::floating(size),
                     })
@@ -239,7 +239,7 @@ impl Circuit {
                 
                 for (port, value) in self[gate_idx].run(&inputs).into_iter().enumerate() {
                     let (Some(sink_idx), ref mut out_val) = self.graph[gate_idx].outputs[port] else { continue };
-                    *out_val = value.clone();
+                    *out_val = value;
                     self.transient.triggers.insert(sink_idx);
                 }
             }
@@ -295,7 +295,7 @@ mod tests {
         circuit.run();
 
         let left = a ^ b;
-        let right = circuit.get_outputs()[0].to_u64().unwrap();
+        let right = u64::try_from(circuit.get_outputs()[0]).unwrap();
         assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
     }
 
@@ -327,7 +327,7 @@ mod tests {
         circuit.run();
 
         let left = a ^ b ^ c ^ d;
-        let right = circuit.get_outputs()[0].to_u64().unwrap();
+        let right = u64::try_from(circuit.get_outputs()[0]).unwrap();
         assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
     }
 
@@ -352,8 +352,8 @@ mod tests {
         for wire in wires {
             println!("{:?}", circuit[wire]);
         }
-        let (l1, r1) = (a, circuit[wires[0]].to_u64().unwrap());
-        let (l2, r2) = (!a, circuit[wires[1]].to_u64().unwrap());
+        let (l1, r1) = (a, u64::try_from(circuit[wires[0]]).unwrap());
+        let (l2, r2) = (!a, u64::try_from(circuit[wires[1]]).unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
         assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
     }
@@ -375,9 +375,9 @@ mod tests {
         circuit.connect(gates[1], &[wires[0], wires[2]], &[wires[1]]);
         circuit.run();
 
-        assert_eq!(0, circuit[wires[0]].to_u64().unwrap());
-        assert_eq!(1, circuit[wires[1]].to_u64().unwrap());
-        assert_eq!(1, circuit[wires[2]].to_u64().unwrap());
+        assert_eq!(0, u64::try_from(circuit[wires[0]]).unwrap());
+        assert_eq!(1, u64::try_from(circuit[wires[1]]).unwrap());
+        assert_eq!(1, u64::try_from(circuit[wires[2]]).unwrap());
     }
 
     #[test]
@@ -396,7 +396,7 @@ mod tests {
         circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
         circuit.run();
 
-        assert_eq!(1, circuit[wires[2]].to_u64().unwrap());
+        assert_eq!(1, u64::try_from(circuit[wires[2]]).unwrap());
     }
 
     #[test]
@@ -457,21 +457,21 @@ mod tests {
         circuit.connect(snand, &[s, qp], &[q]);
         circuit.run();
 
-        assert_eq!(circuit[q].to_u64().unwrap(), 1);
-        assert_eq!(circuit[qp].to_u64().unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[q]).unwrap(), 1);
+        assert_eq!(u64::try_from(circuit[qp]).unwrap(), 0);
         
         // R = 0, S = 1
         circuit.set_inputs(vec![BitArray::from_iter([BitState::Low]), BitArray::from_iter([BitState::High])]);
         circuit.run();
 
-        assert_eq!(circuit[q].to_u64().unwrap(), 0);
-        assert_eq!(circuit[qp].to_u64().unwrap(), 1);
+        assert_eq!(u64::try_from(circuit[q]).unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[qp]).unwrap(), 1);
 
         // R = 1, S = 0
         circuit.set_inputs(vec![BitArray::from_iter([BitState::High]), BitArray::from_iter([BitState::Low])]);
         circuit.run();
 
-        assert_eq!(circuit[q].to_u64().unwrap(), 1);
-        assert_eq!(circuit[qp].to_u64().unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[q]).unwrap(), 1);
+        assert_eq!(u64::try_from(circuit[qp]).unwrap(), 0);
     }
 }
