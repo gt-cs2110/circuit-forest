@@ -138,7 +138,7 @@ impl BitArray {
         Self {
             data: if data { u64::MAX } else { 0 },
             spec: if spec { u64::MAX } else { 0 },
-            len: len.min(64)
+            len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE - 1)
         }
     }
     pub fn floating(len: u8) -> Self {
@@ -150,8 +150,9 @@ impl BitArray {
 
     pub const fn len(self) -> u8 {
         match self.len {
-            len @ ..64 => len,
-            _ => 64,
+            ..BitArray::MIN_BITSIZE => BitArray::MIN_BITSIZE,
+            len @ BitArray::MIN_BITSIZE..BitArray::MAX_BITSIZE => len,
+            _ => BitArray::MAX_BITSIZE,
         }
     }
     pub fn is_empty(self) -> bool {
