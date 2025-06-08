@@ -29,6 +29,9 @@ impl NotTwoValuedErr {
     pub fn is_unk(&self) -> bool { self.0 == BitState::Unk }
     pub fn bit_state(&self) -> BitState { self.0 }
 }
+#[derive(Debug)]
+pub struct JoinConflictError(());
+
 impl TryFrom<BitState> for bool {
     type Error = NotTwoValuedErr;
 
@@ -135,6 +138,13 @@ impl BitArray {
             len: len.min(64)
         }
     }
+    pub fn floating(len: u8) -> Self {
+        Self::repeat(BitState::Imped, len)
+    }
+    pub fn unknown(len: u8) -> Self {
+        Self::repeat(BitState::Unk, len)
+    }
+
     pub const fn len(&self) -> u8 {
         match self.len {
             len @ ..64 => len,
@@ -181,13 +191,15 @@ impl BitArray {
         data == mask && spec == 0
     }
 
-    pub fn get(&self, i: u8) -> Option<BitState> {
-        (i < self.len()).then(|| {
-            let data = (self.data >> i) & 1 != 0;
-            let spec = (self.spec >> i) & 1 != 0;
-            BitState::join(data, spec)
-        })
+    fn get_raw(&self, i: u8) -> BitState {
+        let data = (self.data >> i) & 1 != 0;
+        let spec = (self.spec >> i) & 1 != 0;
+        BitState::join(data, spec)
     }
+    pub fn get(&self, i: u8) -> Option<BitState> {
+        (i < self.len()).then(|| self.get_raw(i))
+    }
+
     fn set_raw(&mut self, i: u8, st: BitState) {
         let (data, spec) = st.split();
         self.data &= !(1 << i);
@@ -200,13 +212,13 @@ impl BitArray {
             self.set_raw(i, st);
         }
     }
-    pub fn push(&mut self, st: BitState) {
+    fn push(&mut self, st: BitState) {
         if let len @ ..64 = self.len() {
             self.set_raw(len, st);
             self.len += 1;
         }
     }
-    pub fn pop(&mut self) -> Option<BitState> {
+    fn pop(&mut self) -> Option<BitState> {
         (!self.is_empty()).then(|| {
             self.len -= 1;
             let data = self.data & 1 != 0;
@@ -220,7 +232,7 @@ impl BitArray {
     pub fn index(&self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
     }
-    pub fn try_join(self, rhs: BitArray) -> Option<BitArray> {
+    pub fn try_join(self, rhs: BitArray) -> Result<BitArray, JoinConflictError> {
         // TODO: assert size
         // TODO: Result
         // __ | 00 | 01 | 10 | 11
@@ -234,20 +246,19 @@ impl BitArray {
         let lz = self.is_z();
         let rz = rhs.is_z();
         let any_z = lz | rz;
-        let none_z = !any_z;
 
-        // no instances are both z
-        (len == 0 || none_z & mask == 0).then(|| {
-            let data = (lz & rhs.data) | (rz & self.data);
-            let spec = (lz & rhs.spec) | (rz & self.spec);
-            Self { data, spec, len }
-        })
-    }
-    pub fn truncated(mut self, n: u8) -> Self {
-        if n < self.len() {
-            self.len = n;
+        // all instances have Z
+        match any_z & mask == mask {
+            true => {
+                let data = (lz & rhs.data) | (rz & self.data);
+                let spec = (lz & rhs.spec) | (rz & self.spec);
+                Ok(Self { data, spec, len })
+            },
+            false => Err(JoinConflictError(())),
         }
-        self
+    }
+    pub fn iter(&self) -> BitArrayIntoIter {
+        self.clone().into_iter()
     }
 }
 impl FromIterator<BitState> for BitArray {
@@ -273,9 +284,7 @@ impl TryFrom<BitArray> for u64 {
         match spec == 0 {
             true => Ok(data),
             false => {
-                let not_unk = value.clone()
-                    .into_iter()
-                    .all(|st| st != BitState::Unk);
+                let not_unk = value.is_x() == 0;
                 let err_st = match not_unk {
                     true => BitState::Imped,
                     false => BitState::Unk,
@@ -299,12 +308,30 @@ impl Iterator for BitArrayIntoIter {
         (len, Some(len))
     }
 }
+impl DoubleEndedIterator for BitArrayIntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let len = self.0.len();
+        (len > 0).then(|| {
+            let raw = self.0.get_raw(len - 1);
+            self.0.len -= 1;
+            raw
+        })
+    }
+}
 impl IntoIterator for BitArray {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = BitArrayIntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         BitArrayIntoIter(self)
+    }
+}
+impl IntoIterator for &BitArray {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = BitArrayIntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 impl ExactSizeIterator for BitArrayIntoIter {
@@ -315,23 +342,29 @@ impl ExactSizeIterator for BitArrayIntoIter {
 
 impl PartialEq for BitArray {
     fn eq(&self, other: &Self) -> bool {
-        self.normalize() == other.normalize() && self.len() == other.len()
+        self.len() == other.len() && self.normalize() == other.normalize()
     }
 }
 impl Eq for BitArray {}
 impl std::hash::Hash for BitArray {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let (data, spec) = self.normalize();
-        data.hash(state);
-        spec.hash(state);
         self.len.hash(state);
+        self.normalize().hash(state);
     }
 }
 impl std::fmt::Debug for BitArray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
-            .entries(self.clone())
+            .entries(self)
             .finish()
+    }
+}
+impl std::fmt::Display for BitArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for bit in self.iter().rev() {
+            write!(f, "{bit}")?;
+        }
+        Ok(())
     }
 }
 
@@ -403,5 +436,26 @@ impl std::ops::Not for BitArray {
         let data = self.spec | !self.data;
         let len = self.len;
         Self { spec, data, len }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{BitArray, BitState};
+
+    #[test]
+    fn display() {
+        let ba = BitArray::from_iter([
+            BitState::Low,
+            BitState::Imped,
+            BitState::High,
+            BitState::Unk,
+            BitState::High,
+            BitState::Low,
+            BitState::Unk,
+            BitState::Imped,
+        ]);
+
+        assert_eq!(format!("{ba}"), "ZX01X1Z0");
     }
 }

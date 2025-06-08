@@ -48,7 +48,7 @@ impl Component for NodeFnType {
             inp.iter()
                 .cloned()
                 .reduce(f)
-                .unwrap_or_else(|| BitArray::repeat(BitState::Unk, bitsize))
+                .unwrap_or_else(|| BitArray::unknown(bitsize))
         }
         // TODO: bitsize
 
@@ -69,9 +69,9 @@ impl Component for NodeFnType {
                 let bitsize = input.len();
 
                 vec![match gate {
-                    BitState::Low | BitState::Imped => BitArray::repeat(BitState::Imped, bitsize),
+                    BitState::Low | BitState::Imped => BitArray::floating(bitsize),
                     BitState::High => input,
-                    BitState::Unk => BitArray::repeat(BitState::Unk, bitsize),
+                    BitState::Unk => BitArray::unknown(bitsize),
                 }]
             },
 
@@ -151,7 +151,7 @@ macro_rules! gates {
                     let value = inp.iter()
                         .cloned()
                         .reduce($f)
-                        .unwrap_or_else(|| BitArray::repeat(BitState::Unk, self.props.bitsize));
+                        .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
     
                     vec![value]
                 }
@@ -205,8 +205,8 @@ impl Component for TriState {
         let gate = inp[0].index(0);
         let result = match gate {
             BitState::High => inp[1].clone(),
-            BitState::Low | BitState::Imped => BitArray::repeat(BitState::Imped, self.props.bitsize),
-            BitState::Unk => BitArray::repeat(BitState::Unk, self.props.bitsize),
+            BitState::Low | BitState::Imped => BitArray::floating(self.props.bitsize),
+            BitState::Unk => BitArray::unknown(self.props.bitsize),
         };
         vec![result]
     }

@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 use std::ops::{Index, IndexMut};
 
-use bitarray::{BitArray, BitState};
+use bitarray::BitArray;
 use node::{Component, NodeFnType};
 use slotmap::{new_key_type, SlotMap};
 
@@ -52,7 +52,7 @@ impl Graph {
     pub fn add_function(&mut self, func: NodeFnType) -> FunctionKey {
         let inputs = vec![None; func.inputs().len()];
         let outputs = func.outputs().into_iter()
-            .map(|size| (None, BitArray::repeat(BitState::Imped, size)))
+            .map(|size| (None, BitArray::floating(size)))
             .collect();
         self.functions.insert(FunctionNode {
             func, inputs, outputs
@@ -161,7 +161,7 @@ impl Circuit {
         ix
     }
     fn add_output_node(&mut self, len: u8) -> ValueKey {
-        let ix = self.graph.add_value(BitArray::repeat(BitState::Imped, len));
+        let ix = self.graph.add_value(BitArray::floating(len));
         self.outputs.push(ix);
         ix
     }
@@ -211,7 +211,7 @@ impl Circuit {
                 let mut it = self.graph[node].inputs.iter()
                     .map(|&Port { gate, index }| self.graph[gate].outputs[index].1.clone());
                 if let Some(first) = it.next() {
-                    let Some(result) = it.try_fold(first, BitArray::try_join) else {
+                    let Ok(result) = it.try_fold(first, BitArray::try_join) else {
                         todo!("short circuit");
                     };
 
@@ -232,7 +232,7 @@ impl Circuit {
                 let inputs: Vec<_> = std::iter::zip(gate.func.inputs(), gate.inputs.iter())
                     .map(|(size, &m_node)| match m_node {
                         Some(n) => self.graph[n].value.clone(),
-                        None => BitArray::repeat(BitState::Imped, size),
+                        None => BitArray::floating(size),
                     })
                     .collect();
                 
@@ -273,6 +273,8 @@ impl IndexMut<FunctionKey> for Circuit {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitarray::BitState;
+
     use super::*;
 
     #[test]
@@ -309,8 +311,8 @@ mod tests {
             circuit.add_input_node(BitArray::from(b)),
             circuit.add_input_node(BitArray::from(c)),
             circuit.add_input_node(BitArray::from(d)),
-            circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
-            circuit.add_value_node(BitArray::repeat(BitState::Imped, 64)),
+            circuit.add_value_node(BitArray::floating(64)),
+            circuit.add_value_node(BitArray::floating(64)),
             circuit.add_output_node(64),
         ];
         let gates = [
