@@ -37,10 +37,24 @@ struct ValueNode {
     outputs: HashSet<Port>,
     issues: HashSet<ValueIssue>
 }
+impl ValueNode {
+    fn new(value: BitArray) -> Self {
+        Self { value, inputs: HashSet::new(), outputs: HashSet::new(), issues: HashSet::new() }
+    }
+}
 struct FunctionNode {
     func: ComponentFn,
     inputs: Vec<Option<ValueKey>>,
     outputs: Vec<(Option<ValueKey>, BitArray)>,
+}
+impl FunctionNode {
+    fn new(func: ComponentFn) -> Self {
+        let inputs = vec![None; func.input_sizes().len()];
+        let outputs = func.output_sizes().into_iter()
+            .map(|size| (None, BitArray::floating(size)))
+            .collect();
+        Self { func, inputs, outputs }
+    }
 }
 #[derive(Default)]
 struct Graph {
@@ -53,18 +67,10 @@ impl Graph {
     }
 
     pub fn add_value(&mut self, value: BitArray) -> ValueKey {
-        self.values.insert(ValueNode {
-            value, inputs: HashSet::new(), outputs: HashSet::new(), issues: HashSet::new()
-        })
+        self.values.insert(ValueNode::new(value))
     }
     pub fn add_function(&mut self, func: ComponentFn) -> FunctionKey {
-        let inputs = vec![None; func.input_sizes().len()];
-        let outputs = func.output_sizes().into_iter()
-            .map(|size| (None, BitArray::floating(size)))
-            .collect();
-        self.functions.insert(FunctionNode {
-            func, inputs, outputs
-        })
+        self.functions.insert(FunctionNode::new(func))
     }
 
     pub fn connect_in(&mut self, gate: FunctionKey, source: ValueKey, port: usize) {
