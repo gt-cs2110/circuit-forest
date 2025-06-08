@@ -30,73 +30,6 @@ fn any_activated(old: &[BitArray], new: &[BitArray], sensitivities: &[Sensitivit
         .zip(sensitivities)
         .any(|((o, n), s)| s.activated(o, n))
 }
-pub enum NodeFnType {
-    Transistor, Splitter,
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
-    Mux, Decoder
-}
-impl Component for NodeFnType {
-    fn input_sizes(&self) -> Vec<u8> {
-        vec![64; 2]
-    }
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![64; 1]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        fn reduce(inp: &[BitArray], bitsize: u8, f: impl FnMut(BitArray, BitArray) -> BitArray) -> BitArray {
-            inp.iter()
-                .cloned()
-                .reduce(f)
-                .unwrap_or_else(|| BitArray::unknown(bitsize))
-        }
-        // TODO: bitsize
-
-        match self {
-            NodeFnType::Transistor => todo!(),
-            NodeFnType::Splitter => todo!(),
-
-            NodeFnType::And  => vec![reduce(inp, 64, |a, b| a & b)],
-            NodeFnType::Or   => vec![reduce(inp, 64, |a, b| a | b)],
-            NodeFnType::Xor  => vec![reduce(inp, 64, |a, b| a ^ b)],
-            NodeFnType::Nand => vec![reduce(inp, 64, |a, b| !(a & b))],
-            NodeFnType::Nor  => vec![reduce(inp, 64, |a, b| !(a | b))],
-            NodeFnType::Xnor => vec![reduce(inp, 64, |a, b| !(a ^ b))],
-            NodeFnType::Not  => vec![!inp[0].clone()],
-            NodeFnType::TriState => {
-                let gate = inp[0].index(0);
-                let input = inp[1].clone();
-                let bitsize = input.len();
-
-                vec![match gate {
-                    BitState::Low | BitState::Imped => BitArray::floating(bitsize),
-                    BitState::High => input,
-                    BitState::Unk => BitArray::unknown(bitsize),
-                }]
-            },
-
-            NodeFnType::Mux => {
-                let m_sel = inp[0].to_u64();
-                let bitsize = inp[1].len();
-                match m_sel {
-                    Ok(sel) => vec![inp[sel as usize + 1].clone()],
-                    Err(e) => vec![BitArray::repeat(e.bit_state(), bitsize)],
-                }
-            },
-            NodeFnType::Decoder => {
-                let m_sel = inp[0].to_u64();
-                let n_outputs = inp[0].len();
-
-                match m_sel {
-                    Ok(sel) => (0..n_outputs)
-                        .map(|i| BitArray::repeat((u64::from(i) == sel).into(), 1))
-                        .collect(),
-                    Err(e) => vec![BitArray::repeat(e.bit_state(), 1); usize::from(n_outputs)],
-                }
-            },
-        }
-    }
-}
 
 macro_rules! decl_component_enum {
     ($ComponentEnum:ident: $($Component:ident),*$(,)?) => {
@@ -126,9 +59,19 @@ macro_rules! decl_component_enum {
                 }
             }
         }
+        $(
+            impl From<$Component> for $ComponentEnum {
+                fn from(value: $Component) -> Self {
+                    Self::$Component(value)
+                }
+            }
+        )*
     }
 }
-decl_component_enum!(NodeFn: And, Or, Xor, Nand, Nor, Xnor, Not, TriState);
+decl_component_enum!(ComponentFn: And, Or, Xor, Nand, Nor, Xnor, Not, TriState);
+
+pub const MIN_GATE_INPUTS: u8 = 2;
+pub const MAX_GATE_INPUTS: u8 = 64;
 pub struct GateProperties {
     bitsize: u8,
     n_inputs: u8
@@ -139,6 +82,13 @@ macro_rules! gates {
         $(
             pub struct $Id {
                 props: GateProperties
+            }
+            impl $Id {
+                pub fn new(mut bitsize: u8, mut n_inputs: u8) -> Self {
+                    bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+                    n_inputs = n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS);
+                    Self { props: GateProperties { bitsize, n_inputs }}
+                }
             }
             impl Component for $Id {
                 fn input_sizes(&self) -> Vec<u8> {
@@ -175,6 +125,12 @@ pub struct BufNotProperties {
 pub struct Not {
     props: BufNotProperties
 }
+impl Not {
+    pub fn new(mut bitsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        Self { props: BufNotProperties { bitsize }}
+    }
+}
 impl Component for Not {
     fn input_sizes(&self) -> Vec<u8> {
         vec![self.props.bitsize]
@@ -191,6 +147,12 @@ impl Component for Not {
 
 pub struct TriState {
     props: BufNotProperties
+}
+impl TriState {
+    pub fn new(mut bitsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        Self { props: BufNotProperties { bitsize }}
+    }
 }
 impl Component for TriState {
     fn input_sizes(&self) -> Vec<u8> {

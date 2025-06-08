@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::ops::{Index, IndexMut};
 
 use bitarray::BitArray;
-use node::{Component, NodeFnType};
+use node::{Component, ComponentFn};
 use slotmap::{new_key_type, SlotMap};
 
 pub mod bitarray;
@@ -30,7 +30,7 @@ struct ValueNode {
     outputs: HashSet<Port>,
 }
 struct FunctionNode {
-    func: NodeFnType,
+    func: ComponentFn,
     inputs: Vec<Option<ValueKey>>,
     outputs: Vec<(Option<ValueKey>, BitArray)>,
 }
@@ -49,7 +49,7 @@ impl Graph {
             value, inputs: HashSet::new(), outputs: HashSet::new()
         })
     }
-    pub fn add_function(&mut self, func: NodeFnType) -> FunctionKey {
+    pub fn add_function(&mut self, func: ComponentFn) -> FunctionKey {
         let inputs = vec![None; func.input_sizes().len()];
         let outputs = func.output_sizes().into_iter()
             .map(|size| (None, BitArray::floating(size)))
@@ -165,8 +165,8 @@ impl Circuit {
         self.outputs.push(ix);
         ix
     }
-    fn add_function_node(&mut self, f: NodeFnType) -> FunctionKey {
-        self.graph.add_function(f)
+    fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
+        self.graph.add_function(f.into())
     }
     fn inputs(&self) -> &[ValueKey] {
         &self.inputs
@@ -259,7 +259,7 @@ impl IndexMut<ValueKey> for Circuit {
     }
 }
 impl Index<FunctionKey> for Circuit {
-    type Output = NodeFnType;
+    type Output = ComponentFn;
 
     fn index(&self, index: FunctionKey) -> &Self::Output {
         &self.graph[index].func
@@ -289,7 +289,7 @@ mod tests {
             circuit.add_input_node(BitArray::from(b)),
             circuit.add_output_node(64),
         ];
-        let gates = [circuit.add_function_node(NodeFnType::Xor)];
+        let gates = [circuit.add_function_node(node::Xor::new(64, 2))];
 
         circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[2]]);
         circuit.run();
@@ -317,9 +317,9 @@ mod tests {
             circuit.add_output_node(64),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::Xor),
-            circuit.add_function_node(NodeFnType::Xor),
-            circuit.add_function_node(NodeFnType::Xor),
+            circuit.add_function_node(node::Xor::new(64, 2)),
+            circuit.add_function_node(node::Xor::new(64, 2)),
+            circuit.add_function_node(node::Xor::new(64, 2)),
         ];
         circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[4]]);
         circuit.connect(gates[1], &[wires[2], wires[3]], &[wires[5]]);
@@ -341,8 +341,8 @@ mod tests {
             circuit.add_output_node(64),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::Not),
-            circuit.add_function_node(NodeFnType::Not),
+            circuit.add_function_node(node::Not::new(64)),
+            circuit.add_function_node(node::Not::new(64)),
         ];
 
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
@@ -367,8 +367,8 @@ mod tests {
             circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::Nand),
-            circuit.add_function_node(NodeFnType::Nand),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
         ];
 
         circuit.connect(gates[0], &[wires[0], wires[1]], &[wires[2]]);
@@ -389,8 +389,8 @@ mod tests {
             circuit.add_value_node(BitArray::from_iter([BitState::Unk])),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::TriState),
-            circuit.add_function_node(NodeFnType::TriState),
+            circuit.add_function_node(node::TriState::new(1)),
+            circuit.add_function_node(node::TriState::new(1)),
         ];
         circuit.connect(gates[0], &[wires[0], wires[0]], &[wires[2]]);
         circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
@@ -409,8 +409,8 @@ mod tests {
             circuit.add_value_node(BitArray::from_iter([BitState::Unk])),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::TriState),
-            circuit.add_function_node(NodeFnType::TriState),
+            circuit.add_function_node(node::TriState::new(1)),
+            circuit.add_function_node(node::TriState::new(1)),
         ];
         circuit.connect(gates[0], &[wires[1], wires[0]], &[wires[2]]);
         circuit.connect(gates[1], &[wires[1], wires[1]], &[wires[2]]);
@@ -427,9 +427,9 @@ mod tests {
             circuit.add_value_node(BitArray::from_iter([BitState::Low])),
         ];
         let gates = [
-            circuit.add_function_node(NodeFnType::Not),
-            circuit.add_function_node(NodeFnType::Not),
-            circuit.add_function_node(NodeFnType::Not),
+            circuit.add_function_node(node::Not::new(1)),
+            circuit.add_function_node(node::Not::new(1)),
+            circuit.add_function_node(node::Not::new(1)),
         ];
 
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
@@ -448,8 +448,8 @@ mod tests {
             circuit.add_value_node(BitArray::from_iter([BitState::Low])), // Q'
         ];
         let [rnand, snand] = [
-            circuit.add_function_node(NodeFnType::Nand),
-            circuit.add_function_node(NodeFnType::Nand),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
         ];
 
         // R = 1, S = 1

@@ -127,6 +127,9 @@ pub struct BitArray {
     len: u8
 }
 impl BitArray {
+    pub const MIN_BITSIZE: u8 = 1;
+    pub const MAX_BITSIZE: u8 = u64::BITS as u8;
+
     pub fn new() -> Self {
         Default::default()
     }
