@@ -215,22 +215,6 @@ impl BitArray {
             self.set_raw(i, st);
         }
     }
-    fn push(&mut self, st: BitState) {
-        if let len @ ..64 = self.len() {
-            self.set_raw(len, st);
-            self.len += 1;
-        }
-    }
-    fn pop(&mut self) -> Option<BitState> {
-        (!self.is_empty()).then(|| {
-            self.len -= 1;
-            let data = self.data & 1 != 0;
-            let spec = self.spec & 1 != 0;
-            self.data >>= 1;
-            self.spec >>= 1;
-            BitState::join(data, spec)
-        })
-    }
 
     pub fn index(&self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
@@ -267,9 +251,10 @@ impl BitArray {
 impl FromIterator<BitState> for BitArray {
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
         iter.into_iter()
-            .take(64)
-            .fold(BitArray::new(), |mut arr, st| {
-                arr.push(st);
+            .zip(0..64)
+            .fold(BitArray::new(), |mut arr, (st, i)| {
+                arr.set_raw(i, st);
+                arr.len += 1;
                 arr
             })
     }
@@ -304,7 +289,13 @@ impl Iterator for BitArrayIntoIter {
     type Item = BitState;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.pop()
+        (!self.0.is_empty()).then(|| {
+            let raw = self.0.get_raw(0);
+            self.0.data >>= 1;
+            self.0.spec >>= 1;
+            self.0.len -= 1;
+            raw
+        })
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.len();
@@ -313,9 +304,8 @@ impl Iterator for BitArrayIntoIter {
 }
 impl DoubleEndedIterator for BitArrayIntoIter {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let len = self.0.len();
-        (len > 0).then(|| {
-            let raw = self.0.get_raw(len - 1);
+        (!self.0.is_empty()).then(|| {
+            let raw = self.0.get_raw(self.0.len() - 1);
             self.0.len -= 1;
             raw
         })
