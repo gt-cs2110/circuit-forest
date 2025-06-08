@@ -216,35 +216,6 @@ impl BitArray {
     pub fn index(self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
     }
-    pub fn join(self, rhs: BitArray) -> BitArray {
-        // TODO: assert size
-        // __ | 00 | 01 | 10 | 11
-        // 00 | 11 | 11 | 00 | 11
-        // 01 | 11 | 11 | 01 | 11
-        // 10 | 00 | 01 | 10 | 11
-        // 11 | 11 | 11 | 11 | 11
-        let len = self.len();
-        let lz = self.is_z();
-        let rz = rhs.is_z();
-
-        let data = (!lz & !rz) | (lz & !rz & rhs.data) | (rz & self.data);
-        let spec = (!lz & !rz) | (lz & !rz & rhs.spec) | (rz & self.spec);
-        
-        Self { data, spec, len }
-    }
-    pub(crate) fn short_circuits(values: impl IntoIterator<Item=BitArray>) -> bool {
-        let mut occupied = 0;
-        for val in values {
-            let not_z = val.is_0() | val.is_1() | val.is_x();
-
-            // Short circuit if multiple bits have non-Z
-            if occupied & not_z != 0 {
-                return true;
-            }
-            occupied |= not_z;
-        }
-        false
-    }
 }
 impl FromIterator<BitState> for BitArray {
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
@@ -352,6 +323,37 @@ impl std::fmt::Display for BitArray {
 }
 
 // assume same size
+impl BitArray {
+    pub fn join(self, rhs: BitArray) -> BitArray {
+        // TODO: assert size
+        // __ | 00 | 01 | 10 | 11
+        // 00 | 11 | 11 | 00 | 11
+        // 01 | 11 | 11 | 01 | 11
+        // 10 | 00 | 01 | 10 | 11
+        // 11 | 11 | 11 | 11 | 11
+        let len = self.len();
+        let lz = self.is_z();
+        let rz = rhs.is_z();
+
+        let data = (!lz & !rz) | (lz & !rz & rhs.data) | (rz & self.data);
+        let spec = (!lz & !rz) | (lz & !rz & rhs.spec) | (rz & self.spec);
+        
+        Self { data, spec, len }
+    }
+    pub(crate) fn short_circuits(values: impl IntoIterator<Item=BitArray>) -> bool {
+        let mut occupied = 0;
+        for val in values {
+            let not_z = val.is_0() | val.is_1() | val.is_x();
+
+            // Short circuit if multiple bits have non-Z
+            if occupied & not_z != 0 {
+                return true;
+            }
+            occupied |= not_z;
+        }
+        false
+    }
+}
 impl std::ops::BitAnd for BitArray {
     type Output = Self;
 
