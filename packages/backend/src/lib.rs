@@ -360,7 +360,7 @@ mod tests {
         circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
         circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
         circuit.run(&[wires[0]]);
-        
+
         let (l1, r1) = (a, u64::try_from(circuit[wires[0]]).unwrap());
         let (l2, r2) = (!a, u64::try_from(circuit[wires[1]]).unwrap());
         assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
@@ -489,5 +489,36 @@ mod tests {
 
         assert_eq!(u64::try_from(circuit[q]).unwrap(), 1);
         assert_eq!(u64::try_from(circuit[qp]).unwrap(), 0);
+    }
+
+    #[test]
+    fn chain() {
+        let mut circuit = Circuit::new();
+        
+        // Wires
+        let a_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let b_in = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
+        let c_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let d_in = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
+        let e_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let ab_mid = circuit.add_value_node(BitArray::floating(1));
+        let abc_mid = circuit.add_value_node(BitArray::floating(1));
+        let abcd_mid = circuit.add_value_node(BitArray::floating(1));
+        let out = circuit.add_value_node(BitArray::floating(1));
+        // Gates
+        let gates = [
+            circuit.add_function_node(node::Xor::new(1, 2)),
+            circuit.add_function_node(node::Xor::new(1, 2)),
+            circuit.add_function_node(node::Xor::new(1, 2)),
+            circuit.add_function_node(node::Xor::new(1, 2)),
+        ];
+
+        circuit.connect(gates[0], &[a_in, b_in], &[ab_mid]);
+        circuit.connect(gates[1], &[ab_mid, c_in], &[abc_mid]);
+        circuit.connect(gates[2], &[abc_mid, d_in], &[abcd_mid]);
+        circuit.connect(gates[3], &[abcd_mid, e_in], &[out]);
+        circuit.run(&[a_in, b_in, c_in, d_in, e_in]);
+
+        assert_eq!(u64::try_from(circuit[out]).unwrap(), 1);
     }
 }
