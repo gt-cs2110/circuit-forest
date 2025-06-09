@@ -197,7 +197,7 @@ impl Circuit {
         while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
             if iteration > RUN_ITER_LIMIT {
                 for &key in self.transient.triggers.keys() {
-                    self.graph[key].issues.insert(ValueIssue::ShortCircuit);
+                    self.graph[key].issues.insert(ValueIssue::OscillationDetected);
                 }
                 break;
             }
@@ -530,5 +530,18 @@ mod tests {
         circuit.run(&[a_in, b_in, c_in, d_in, e_in]);
 
         assert_eq!(u64::try_from(circuit[out]).unwrap(), 1);
+    }
+
+    #[test]
+    fn oscillate() {
+        let mut circuit = Circuit::new();
+
+        let a_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let gate = circuit.add_function_node(node::Not::new(1));
+        
+        circuit.connect(gate, &[a_in], &[a_in]);
+        circuit.run(&[a_in]);
+
+        assert!(circuit.graph[a_in].issues.contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
     }
 }
