@@ -44,15 +44,16 @@ impl ValueNode {
 struct FunctionNode {
     func: ComponentFn,
     links: Vec<Option<(ValueKey, PortType)>>,
+    old_values: Vec<BitArray>,
     values: Vec<BitArray>
 }
 impl FunctionNode {
     fn new(func: ComponentFn) -> Self {
-        let (links, values) = func.ports().into_iter()
-            .map(|bitsize| (None, BitArray::floating(bitsize)))
+        let (links, (old_values, values)) = func.ports().into_iter()
+            .map(|bitsize| (None, (BitArray::floating(bitsize), BitArray::floating(bitsize))))
             .unzip();
 
-        Self { func, links, values }
+        Self { func, links, old_values, values }
     }
 }
 #[derive(Default)]
@@ -223,6 +224,7 @@ impl Circuit {
                 let gate = &mut self.graph.functions[gate_idx];
 
                 // Update inputs:
+                gate.old_values = gate.values.clone();
                 for (index, (&port, port_value)) in std::iter::zip(&gate.links, &mut gate.values).enumerate() {
                     let port_size = port_value.len();
                     let input = match port {
@@ -244,7 +246,7 @@ impl Circuit {
                     *port_value = input;
                 }
                 
-                for PortUpdate { index, value } in gate.func.run(&gate.values) {
+                for PortUpdate { index, value } in gate.func.run(&gate.old_values, &gate.values) {
                     self.graph[gate_idx].values[index] = value; // todo: assert right value
                     
                     if let Some((sink_idx, PortType::Output)) = self.graph[gate_idx].links[index] {
@@ -533,5 +535,41 @@ mod tests {
         circuit.run(&[a_in]);
 
         assert!(circuit.graph[a_in].issues.contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
+    }
+
+    #[test]
+    fn splitter() {
+        let inputs = [
+            BitState::Low,
+            BitState::High,
+            BitState::Imped,
+            BitState::Unk,
+            BitState::Low,
+            BitState::High,
+            BitState::Imped,
+            BitState::Unk,
+        ];
+        let split = inputs.map(|n| BitArray::from_iter([n]));
+        let joined = BitArray::from_iter(inputs);
+
+        let mut circuit = Circuit::new();
+
+        // joined -> split
+        let join_node = circuit.add_value_node(joined);
+        let split_nodes: [_; 8] = std::array::from_fn(|_| {
+            circuit.add_value_node(BitArray::floating(1))
+        });
+        let splitter = circuit.add_function_node(node::Splitter::new(8));
+
+        circuit.connect(splitter, &[join_node], &split_nodes);
+        circuit.run(&[join_node]);
+
+        assert_eq!(split_nodes.map(|n| circuit[n]), split);
+        panic!();
+        // // split -> joined
+        // for (n, st) in std::iter::zip(split_nodes, inputs.into_iter().rev()) {
+        //     circuit[n] = BitArray::from_iter([st]);
+        // }
+        // circuit.run(&split_nodes);
     }
 }
