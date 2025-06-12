@@ -136,7 +136,7 @@ impl BitArray {
         Self {
             data: if data { u64::MAX } else { 0 },
             spec: if spec { u64::MAX } else { 0 },
-            len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE - 1)
+            len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
         }
     }
     pub fn floating(len: u8) -> Self {

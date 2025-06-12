@@ -1,10 +1,30 @@
 use crate::bitarray::{BitArray, BitState};
 
+pub struct FunctionNode {
+    state: Vec<BitArray>,
+    func: ComponentFn
+}
+impl FunctionNode {
+    pub fn new(mut func: ComponentFn) -> Self {
+        let mut state: Vec<_> = func.ports()
+            .into_iter()
+            .map(|size| BitArray::floating(size))
+            .collect();
+        func.initialize(&mut state);
+
+        Self { state, func }
+    }
+}
+pub struct PortUpdate {
+    pub index: usize,
+    pub value: BitArray
+}
+
 pub trait Component {
-    fn input_sizes(&self) -> Vec<u8>;
-    fn output_sizes(&self) -> Vec<u8>;
+    fn ports(&self) -> Vec<u8>;
+    fn initialize(&mut self, _state: &mut [BitArray]) {}
     #[must_use]
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray>;
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -37,21 +57,21 @@ macro_rules! decl_component_enum {
             $($Component($Component)),*
         }
         impl Component for $ComponentEnum {
-            fn input_sizes(&self) -> Vec<u8> {
+            fn ports(&self) -> Vec<u8> {
                 match self {
                     $(
-                        Self::$Component(c) => c.input_sizes(),
+                        Self::$Component(c) => c.ports(),
                     )*
                 }
             }
-            fn output_sizes(&self) -> Vec<u8> {
+            fn initialize(&mut self, state: &mut [BitArray]) {
                 match self {
                     $(
-                        Self::$Component(c) => c.output_sizes(),
+                        Self::$Component(c) => c.initialize(state),
                     )*
                 }
             }
-            fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+            fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
                 match self {
                     $(
                         Self::$Component(c) => c.run(inp),
@@ -94,19 +114,18 @@ macro_rules! gates {
                 }
             }
             impl Component for $Id {
-                fn input_sizes(&self) -> Vec<u8> {
-                    vec![self.props.bitsize; usize::from(self.props.n_inputs)]
+                fn ports(&self) -> Vec<u8> {
+                    std::iter::repeat_n(self.props.bitsize, usize::from(self.props.n_inputs)) // inputs
+                        .chain([self.props.bitsize]) // outputs
+                        .collect()
                 }
-                fn output_sizes(&self) -> Vec<u8> {
-                    vec![self.props.bitsize]
-                }
-                fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-                    let value = inp.iter()
+                fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
+                    let value = inp[..usize::from(self.props.n_inputs)].iter()
                         .cloned()
                         .reduce($f)
                         .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
     
-                    vec![value]
+                    vec![PortUpdate { index: usize::from(self.props.n_inputs), value }]
                 }
             }
         )*
@@ -135,16 +154,12 @@ impl Not {
     }
 }
 impl Component for Not {
-    fn input_sizes(&self) -> Vec<u8> {
-        vec![self.props.bitsize]
+    fn ports(&self) -> Vec<u8> {
+        vec![self.props.bitsize; 2]
     }
 
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![self.props.bitsize]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
-        vec![!inp[0]]
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
+        vec![PortUpdate { index: 1, value: !inp[0] }]
     }
 }
 
@@ -158,22 +173,19 @@ impl TriState {
     }
 }
 impl Component for TriState {
-    fn input_sizes(&self) -> Vec<u8> {
-        vec![1, self.props.bitsize]
+    fn ports(&self) -> Vec<u8> {
+        // selector, input, output
+        vec![1, self.props.bitsize, self.props.bitsize]
     }
 
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![self.props.bitsize]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
         let gate = inp[0].index(0);
         let result = match gate {
             BitState::High => inp[1],
             BitState::Low | BitState::Imped => BitArray::floating(self.props.bitsize),
             BitState::Unk => BitArray::unknown(self.props.bitsize),
         };
-        vec![result]
+        vec![PortUpdate { index: 2, value: result }]
     }
 }
 
@@ -194,22 +206,20 @@ impl Mux {
     }
 }
 impl Component for Mux {
-    fn input_sizes(&self) -> Vec<u8> {
-        let mut sizes = vec![self.props.selsize];
-        sizes.extend(std::iter::repeat_n(self.props.bitsize, 1 << self.props.selsize));
+    fn ports(&self) -> Vec<u8> {
+        let mut sizes = vec![self.props.selsize]; // selector
+        sizes.extend(std::iter::repeat_n(self.props.bitsize, 1 << self.props.selsize)); // inputs
+        sizes.push(self.props.bitsize); //output
         sizes
     }
 
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![self.props.bitsize]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
         let m_sel = u64::try_from(inp[0]);
-        match m_sel {
-            Ok(sel) => vec![inp[sel as usize + 1]],
-            Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize)],
-        }
+        let result = match m_sel {
+            Ok(sel) => inp[sel as usize + 1],
+            Err(e) => BitArray::repeat(e.bit_state(), self.props.bitsize),
+        };
+        vec![PortUpdate { index: (1 << self.props.selsize) + 1, value: result }]
     }
 }
 pub struct Demux {
@@ -223,25 +233,26 @@ impl Demux {
     }
 }
 impl Component for Demux {
-    fn input_sizes(&self) -> Vec<u8> {
-        vec![self.props.selsize, self.props.bitsize]
+    fn ports(&self) -> Vec<u8> {
+        let mut sizes = vec![self.props.selsize, self.props.bitsize]; // selector and input
+        sizes.extend(std::iter::repeat_n(self.props.bitsize, 1 << self.props.selsize)); // outputs
+        sizes
     }
-    
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![self.props.bitsize; 1 << self.props.selsize]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
         let m_sel = u64::try_from(inp[0]);
-        
-        match m_sel {
+        let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![BitArray::repeat(BitState::Low, self.props.bitsize); 1 << self.props.selsize];
                 result[sel as usize] = inp[1];
                 result
             },
             Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize); 1 << self.props.selsize],
-        }
+        };
+
+        result.into_iter()
+            .enumerate()
+            .map(|(i, value)| PortUpdate { index: 2 + i, value })
+            .collect()
     }
 }
 
@@ -258,25 +269,27 @@ impl Decoder {
     }
 }
 impl Component for Decoder {
-    fn input_sizes(&self) -> Vec<u8> {
-        vec![self.props.selsize]
+    fn ports(&self) -> Vec<u8> {
+        let mut sizes = vec![self.props.selsize]; // selector
+        sizes.extend(std::iter::repeat_n(1, 1 << self.props.selsize)); // outputs
+        sizes
     }
 
-    fn output_sizes(&self) -> Vec<u8> {
-        vec![1; 1 << self.props.selsize]
-    }
-
-    fn run(&mut self, inp: &[BitArray]) -> Vec<BitArray> {
+    fn run(&mut self, inp: &[BitArray]) -> Vec<PortUpdate> {
         let m_sel = u64::try_from(inp[0]);
-
-        match m_sel {
+        let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![BitArray::from_iter([BitState::Low]); 1 << self.props.selsize];
                 result[sel as usize] = BitArray::from_iter([BitState::High]);
                 result
             },
             Err(e) => vec![BitArray::from_iter([e.bit_state()]); 1 << self.props.selsize],
-        }
+        };
+
+        result.into_iter()
+            .enumerate()
+            .map(|(i, value)| PortUpdate { index: 1 + i, value })
+            .collect()
     }
 }
 
