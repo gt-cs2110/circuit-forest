@@ -491,6 +491,56 @@ mod tests {
     }
 
     #[test]
+    fn d_latch() {
+        let mut circuit = Circuit::new();
+        // external
+        let [din, wen, dout, doutp] = [
+            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_value_node(BitArray::from_iter([BitState::High])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+        ];
+        // internal
+        let [dinp, r, s] = [
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+        ];
+        // nodes
+        let [dnot, dnand, dpnand, rnand, snand] = [
+            circuit.add_function_node(node::Not::new(1)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(node::Nand::new(1, 2)),
+        ];
+
+        circuit.connect_all(dnot, &[din, dinp]);
+        circuit.connect_all(dnand, &[din, wen, s]);
+        circuit.connect_all(dpnand, &[dinp, wen, r]);
+        circuit.connect_all(rnand, &[r, dout, doutp]);
+        circuit.connect_all(snand, &[s, doutp, dout]);
+        
+        circuit.run(&[din, wen]);
+        assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
+
+        circuit[wen] = BitArray::from_iter([BitState::Low]);
+        circuit.run(&[wen]);
+        assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
+
+        circuit[din] = BitArray::from_iter([BitState::High]);
+        circuit.run(&[din]);
+        assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
+        assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
+
+        circuit[wen] = BitArray::from_iter([BitState::High]);
+        circuit.run(&[wen]);
+        assert_eq!(u64::try_from(circuit[dout]).unwrap(), 1);
+        assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 0);
+    }
+    #[test]
     fn chain() {
         let mut circuit = Circuit::new();
         
