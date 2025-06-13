@@ -6,7 +6,7 @@ use bitarray::BitArray;
 use node::{Component, ComponentFn};
 use slotmap::{new_key_type, SlotMap};
 
-use crate::node::PortUpdate;
+use crate::node::{PortProperties, PortType, PortUpdate};
 
 pub mod bitarray;
 pub mod node;
@@ -16,8 +16,6 @@ new_key_type! {
     pub struct FunctionKey;
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
-enum PortType { Input, Output }
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 struct Port {
     gate: FunctionKey,
@@ -32,28 +30,32 @@ enum ValueIssue {
 }
 struct ValueNode {
     value: BitArray,
-    inputs: HashSet<Port>,
-    outputs: HashSet<Port>,
+    links: HashSet<Port>,
     issues: HashSet<ValueIssue>
 }
 impl ValueNode {
     fn new(value: BitArray) -> Self {
-        Self { value, inputs: HashSet::new(), outputs: HashSet::new(), issues: HashSet::new() }
+        Self { value, links: HashSet::new(), issues: HashSet::new() }
     }
 }
 struct FunctionNode {
     func: ComponentFn,
-    links: Vec<Option<(ValueKey, PortType)>>,
+    port_types: Vec<PortType>,
+    // connections
+    links: Vec<Option<ValueKey>>,
+    // value update
     old_values: Vec<BitArray>,
     values: Vec<BitArray>
 }
 impl FunctionNode {
     fn new(func: ComponentFn) -> Self {
-        let (links, (old_values, values)) = func.ports().into_iter()
-            .map(|bitsize| (None, (BitArray::floating(bitsize), BitArray::floating(bitsize))))
+        let ((links, port_types), (old_values, values)) = func.ports().into_iter()
+            .map(|PortProperties { ty, bitsize }| ((None, ty), (BitArray::floating(bitsize), BitArray::floating(bitsize))))
             .unzip();
-
-        Self { func, links, old_values, values }
+        
+        let mut node = Self { func, links, port_types, old_values, values };
+        node.func.initialize(&mut node.values);
+        node
     }
 }
 #[derive(Default)]
@@ -73,25 +75,16 @@ impl Graph {
         self.functions.insert(FunctionNode::new(func))
     }
 
-    pub fn connect_in(&mut self, gate: FunctionKey, source: ValueKey, index: usize) {
-        self.disconnect(gate, index);
-        self.functions[gate].links[index].replace((source, PortType::Input));
-        self.values[source].outputs.insert(Port { gate, index });
+    pub fn connect(&mut self, wire: ValueKey, port: Port) {
+        self.disconnect(port);
+        self.functions[port.gate].links[port.index].replace(wire);
+        self.values[wire].links.insert(port);
     }
-    pub fn connect_out(&mut self, gate: FunctionKey, sink: ValueKey, index: usize) {
-        self.disconnect(gate, index);
-        self.functions[gate].links[index].replace((sink, PortType::Output));
-        self.values[sink].inputs.insert(Port { gate, index });
-    }
-
-    pub fn disconnect(&mut self, gate: FunctionKey, index: usize) {
-        let old_port = self.functions[gate].links[index];
+    pub fn disconnect(&mut self, port: Port) {
+        let old_port = self.functions[port.gate].links[port.index];
         // If there was something there, remove it from the other side:
-        if let Some((node, pt)) = old_port {
-            let result = match pt {
-                PortType::Input => self.values[node].outputs.remove(&Port { gate, index }),
-                PortType::Output => self.values[node].inputs.remove(&Port { gate, index })
-            };
+        if let Some(node) = old_port {
+            let result = self.values[node].links.remove(&port);
             debug_assert!(result, "Gate should've been removed from assigned value node");
         }
     }
@@ -99,11 +92,8 @@ impl Graph {
         self.functions[gate].links.iter_mut()
             .enumerate()
             .filter_map(|(index, p)| Some((index, p.take()?)))
-            .for_each(|(index, (node, pt))| {
-                let result = match pt {
-                    PortType::Input => self.values[node].outputs.remove(&Port { gate, index }),
-                    PortType::Output => self.values[node].inputs.remove(&Port { gate, index })
-                };
+            .for_each(|(index, node)| {
+                let result = self.values[node].links.remove(&Port { gate, index });
                 debug_assert!(result, "Gate should've been removed from assigned value node");
             });
     }
@@ -157,16 +147,14 @@ impl Circuit {
     fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
         self.graph.add_function(f.into())
     }
-    fn connect_one(&mut self, port: Port, as_input: bool, value: ValueKey) {
-        match as_input {
-            true  => self.graph.connect_in(port.gate, value, port.index),
-            false => self.graph.connect_out(port.gate, value, port.index),
-        }
+    fn connect(&mut self, wire: ValueKey, port: Port) {
+        self.graph.connect(wire, port);
     }
-    fn connect(&mut self, gate: FunctionKey, inputs: &[ValueKey], outputs: &[ValueKey]) {
+    fn connect_all(&mut self, gate: FunctionKey, ports: &[ValueKey]) {
         self.graph.clear_edges(gate);
-        inputs.iter().copied().enumerate().for_each(|(i, source)| self.graph.connect_in(gate, source, i));
-        std::iter::zip(inputs.len().., outputs.iter().copied()).for_each(|(i, sink)| self.graph.connect_out(gate, sink, i));
+        ports.iter().copied()
+            .enumerate()
+            .for_each(|(index, wire)| self.connect(wire, Port { gate, index }));
     }
     fn run(&mut self, inputs: &[ValueKey]) {
         const RUN_ITER_LIMIT: usize = 10_000;
@@ -195,8 +183,10 @@ impl Circuit {
 
                 let mut propagate_update = true;
                 if recalculate {
+                    // todo: assert right bitsize
                     // Get all port values feeding into value:
-                    let it = self.graph[node].inputs.iter()
+                    let it = self.graph[node].links.iter()
+                        .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_output())
                         .map(|&Port { gate, index }| self.graph[gate].values[index]);
                     // Join:
                     let result = it.clone()
@@ -213,8 +203,8 @@ impl Circuit {
 
                 if propagate_update {
                     self.transient.frontier.extend({
-                        self.graph[node].outputs
-                            .iter()
+                        self.graph[node].links.iter()
+                            .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_input())
                             .map(|&Port { gate, index: _ }| gate)
                     });
                 }
@@ -225,20 +215,26 @@ impl Circuit {
 
                 // Update inputs:
                 gate.old_values = gate.values.clone();
-                for (index, (&port, port_value)) in std::iter::zip(&gate.links, &mut gate.values).enumerate() {
+                for (index, ((&port, port_value), port_type)) in std::iter::zip(&gate.links, &mut gate.values).zip(&gate.port_types).enumerate() {
+                    if matches!(port_type, PortType::Output) { continue; }
+                    // Only update inputs and inouts
                     let port_size = port_value.len();
                     let input = match port {
-                        Some((_, PortType::Output)) => continue,
-                        Some((n, PortType::Input)) if self.graph.values[n].value.len() == port_size => self.graph.values[n].value,
-                        Some((n, PortType::Input)) => {
-                            let val_size = self.graph.values[n].value.len();
-                            self.graph.values[n].issues.insert(ValueIssue::MismatchedBitsizes {
-                                val_size,
-                                port_size,
-                                port: Port { gate: gate_idx, index },
-                                is_input: true
-                            });
-                            BitArray::floating(port_size)
+                        Some(n) => {
+                            let node = &mut self.graph.values[n];
+                            let val_size = node.value.len();
+                            match val_size == port_size {
+                                true  => node.value,
+                                false => {
+                                    node.issues.insert(ValueIssue::MismatchedBitsizes {
+                                        val_size,
+                                        port_size,
+                                        port: Port { gate: gate_idx, index },
+                                        is_input: true
+                                    });
+                                    BitArray::floating(port_size)
+                                }
+                            }
                         },
                         None => BitArray::floating(port_size)
                     };
@@ -247,9 +243,10 @@ impl Circuit {
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&gate.old_values, &gate.values) {
-                    self.graph[gate_idx].values[index] = value; // todo: assert right value
+                    debug_assert!(self.graph[gate_idx].port_types[index].accepts_output(), "Input port cannot be updated");
+                    self.graph[gate_idx].values[index] = value; // todo: assert right bitsize
                     
-                    if let Some((sink_idx, PortType::Output)) = self.graph[gate_idx].links[index] {
+                    if let Some(sink_idx) = self.graph[gate_idx].links[index] {
                         self.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
                     }
                 }
@@ -304,7 +301,7 @@ mod tests {
         // Gates
         let gate = circuit.add_function_node(node::Xor::new(64, 2));
 
-        circuit.connect(gate, &[a_in, b_in], &[out]);
+        circuit.connect_all(gate, &[a_in, b_in, out]);
         circuit.run(&[a_in, b_in]);
 
         let left = a ^ b;
@@ -335,9 +332,9 @@ mod tests {
             circuit.add_function_node(node::Xor::new(64, 2)),
         ];
 
-        circuit.connect(gates[0], &[a_in, b_in], &[ab_mid]);
-        circuit.connect(gates[1], &[c_in, d_in], &[cd_mid]);
-        circuit.connect(gates[2], &[ab_mid, cd_mid], &[out]);
+        circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);
+        circuit.connect_all(gates[1], &[c_in, d_in, cd_mid]);
+        circuit.connect_all(gates[2], &[ab_mid, cd_mid, out]);
         circuit.run(&[a_in, b_in, c_in, d_in]);
 
         let left = a ^ b ^ c ^ d;
@@ -359,8 +356,8 @@ mod tests {
             circuit.add_function_node(node::Not::new(64)),
         ];
 
-        circuit.connect(gates[0], &[wires[0]], &[wires[1]]);
-        circuit.connect(gates[1], &[wires[1]], &[wires[0]]);
+        circuit.connect_all(gates[0], &[wires[0], wires[1]]);
+        circuit.connect_all(gates[1], &[wires[1], wires[0]]);
         circuit.run(&[wires[0]]);
 
         let (l1, r1) = (a, u64::try_from(circuit[wires[0]]).unwrap());
@@ -381,8 +378,8 @@ mod tests {
             circuit.add_function_node(node::Nand::new(1, 2)),
         ];
 
-        circuit.connect(gates[0], &[inp, out1], &[out0]);
-        circuit.connect(gates[1], &[inp, out0], &[out1]);
+        circuit.connect_all(gates[0], &[inp, out1, out0]);
+        circuit.connect_all(gates[1], &[inp, out0, out1]);
         circuit.run(&[inp]);
 
         assert_eq!(0, u64::try_from(circuit[inp]).unwrap());
@@ -404,8 +401,8 @@ mod tests {
             circuit.add_function_node(node::TriState::new(1)),
         ];
 
-        circuit.connect(gates[0], &[lo, lo], &[out]);
-        circuit.connect(gates[1], &[hi, hi], &[out]);
+        circuit.connect_all(gates[0], &[lo, lo, out]);
+        circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
         assert_eq!(1, u64::try_from(circuit[out]).unwrap());
@@ -425,8 +422,8 @@ mod tests {
             circuit.add_function_node(node::TriState::new(1)),
         ];
 
-        circuit.connect(gates[0], &[hi, lo], &[out]);
-        circuit.connect(gates[1], &[hi, hi], &[out]);
+        circuit.connect_all(gates[0], &[hi, lo, out]);
+        circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
         assert!(circuit.graph[out].issues.contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
@@ -447,9 +444,9 @@ mod tests {
             circuit.add_function_node(node::Not::new(1)),
         ];
 
-        circuit.connect(gates[0], &[inp], &[mid]);
-        circuit.connect(gates[1], &[mid], &[out]);
-        circuit.connect(gates[2], &[inp], &[out]);
+        circuit.connect_all(gates[0], &[inp, mid]);
+        circuit.connect_all(gates[1], &[mid, out]);
+        circuit.connect_all(gates[2], &[inp, out]);
         circuit.run(&[inp]);
 
         assert!(circuit.graph[out].issues.contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
@@ -470,8 +467,8 @@ mod tests {
         ];
 
         // R = 1, S = 1
-        circuit.connect(rnand, &[r, q], &[qp]);
-        circuit.connect(snand, &[s, qp], &[q]);
+        circuit.connect_all(rnand, &[r, q, qp]);
+        circuit.connect_all(snand, &[s, qp, q]);
         circuit.run(&[r, s]);
 
         assert_eq!(u64::try_from(circuit[q]).unwrap(), 1);
@@ -515,10 +512,10 @@ mod tests {
             circuit.add_function_node(node::Xor::new(1, 2)),
         ];
 
-        circuit.connect(gates[0], &[a_in, b_in], &[ab_mid]);
-        circuit.connect(gates[1], &[ab_mid, c_in], &[abc_mid]);
-        circuit.connect(gates[2], &[abc_mid, d_in], &[abcd_mid]);
-        circuit.connect(gates[3], &[abcd_mid, e_in], &[out]);
+        circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);
+        circuit.connect_all(gates[1], &[ab_mid, c_in, abc_mid]);
+        circuit.connect_all(gates[2], &[abc_mid, d_in, abcd_mid]);
+        circuit.connect_all(gates[3], &[abcd_mid, e_in, out]);
         circuit.run(&[a_in, b_in, c_in, d_in, e_in]);
 
         assert_eq!(u64::try_from(circuit[out]).unwrap(), 1);
@@ -531,7 +528,7 @@ mod tests {
         let a_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
         let gate = circuit.add_function_node(node::Not::new(1));
         
-        circuit.connect(gate, &[a_in], &[a_in]);
+        circuit.connect_all(gate, &[a_in, a_in]);
         circuit.run(&[a_in]);
 
         assert!(circuit.graph[a_in].issues.contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
@@ -539,6 +536,16 @@ mod tests {
 
     #[test]
     fn splitter() {
+        let mut circuit = Circuit::new();
+        let nodes: [_; 9] = std::array::from_fn(|i| circuit.add_value_node(match i {
+            0 => BitArray::floating(8),
+            _ => BitArray::floating(1)
+        }));
+        let [joined_node, split_nodes @ ..] = nodes;
+        let splitter = circuit.add_function_node(node::Splitter::new(8));
+        circuit.connect_all(splitter, &nodes);
+
+        // joined -> split
         let inputs = [
             BitState::Low,
             BitState::High,
@@ -549,27 +556,31 @@ mod tests {
             BitState::Imped,
             BitState::Unk,
         ];
-        let split = inputs.map(|n| BitArray::from_iter([n]));
         let joined = BitArray::from_iter(inputs);
+        let split = inputs.map(|st| BitArray::from_iter([st]));
 
-        let mut circuit = Circuit::new();
-
-        // joined -> split
-        let join_node = circuit.add_value_node(joined);
-        let split_nodes: [_; 8] = std::array::from_fn(|_| {
-            circuit.add_value_node(BitArray::floating(1))
-        });
-        let splitter = circuit.add_function_node(node::Splitter::new(8));
-
-        circuit.connect(splitter, &[join_node], &split_nodes);
-        circuit.run(&[join_node]);
-
+        circuit[joined_node] = joined;
+        circuit.run(&[nodes[0]]);
         assert_eq!(split_nodes.map(|n| circuit[n]), split);
-        panic!();
-        // // split -> joined
-        // for (n, st) in std::iter::zip(split_nodes, inputs.into_iter().rev()) {
-        //     circuit[n] = BitArray::from_iter([st]);
-        // }
-        // circuit.run(&split_nodes);
+
+        // split -> joined
+        let inputs = [
+            BitState::Unk,
+            BitState::Imped,
+            BitState::High,
+            BitState::Low,
+            BitState::Unk,
+            BitState::Imped,
+            BitState::High,
+            BitState::Low,
+        ];
+        let joined = BitArray::from_iter(inputs);
+        let split = inputs.map(|st| BitArray::from_iter([st]));
+
+        for (n, a) in std::iter::zip(split_nodes, split) {
+            circuit[n] = a;
+        }
+        circuit.run(&split_nodes);
+        assert_eq!(circuit[joined_node], joined);
     }
 }
