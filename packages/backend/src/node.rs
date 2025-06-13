@@ -93,7 +93,7 @@ macro_rules! decl_component_enum {
 }
 decl_component_enum!(ComponentFn: 
     And, Or, Xor, Nand, Nor, Xnor, Not, TriState, 
-    Mux, Demux, Decoder, Splitter,
+    Mux, Demux, Decoder, Splitter, Register
 );
 
 pub const MIN_GATE_INPUTS: u8 = 2;
@@ -351,6 +351,40 @@ impl Component for Splitter {
                 .map(|b| b.index(0))
                 .collect();
             vec![PortUpdate { index: 0, value }]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct Register {
+    props: BufNotProperties
+}
+impl Register {
+    pub fn new(mut bitsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        Self { props: BufNotProperties { bitsize } }
+    }
+}
+impl Component for Register {
+    fn ports(&self) -> Vec<PortProperties> {
+        port_list(&[
+            // din
+            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            // enable, clock, clear
+            (PortProperties { ty: PortType::Input, bitsize: 1 }, 3),
+            // dout
+            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+        ])
+    }
+    fn initialize(&mut self, state: &mut [BitArray]) {
+        state[4] = BitArray::repeat(BitState::Low, self.props.bitsize);
+    }
+    fn run(&mut self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
+        if inp[3].all_high() {
+            vec![PortUpdate { index: 4, value: BitArray::repeat(BitState::Low, self.props.bitsize) }]
+        } else if Sensitivity::Posedge.activated(old_inp[2], inp[2]) && inp[1].all_high() {
+            vec![PortUpdate { index: 4, value: inp[0] }]
         } else {
             vec![]
         }
