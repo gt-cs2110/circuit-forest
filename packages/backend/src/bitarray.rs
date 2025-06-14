@@ -29,6 +29,8 @@ impl NotTwoValuedErr {
     pub fn is_unk(&self) -> bool { self.0 == BitState::Unk }
     pub fn bit_state(&self) -> BitState { self.0 }
 }
+#[derive(Debug)]
+pub struct InvalidStateErr(());
 
 impl TryFrom<BitState> for bool {
     type Error = NotTwoValuedErr;
@@ -50,7 +52,7 @@ impl From<bool> for BitState {
     }
 }
 impl TryFrom<u8> for BitState {
-    type Error = ();
+    type Error = InvalidStateErr;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -58,7 +60,30 @@ impl TryFrom<u8> for BitState {
             0b01 => Ok(BitState::High),
             0b10 => Ok(BitState::Imped),
             0b11 => Ok(BitState::Unk),
-            _ => Err(())
+            _ => Err(InvalidStateErr(()))
+        }
+    }
+}
+impl TryFrom<char> for BitState {
+    type Error = InvalidStateErr;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        match value {
+            '0' => Ok(BitState::Low),
+            '1' => Ok(BitState::High),
+            'Z' | 'z' => Ok(BitState::Imped),
+            'X' | 'x' => Ok(BitState::Unk),
+            _ => Err(InvalidStateErr(()))
+        }
+    }
+}
+impl std::str::FromStr for BitState {
+    type Err = InvalidStateErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.as_bytes() {
+            &[n] => char::from(n).try_into(),
+            _ => Err(InvalidStateErr(()))
         }
     }
 }
@@ -354,6 +379,22 @@ impl BitArray {
         false
     }
 }
+impl From<BitState> for BitArray {
+    fn from(value: BitState) -> Self {
+        BitArray::repeat(value, 1)
+    }
+}
+impl std::str::FromStr for BitArray {
+    type Err = InvalidStateErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.bytes()
+            .map(char::from)
+            .map(BitState::try_from)
+            .collect()
+    }
+}
+
 impl std::ops::BitAnd for BitArray {
     type Output = Self;
 
@@ -426,8 +467,26 @@ impl std::ops::Not for BitArray {
 
 #[cfg(test)]
 mod test {
-    use super::{BitArray, BitState};
+    use crate::bitarray::BitState;
 
+    use super::BitArray;
+
+    #[test]
+    fn parse() {
+        let str_ba = "0Z1X10XZ".parse::<BitArray>().unwrap();
+        let iter_ba = BitArray::from_iter([
+            BitState::Low,
+            BitState::Imped,
+            BitState::High,
+            BitState::Unk,
+            BitState::High,
+            BitState::Low,
+            BitState::Unk,
+            BitState::Imped,
+        ]);
+
+        assert_eq!(str_ba, iter_ba);
+    }
     #[test]
     fn display() {
         let ba = BitArray::from_iter([

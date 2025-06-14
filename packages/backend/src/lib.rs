@@ -372,9 +372,9 @@ mod tests {
     fn nand_propagate() {
         let mut circuit = Circuit::new();
 
-        let inp  = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let out0 = circuit.add_value_node(BitArray::from_iter([BitState::Imped]));
-        let out1 = circuit.add_value_node(BitArray::from_iter([BitState::Imped]));
+        let inp  = circuit.add_value_node(BitArray::from(BitState::Low));
+        let out0 = circuit.add_value_node(BitArray::from(BitState::Imped));
+        let out1 = circuit.add_value_node(BitArray::from(BitState::Imped));
         let gates = [
             circuit.add_function_node(node::Nand::new(1, 2)),
             circuit.add_function_node(node::Nand::new(1, 2)),
@@ -394,9 +394,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let hi = circuit.add_value_node(BitArray::from_iter([BitState::High]));
-        let out = circuit.add_value_node(BitArray::from_iter([BitState::Unk]));
+        let lo = circuit.add_value_node(BitArray::from(BitState::Low));
+        let hi = circuit.add_value_node(BitArray::from(BitState::High));
+        let out = circuit.add_value_node(BitArray::from(BitState::Unk));
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -415,9 +415,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let hi = circuit.add_value_node(BitArray::from_iter([BitState::High]));
-        let out = circuit.add_value_node(BitArray::from_iter([BitState::Unk]));
+        let lo = circuit.add_value_node(BitArray::from(BitState::Low));
+        let hi = circuit.add_value_node(BitArray::from(BitState::High));
+        let out = circuit.add_value_node(BitArray::from(BitState::Unk));
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -436,9 +436,9 @@ mod tests {
         let mut circuit = Circuit::new();
         
         // Wires
-        let inp = circuit.add_value_node(BitArray::from_iter([BitState::Low])); 
-        let mid = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let out = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
+        let inp = circuit.add_value_node(BitArray::from(BitState::Low)); 
+        let mid = circuit.add_value_node(BitArray::from(BitState::Low));
+        let out = circuit.add_value_node(BitArray::from(BitState::Low));
         // Gates
         let gates = [
             circuit.add_function_node(node::Not::new(1)),
@@ -458,10 +458,10 @@ mod tests {
     fn rs_latch() {
         let mut circuit = Circuit::new();
         let [r, s, q, qp] = [
-            circuit.add_value_node(BitArray::from_iter([BitState::High])), // R
-            circuit.add_value_node(BitArray::from_iter([BitState::High])), // S
-            circuit.add_value_node(BitArray::from_iter([BitState::High])), // Q
-            circuit.add_value_node(BitArray::from_iter([BitState::Low])), // Q'
+            circuit.add_value_node(BitArray::from(BitState::High)), // R
+            circuit.add_value_node(BitArray::from(BitState::High)), // S
+            circuit.add_value_node(BitArray::from(BitState::High)), // Q
+            circuit.add_value_node(BitArray::from(BitState::Low)), // Q'
         ];
         let [rnand, snand] = [
             circuit.add_function_node(node::Nand::new(1, 2)),
@@ -477,15 +477,15 @@ mod tests {
         assert_eq!(u64::try_from(circuit[qp]).unwrap(), 0);
         
         // R = 0, S = 1
-        circuit[r] = BitArray::from_iter([BitState::Low]); // TODO, don't allow this
+        circuit[r] = BitArray::from(BitState::Low); // TODO, don't allow this
         circuit.run(&[r]);
 
         assert_eq!(u64::try_from(circuit[q]).unwrap(), 0);
         assert_eq!(u64::try_from(circuit[qp]).unwrap(), 1);
 
         // R = 1, S = 0
-        circuit[r] = BitArray::from_iter([BitState::High]);
-        circuit[s] = BitArray::from_iter([BitState::Low]);
+        circuit[r] = BitArray::from(BitState::High);
+        circuit[s] = BitArray::from(BitState::Low);
         circuit.run(&[r, s]);
 
         assert_eq!(u64::try_from(circuit[q]).unwrap(), 1);
@@ -497,16 +497,16 @@ mod tests {
         let mut circuit = Circuit::new();
         // external
         let [din, wen, dout, doutp] = [
-            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
-            circuit.add_value_node(BitArray::from_iter([BitState::High])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from(BitState::Low)),
+            circuit.add_value_node(BitArray::from(BitState::High)),
+            circuit.add_value_node(BitArray::from(BitState::Imped)),
+            circuit.add_value_node(BitArray::from(BitState::Imped)),
         ];
         // internal
         let [dinp, r, s] = [
-            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Imped])),
+            circuit.add_value_node(BitArray::from(BitState::Imped)),
+            circuit.add_value_node(BitArray::from(BitState::Imped)),
+            circuit.add_value_node(BitArray::from(BitState::Imped)),
         ];
         // nodes
         let [dnot, dnand, dpnand, rnand, snand] = [
@@ -527,17 +527,17 @@ mod tests {
         assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
         assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
 
-        circuit[wen] = BitArray::from_iter([BitState::Low]);
+        circuit[wen] = BitArray::from(BitState::Low);
         circuit.run(&[wen]);
         assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
         assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
 
-        circuit[din] = BitArray::from_iter([BitState::High]);
+        circuit[din] = BitArray::from(BitState::High);
         circuit.run(&[din]);
         assert_eq!(u64::try_from(circuit[dout]).unwrap(), 0);
         assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 1);
 
-        circuit[wen] = BitArray::from_iter([BitState::High]);
+        circuit[wen] = BitArray::from(BitState::High);
         circuit.run(&[wen]);
         assert_eq!(u64::try_from(circuit[dout]).unwrap(), 1);
         assert_eq!(u64::try_from(circuit[doutp]).unwrap(), 0);
@@ -547,11 +547,11 @@ mod tests {
         let mut circuit = Circuit::new();
         
         // Wires
-        let a_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
-        let b_in = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let c_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
-        let d_in = circuit.add_value_node(BitArray::from_iter([BitState::Low]));
-        let e_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let a_in = circuit.add_value_node(BitArray::from(BitState::High));
+        let b_in = circuit.add_value_node(BitArray::from(BitState::Low));
+        let c_in = circuit.add_value_node(BitArray::from(BitState::High));
+        let d_in = circuit.add_value_node(BitArray::from(BitState::Low));
+        let e_in = circuit.add_value_node(BitArray::from(BitState::High));
         let ab_mid = circuit.add_value_node(BitArray::floating(1));
         let abc_mid = circuit.add_value_node(BitArray::floating(1));
         let abcd_mid = circuit.add_value_node(BitArray::floating(1));
@@ -577,7 +577,7 @@ mod tests {
     fn oscillate() {
         let mut circuit = Circuit::new();
 
-        let a_in = circuit.add_value_node(BitArray::from_iter([BitState::High]));
+        let a_in = circuit.add_value_node(BitArray::from(BitState::High));
         let gate = circuit.add_function_node(node::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
@@ -610,7 +610,6 @@ mod tests {
         ];
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
-
         circuit[joined_node] = joined;
         circuit.run(&[nodes[0]]);
         assert_eq!(split_nodes.map(|n| circuit[n]), split);
@@ -628,7 +627,6 @@ mod tests {
         ];
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
-
         for (n, a) in std::iter::zip(split_nodes, split) {
             circuit[n] = a;
         }
@@ -647,9 +645,9 @@ mod tests {
         ];
         let nodes @ [din, enable, clock, clear, dout] = [
             circuit.add_value_node(BitArray::from_iter(inputs)),
-            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
-            circuit.add_value_node(BitArray::from_iter([BitState::Low])),
+            circuit.add_value_node(BitArray::from(BitState::Low)),
+            circuit.add_value_node(BitArray::from(BitState::Low)),
+            circuit.add_value_node(BitArray::from(BitState::Low)),
             circuit.add_value_node(BitArray::repeat(BitState::Low, 8)), // TODO: this should be floating. on connect, it should update
         ];
         let reg = circuit.add_function_node(node::Register::new(8));
@@ -660,17 +658,17 @@ mod tests {
         assert_eq!(circuit[dout], BitArray::repeat(BitState::Low, 8));
         
         // enable on, clock down
-        circuit[enable] = BitArray::from_iter([BitState::High]);
+        circuit[enable] = BitArray::from(BitState::High);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::repeat(BitState::Low, 8));
         
         // enable on, clock up
-        circuit[clock] = BitArray::from_iter([BitState::High]);
+        circuit[clock] = BitArray::from(BitState::High);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::from_iter(inputs));
         
         // enable on, clock down
-        circuit[clock] = BitArray::from_iter([BitState::Low]);
+        circuit[clock] = BitArray::from(BitState::Low);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::from_iter(inputs));
         
@@ -682,39 +680,39 @@ mod tests {
 
         for _ in 0..3 {
             // enable off, clock down
-            circuit[enable] = BitArray::from_iter([BitState::Low]);
+            circuit[enable] = BitArray::from(BitState::Low);
             circuit.run(&[din, enable, clock, clear]);
             assert_eq!(circuit[dout], BitArray::from_iter(inputs));
     
             // enable off, clock up
-            circuit[clock] = BitArray::from_iter([BitState::High]);
+            circuit[clock] = BitArray::from(BitState::High);
             circuit.run(&[din, enable, clock, clear]);
             assert_eq!(circuit[dout], BitArray::from_iter(inputs));
         }
 
         // enable off, clock down
-        circuit[clock] = BitArray::from_iter([BitState::Low]);
+        circuit[clock] = BitArray::from(BitState::Low);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::from_iter(inputs));
 
         // enable on, clock up
-        circuit[enable] = BitArray::from_iter([BitState::High]);
-        circuit[clock] = BitArray::from_iter([BitState::High]);
+        circuit[enable] = BitArray::from(BitState::High);
+        circuit[clock] = BitArray::from(BitState::High);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::from_iter(neg_inputs));
 
         // reset
-        circuit[clear] = BitArray::from_iter([BitState::High]);
+        circuit[clear] = BitArray::from(BitState::High);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::repeat(BitState::Low, 8));
         
         // reset, clock down
-        circuit[clock] = BitArray::from_iter([BitState::Low]);
+        circuit[clock] = BitArray::from(BitState::Low);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::repeat(BitState::Low, 8));
         
         // reset, clock up
-        circuit[clock] = BitArray::from_iter([BitState::High]);
+        circuit[clock] = BitArray::from(BitState::High);
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit[dout], BitArray::repeat(BitState::Low, 8));
     }
