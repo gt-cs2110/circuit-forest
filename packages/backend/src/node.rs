@@ -37,8 +37,8 @@ impl Sensitivity {
         assert_eq!(old.len(), new.len(), "Bit length should be the same");
         match self {
             Sensitivity::Anyedge  => old != new,
-            Sensitivity::Posedge  => old.all_low() && new.all_high(),
-            Sensitivity::Negedge  => old.all_high() && new.all_low(),
+            Sensitivity::Posedge  => old.all(BitState::Low) && new.all(BitState::High),
+            Sensitivity::Negedge  => old.all(BitState::High) && new.all(BitState::Low),
             Sensitivity::DontCare => false,
         }
     }
@@ -381,9 +381,9 @@ impl Component for Register {
         state[4] = BitArray::repeat(BitState::Low, self.props.bitsize);
     }
     fn run(&mut self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        if inp[3].all_high() {
+        if inp[3].all(BitState::High) {
             vec![PortUpdate { index: 4, value: BitArray::repeat(BitState::Low, self.props.bitsize) }]
-        } else if Sensitivity::Posedge.activated(old_inp[2], inp[2]) && inp[1].all_high() {
+        } else if Sensitivity::Posedge.activated(old_inp[2], inp[2]) && inp[1].all(BitState::High) {
             vec![PortUpdate { index: 4, value: inp[0] }]
         } else {
             vec![]
