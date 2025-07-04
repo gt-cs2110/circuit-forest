@@ -542,6 +542,37 @@ mod test {
     use super::BitArray;
 
     #[test]
+    fn and_two_valued() {
+        let a: u64 = 0x4cb3052010db508b;
+        let b: u64 = 0x1a5b254efea6bcab;
+        let result = a & b;
+
+        let expected = BitArray::from(result);
+        let actual = BitArray::from(a) & BitArray::from(b);
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn or_two_valued() {
+        let a: u64 = 0x6fc5f87e5cc83658;
+        let b: u64 = 0x0c02737be3c85b62;
+        let result = a | b;
+
+        let expected = BitArray::from(result);
+        let actual = BitArray::from(a) | BitArray::from(b);
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn xor_two_valued() {
+        let a: u64 = 0x97f7bd2f3d4a2aad;
+        let b: u64 = 0x8769806a06948e4a;
+        let result = a ^ b;
+
+        let expected = BitArray::from(result);
+        let actual = BitArray::from(a) ^ BitArray::from(b);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn parse() {
         let str_ba = "0Z1X10XZ".parse::<BitArray>().unwrap();
         let iter_ba = BitArray::from_iter([
@@ -557,6 +588,23 @@ mod test {
 
         assert_eq!(str_ba, iter_ba);
     }
+    #[test]
+    fn collect_roundtrip() {
+        let bits = [
+            BitState::Low,
+            BitState::Imped,
+            BitState::High,
+            BitState::Unk,
+            BitState::High,
+            BitState::Low,
+            BitState::Unk,
+            BitState::Imped,
+        ];
+
+        let bitarray = BitArray::from_iter(bits);
+        assert_eq!(bitarray.into_iter().collect::<Vec<_>>(), bits);
+    }
+
     #[test]
     fn display() {
         let ba = BitArray::from_iter([
