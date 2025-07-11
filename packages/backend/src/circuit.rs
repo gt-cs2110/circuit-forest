@@ -49,17 +49,16 @@ struct FunctionNode {
     port_types: Vec<PortType>,
     // connections
     links: Vec<Option<ValueKey>>,
-    // value update
-    old_values: Vec<BitArray>,
+    // current values of node
     values: Vec<BitArray>
 }
 impl FunctionNode {
     fn new(func: ComponentFn) -> Self {
-        let ((links, port_types), (old_values, values)) = func.ports().into_iter()
-            .map(|PortProperties { ty, bitsize }| ((None, ty), (BitArray::floating(bitsize), BitArray::floating(bitsize))))
-            .unzip();
+        let (links, port_types, values) = func.ports().into_iter()
+            .map(|PortProperties { ty, bitsize }| (None, ty, BitArray::floating(bitsize)))
+            .collect();
         
-        let mut node = Self { func, links, port_types, old_values, values };
+        let mut node = Self { func, links, port_types, values };
         node.func.initialize(&mut node.values);
         node
     }
@@ -216,7 +215,7 @@ impl Circuit {
                 let gate = &mut self.graph.functions[gate_idx];
 
                 // Update inputs:
-                gate.old_values = gate.values.clone();
+                let old_values = gate.values.clone();
                 for (index, ((&port, port_value), port_type)) in std::iter::zip(&gate.links, &mut gate.values).zip(&gate.port_types).enumerate() {
                     if matches!(port_type, PortType::Output) { continue; }
                     // Only update inputs and inouts
@@ -244,7 +243,7 @@ impl Circuit {
                     *port_value = input;
                 }
                 
-                for PortUpdate { index, value } in gate.func.run(&gate.old_values, &gate.values) {
+                for PortUpdate { index, value } in gate.func.run(&old_values, &gate.values) {
                     debug_assert!(self.graph[gate_idx].port_types[index].accepts_output(), "Input port cannot be updated");
                     if self.graph[gate_idx].values[index] != value {
                         self.graph[gate_idx].values[index] = value; // todo: assert right bitsize
