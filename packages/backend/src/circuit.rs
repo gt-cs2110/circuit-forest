@@ -1,10 +1,13 @@
-use std::collections::{HashMap, HashSet};
+mod state;
+
+use std::collections::HashSet;
 use std::ops::{Index, IndexMut};
 
 use slotmap::{new_key_type, SlotMap};
 
 use crate::bitarray::BitArray;
-use crate::node::{Component, ComponentFn, PortProperties, PortType, PortUpdate};
+use crate::circuit::state::{index_mut, CircuitState, TriggerState, ValueState};
+use crate::node::{Component, ComponentFn, PortType, PortUpdate};
 
 
 new_key_type! {
@@ -24,24 +27,14 @@ pub enum ValueIssue {
     MismatchedBitsizes { val_size: u8, port_size: u8, port: Port, is_input: bool },
     OscillationDetected
 }
+
+#[derive(Default)]
 struct ValueNode {
-    value: BitArray,
-    links: HashSet<Port>,
-    issues: HashSet<ValueIssue>
+    links: HashSet<Port>
 }
 impl ValueNode {
-    fn new(value: BitArray) -> Self {
-        Self { value, links: HashSet::new(), issues: HashSet::new() }
-    }
-    fn issues(&self) -> &HashSet<ValueIssue> {
-        &self.issues
-    }
-    fn set(&mut self, new_val: BitArray) -> bool {
-        let success = self.value.len() == new_val.len();
-        if success {
-            self.value = new_val;
-        }
-        success
+    fn new() -> Self {
+        Default::default()
     }
 }
 struct FunctionNode {
@@ -49,18 +42,16 @@ struct FunctionNode {
     port_types: Vec<PortType>,
     // connections
     links: Vec<Option<ValueKey>>,
-    // current values of node
-    values: Vec<BitArray>
 }
 impl FunctionNode {
     fn new(func: ComponentFn) -> Self {
-        let (links, port_types, values) = func.ports().into_iter()
-            .map(|PortProperties { ty, bitsize }| (None, ty, BitArray::floating(bitsize)))
+        let port_types: Vec<_> = func.ports()
+            .into_iter()
+            .map(|props| props.ty)
             .collect();
+        let links = vec![None; port_types.len()];
         
-        let mut node = Self { func, links, port_types, values };
-        node.func.initialize(&mut node.values);
-        node
+        Self { func, links, port_types }
     }
 }
 #[derive(Default)]
@@ -69,8 +60,8 @@ struct Graph {
     functions: SlotMap<FunctionKey, FunctionNode>,
 }
 impl Graph {
-    pub fn add_value(&mut self, value: BitArray) -> ValueKey {
-        self.values.insert(ValueNode::new(value))
+    pub fn add_value(&mut self) -> ValueKey {
+        self.values.insert(ValueNode::new())
     }
     pub fn add_function(&mut self, func: ComponentFn) -> FunctionKey {
         self.functions.insert(FunctionNode::new(func))
@@ -126,27 +117,29 @@ impl IndexMut<FunctionKey> for Graph {
 #[derive(Default)]
 pub struct Circuit {
     graph: Graph,
-    transient: TransientState
-}
-#[derive(Clone, Copy)]
-struct TriggerState {
-    recalculate: bool
-}
-#[derive(Default)]
-struct TransientState {
-    triggers: HashMap<ValueKey, TriggerState>,
-    frontier: HashSet<FunctionKey>
+    state: CircuitState
 }
 
 impl Circuit {
     pub fn new() -> Self {
         Default::default()
     }
+    #[deprecated]
     pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
-        self.graph.add_value(arr)
+        let key = self.add_value_node2();
+        self.state.values.insert(key, ValueState::new(arr));
+        key
     }
+    pub fn add_value_node2(&mut self) -> ValueKey {
+        let key = self.graph.add_value();
+        self.state.init_value(key);
+        key
+    }
+
     pub fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
-        self.graph.add_function(f.into())
+        let key = self.graph.add_function(f.into());
+        self.state.init_func(key, &self.graph.functions[key].func);
+        key
     }
     pub fn connect(&mut self, wire: ValueKey, port: Port) {
         self.graph.connect(wire, port);
@@ -160,22 +153,23 @@ impl Circuit {
     pub fn run(&mut self, inputs: &[ValueKey]) {
         const RUN_ITER_LIMIT: usize = 10_000;
 
-        self.transient.triggers = inputs.iter().copied()
+        self.state.transient.triggers = inputs.iter().copied()
             .map(|k| (k, TriggerState { recalculate: false }))
             .collect();
-        self.transient.frontier.clear();
+        self.state.transient.frontier.clear();
 
         let mut iteration = 0;
-        while !self.transient.triggers.is_empty() || !self.transient.frontier.is_empty() {
+        while !self.state.transient.triggers.is_empty() || !self.state.transient.frontier.is_empty() {
             if iteration > RUN_ITER_LIMIT {
-                for &key in self.transient.triggers.keys() {
-                    self.graph[key].issues.insert(ValueIssue::OscillationDetected);
+                for &key in self.state.transient.triggers.keys() {
+                    index_mut(&mut self.state.values, &key).add_issue(ValueIssue::OscillationDetected);
                 }
                 break;
             }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, TriggerState { recalculate }) in std::mem::take(&mut self.transient.triggers) {
-                self.graph[node].issues.clear(); // remove issues bc of update
+            for (node, TriggerState { recalculate }) in std::mem::take(&mut self.state.transient.triggers) {
+                // Remove issues b/c of update
+                self.state[node].clear_issues();
                 
                 // Iterator of all port values
                 // We join them using a join algorithm.
@@ -188,22 +182,22 @@ impl Circuit {
                     // Get all port values feeding into value:
                     let it = self.graph[node].links.iter()
                         .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_output())
-                        .map(|&Port { gate, index }| self.graph[gate].values[index]);
+                        .map(|&Port { gate, index }| self.state[gate].ports[index]);
                     // Join:
                     let result = it.clone()
                         .reduce(BitArray::join)
                         .unwrap_or_else(|| BitArray::floating(self[node].len())); // if no inputs, make bits floating
                     // Short circuit check:
                     if BitArray::short_circuits(it) {
-                        self.graph[node].issues.insert(ValueIssue::ShortCircuit);
+                        self.state[node].add_issue(ValueIssue::ShortCircuit);
                     }
 
                     propagate_update = self[node] != result;
-                    self.graph[node].value = result;
+                    self.state[node].set_value(result);
                 }
 
                 if propagate_update {
-                    self.transient.frontier.extend({
+                    self.state.transient.frontier.extend({
                         self.graph[node].links.iter()
                             .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_input())
                             .map(|&Port { gate, index: _ }| gate)
@@ -211,23 +205,25 @@ impl Circuit {
                 }
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
-            for gate_idx in std::mem::take(&mut self.transient.frontier) {
-                let gate = &mut self.graph.functions[gate_idx];
+            for gate_idx in std::mem::take(&mut self.state.transient.frontier) {
+                let gate = &self.graph[gate_idx];
+                let state = index_mut(&mut self.state.functions, &gate_idx);
 
                 // Update inputs:
-                let old_values = gate.values.clone();
-                for (index, ((&port, port_value), port_type)) in std::iter::zip(&gate.links, &mut gate.values).zip(&gate.port_types).enumerate() {
+                let old_values = state.ports.clone();
+                for (index, ((&port, port_value), port_type)) in std::iter::zip(&gate.links, &mut state.ports).zip(&gate.port_types).enumerate() {
                     if matches!(port_type, PortType::Output) { continue; }
                     // Only update inputs and inouts
                     let port_size = port_value.len();
                     let input = match port {
                         Some(n) => {
-                            let node = &mut self.graph.values[n];
-                            let val_size = node.value.len();
+                            let node = index_mut(&mut self.state.values, &n);
+                            let value = node.get_value();
+                            let val_size = value.len();
                             match val_size == port_size {
-                                true  => node.value,
+                                true  => value,
                                 false => {
-                                    node.issues.insert(ValueIssue::MismatchedBitsizes {
+                                    node.add_issue(ValueIssue::MismatchedBitsizes {
                                         val_size,
                                         port_size,
                                         port: Port { gate: gate_idx, index },
@@ -243,13 +239,13 @@ impl Circuit {
                     *port_value = input;
                 }
                 
-                for PortUpdate { index, value } in gate.func.run(&old_values, &gate.values) {
+                for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
                     debug_assert!(self.graph[gate_idx].port_types[index].accepts_output(), "Input port cannot be updated");
-                    if self.graph[gate_idx].values[index] != value {
-                        self.graph[gate_idx].values[index] = value; // todo: assert right bitsize
+                    if self.state[gate_idx].ports[index] != value {
+                        self.state[gate_idx].ports[index] = value; // todo: assert right bitsize
                         
                         if let Some(sink_idx) = self.graph[gate_idx].links[index] {
-                            self.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
+                            self.state.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
                         }
                     }
                 }
@@ -260,10 +256,10 @@ impl Circuit {
     }
 
     pub fn get_issues(&self, key: ValueKey) -> &HashSet<ValueIssue> {
-        self.graph[key].issues()
+        self.state[key].get_issues()
     }
     pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), ()> {
-        match self.graph[key].set(val) {
+        match self.state[key].set_value(val) {
             true => Ok(()),
             false => Err(())
         }
@@ -277,7 +273,7 @@ impl Index<ValueKey> for Circuit {
     type Output = BitArray;
 
     fn index(&self, index: ValueKey) -> &Self::Output {
-        &self.graph[index].value
+        &self.state[index].value
     }
 }
 impl Index<FunctionKey> for Circuit {
