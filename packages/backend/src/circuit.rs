@@ -124,15 +124,15 @@ impl Circuit {
     pub fn new() -> Self {
         Default::default()
     }
-    #[deprecated]
-    pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
-        let key = self.add_value_node2();
-        self.state.values.insert(key, ValueState::new(arr));
-        key
-    }
-    pub fn add_value_node2(&mut self) -> ValueKey {
+    
+    fn add_empty_value_node(&mut self) -> ValueKey {
         let key = self.graph.add_value();
         self.state.init_value(key);
+        key
+    }
+    pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
+        let key = self.add_empty_value_node();
+        self.state.values.insert(key, ValueState::new(arr));
         key
     }
 
@@ -159,7 +159,7 @@ impl Circuit {
         self.state.transient.frontier.clear();
 
         let mut iteration = 0;
-        while !self.state.transient.triggers.is_empty() || !self.state.transient.frontier.is_empty() {
+        while !self.state.transient.resolved() {
             if iteration > RUN_ITER_LIMIT {
                 for &key in self.state.transient.triggers.keys() {
                     index_mut(&mut self.state.values, &key).add_issue(ValueIssue::OscillationDetected);
@@ -185,8 +185,7 @@ impl Circuit {
                         .map(|&Port { gate, index }| self.state[gate].ports[index]);
                     // Join:
                     let result = it.clone()
-                        .reduce(BitArray::join)
-                        .unwrap_or_else(|| BitArray::floating(self[node].len())); // if no inputs, make bits floating
+                        .fold(BitArray::floating(self[node].len()), BitArray::join);
                     // Short circuit check:
                     if BitArray::short_circuits(it) {
                         self.state[node].add_issue(ValueIssue::ShortCircuit);
@@ -215,28 +214,25 @@ impl Circuit {
                     if matches!(port_type, PortType::Output) { continue; }
                     // Only update inputs and inouts
                     let port_size = port_value.len();
-                    let input = match port {
-                        Some(n) => {
-                            let node = index_mut(&mut self.state.values, &n);
-                            let value = node.get_value();
-                            let val_size = value.len();
-                            match val_size == port_size {
-                                true  => value,
-                                false => {
-                                    node.add_issue(ValueIssue::MismatchedBitsizes {
-                                        val_size,
-                                        port_size,
-                                        port: Port { gate: gate_idx, index },
-                                        is_input: true
-                                    });
-                                    BitArray::floating(port_size)
-                                }
+                    let input = port.and_then(|n| {
+                        let node = index_mut(&mut self.state.values, &n);
+                        let value = node.get_value();
+                        let val_size = value.len();
+                        match val_size == port_size {
+                            true  => Some(value),
+                            false => {
+                                node.add_issue(ValueIssue::MismatchedBitsizes {
+                                    val_size,
+                                    port_size,
+                                    port: Port { gate: gate_idx, index },
+                                    is_input: true
+                                });
+                                None
                             }
-                        },
-                        None => BitArray::floating(port_size)
-                    };
+                        }
+                    });
                     
-                    *port_value = input;
+                    *port_value = input.unwrap_or_else(|| BitArray::floating(port_size));
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {

@@ -117,3 +117,8 @@ pub struct TransientState {
     pub(crate) triggers: HashMap<ValueKey, TriggerState>,
     pub(crate) frontier: HashSet<FunctionKey>
 }
+impl TransientState {
+    pub fn resolved(&self) -> bool {
+        self.triggers.is_empty() && self.frontier.is_empty()
+    }
+}
