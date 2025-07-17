@@ -7,7 +7,7 @@ use slotmap::{new_key_type, SlotMap};
 
 use crate::bitarray::BitArray;
 use crate::circuit::state::{index_mut, CircuitState, TriggerState, ValueState};
-use crate::node::{Component, ComponentFn, PortType, PortUpdate};
+use crate::node::{Component, ComponentFn, PortProperties, PortType, PortUpdate};
 
 
 new_key_type! {
@@ -30,28 +30,34 @@ pub enum ValueIssue {
 
 #[derive(Default)]
 struct ValueNode {
+    default_bitsize: Option<u8>,
+    bitsize: Option<u8>,
     links: HashSet<Port>
 }
 impl ValueNode {
     fn new() -> Self {
         Default::default()
     }
+    fn with_bitsize(bitsize: u8) -> Self {
+        Self {
+            default_bitsize: Some(bitsize),
+            bitsize: Some(bitsize),
+            links: HashSet::new(),
+        }
+    }
 }
 struct FunctionNode {
     func: ComponentFn,
-    port_types: Vec<PortType>,
+    port_props: Vec<PortProperties>,
     // connections
     links: Vec<Option<ValueKey>>,
 }
 impl FunctionNode {
     fn new(func: ComponentFn) -> Self {
-        let port_types: Vec<_> = func.ports()
-            .into_iter()
-            .map(|props| props.ty)
-            .collect();
-        let links = vec![None; port_types.len()];
+        let port_props = func.ports();
+        let links = vec![None; port_props.len()];
         
-        Self { func, links, port_types }
+        Self { func, links, port_props }
     }
 }
 #[derive(Default)]
@@ -67,10 +73,31 @@ impl CircuitGraph {
         self.functions.insert(FunctionNode::new(func))
     }
 
+    fn attach_bitsize(&mut self, key: ValueKey, bitsize: u8) {
+        self.values[key].bitsize = self.values[key].bitsize.filter(|&s| s == bitsize);
+    }
+    fn recalculate_bitsize(&mut self, key: ValueKey) {
+        // None if no elements or conflicting elements
+        // Some(n) if there's exactly one
+        fn reduce(init: Option<u8>, mut it: impl Iterator<Item=u8>) -> Option<u8> {
+            let bitsize = init.or_else(|| it.next())?;
+            it.all(|s| bitsize == s).then_some(bitsize)
+        }
+
+        self.values[key].bitsize = reduce(
+            self.values[key].default_bitsize, 
+            self.values[key].links.iter().map(|p| {
+                self.functions[p.gate].port_props[p.index].bitsize
+            })
+        );
+    }
+
     pub fn connect(&mut self, wire: ValueKey, port: Port) {
         self.disconnect(port);
         self.functions[port.gate].links[port.index].replace(wire);
+
         self.values[wire].links.insert(port);
+        self.attach_bitsize(wire, self.functions[port.gate].port_props[port.index].bitsize);
     }
     pub fn disconnect(&mut self, port: Port) {
         let old_port = self.functions[port.gate].links[port.index];
@@ -78,16 +105,18 @@ impl CircuitGraph {
         if let Some(node) = old_port {
             let result = self.values[node].links.remove(&port);
             debug_assert!(result, "Gate should've been removed from assigned value node");
+
+            self.recalculate_bitsize(node);
         }
     }
     pub fn clear_edges(&mut self, gate: FunctionKey) {
-        self.functions[gate].links.iter_mut()
-            .enumerate()
-            .filter_map(|(index, p)| Some((index, p.take()?)))
-            .for_each(|(index, node)| {
-                let result = self.values[node].links.remove(&Port { gate, index });
-                debug_assert!(result, "Gate should've been removed from assigned value node");
-            });
+        for index in 0..self.functions[gate].links.len() {
+            let Some(node) = self.functions[gate].links[index].take() else { continue };
+
+            let result = self.values[node].links.remove(&Port { gate, index });
+            debug_assert!(result, "Gate should've been removed from assigned value node");
+            self.recalculate_bitsize(node);
+        }
     }
 }
 impl Index<ValueKey> for CircuitGraph {
@@ -181,7 +210,7 @@ impl Circuit {
                     // todo: assert right bitsize
                     // Get all port values feeding into value:
                     let it = self.graph[node].links.iter()
-                        .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_output())
+                        .filter(|&&Port { gate, index }| self.graph[gate].port_props[index].ty.accepts_output())
                         .map(|&Port { gate, index }| self.state[gate].ports[index]);
                     // Join:
                     let result = it.clone()
@@ -198,7 +227,7 @@ impl Circuit {
                 if propagate_update {
                     self.state.transient.frontier.extend({
                         self.graph[node].links.iter()
-                            .filter(|&&Port { gate, index }| self.graph[gate].port_types[index].accepts_input())
+                            .filter(|&&Port { gate, index }| self.graph[gate].port_props[index].ty.accepts_input())
                             .map(|&Port { gate, index: _ }| gate)
                     });
                 }
@@ -210,20 +239,22 @@ impl Circuit {
 
                 // Update inputs:
                 let old_values = state.ports.clone();
-                for (index, ((&port, port_value), port_type)) in std::iter::zip(&gate.links, &mut state.ports).zip(&gate.port_types).enumerate() {
-                    if matches!(port_type, PortType::Output) { continue; }
+                let it = gate.links.iter()
+                    .zip(&gate.port_props)
+                    .zip(&mut state.ports)
+                    .enumerate();
+                for (index, ((&port, props), port_value)) in it {
+                    if matches!(props.ty, PortType::Output) { continue; }
                     // Only update inputs and inouts
-                    let port_size = port_value.len();
                     let input = port.and_then(|n| {
                         let node = index_mut(&mut self.state.values, &n);
-                        let value = node.get_value();
-                        let val_size = value.len();
-                        match val_size == port_size {
-                            true  => Some(value),
+                        let node_value = node.get_value();
+                        match node_value.len() == port_value.len() {
+                            true  => Some(node_value),
                             false => {
                                 node.add_issue(ValueIssue::MismatchedBitsizes {
-                                    val_size,
-                                    port_size,
+                                    val_size: node_value.len(),
+                                    port_size: port_value.len(),
                                     port: Port { gate: gate_idx, index },
                                     is_input: true
                                 });
@@ -232,11 +263,11 @@ impl Circuit {
                         }
                     });
                     
-                    *port_value = input.unwrap_or_else(|| BitArray::floating(port_size));
+                    *port_value = input.unwrap_or_else(|| BitArray::floating(port_value.len()));
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
-                    debug_assert!(self.graph[gate_idx].port_types[index].accepts_output(), "Input port cannot be updated");
+                    debug_assert!(self.graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
                     if self.state[gate_idx].ports[index] != value {
                         self.state[gate_idx].ports[index] = value; // todo: assert right bitsize
                         
