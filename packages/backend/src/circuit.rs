@@ -55,11 +55,11 @@ impl FunctionNode {
     }
 }
 #[derive(Default)]
-struct Graph {
+struct CircuitGraph {
     values: SlotMap<ValueKey, ValueNode>,
     functions: SlotMap<FunctionKey, FunctionNode>,
 }
-impl Graph {
+impl CircuitGraph {
     pub fn add_value(&mut self) -> ValueKey {
         self.values.insert(ValueNode::new())
     }
@@ -90,33 +90,33 @@ impl Graph {
             });
     }
 }
-impl Index<ValueKey> for Graph {
+impl Index<ValueKey> for CircuitGraph {
     type Output = ValueNode;
 
     fn index(&self, index: ValueKey) -> &Self::Output {
         &self.values[index]
     }
 }
-impl IndexMut<ValueKey> for Graph {
+impl IndexMut<ValueKey> for CircuitGraph {
     fn index_mut(&mut self, index: ValueKey) -> &mut Self::Output {
         &mut self.values[index]
     }
 }
-impl Index<FunctionKey> for Graph {
+impl Index<FunctionKey> for CircuitGraph {
     type Output = FunctionNode;
 
     fn index(&self, index: FunctionKey) -> &Self::Output {
         &self.functions[index]
     }
 }
-impl IndexMut<FunctionKey> for Graph {
+impl IndexMut<FunctionKey> for CircuitGraph {
     fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
         &mut self.functions[index]
     }
 }
 #[derive(Default)]
 pub struct Circuit {
-    graph: Graph,
+    graph: CircuitGraph,
     state: CircuitState
 }
 

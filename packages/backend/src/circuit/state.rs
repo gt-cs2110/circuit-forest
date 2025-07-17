@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use crate::bitarray::BitArray;
-use crate::circuit::{FunctionKey, ValueIssue, ValueKey};
+use crate::circuit::{CircuitGraph, FunctionKey, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn};
 
 #[derive(Default)]
@@ -21,6 +21,16 @@ impl CircuitState {
     pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn) {
         if let Entry::Vacant(e) = self.functions.entry(key) {
             e.insert(FunctionState::initialize(func));
+        }
+    }
+
+    pub(crate) fn init_from_graph(&mut self, graph: &CircuitGraph) {
+        let mut state = CircuitState::default();
+        for k in graph.values.keys() {
+            state.init_value(k);
+        }
+        for (k, f) in graph.functions.iter() {
+            state.init_func(k, &f.func);
         }
     }
 }
