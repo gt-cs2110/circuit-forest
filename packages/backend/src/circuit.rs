@@ -267,19 +267,12 @@ impl Circuit {
                     .zip(&mut state.ports);
                 for ((&port, props), port_value) in it {
                     if matches!(props.ty, PortType::Output) { continue; }
-                    // Only update inputs and inouts
-                    let input = port.and_then(|n| {
-                        let node = index_mut(&mut self.state.values, &n);
-                        match self.graph[n].bitsize == Some(props.bitsize) {
-                            true  => Some(node.get_value()),
-                            false => {
-                                node.add_issue(ValueIssue::MismatchedBitsizes);
-                                None
-                            }
-                        }
-                    });
-                    
-                    *port_value = input.unwrap_or_else(|| BitArray::floating(props.bitsize));
+                    // Update inputs and inouts
+                    // Replace any disconnected ports and mismatched bitsizes with floating
+                    *port_value = port
+                        .filter(|&n| self.graph[n].bitsize == Some(props.bitsize))
+                        .map(|n| self.state.values[&n].get_value())
+                        .unwrap_or_else(|| BitArray::floating(props.bitsize));
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
