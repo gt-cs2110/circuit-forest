@@ -222,7 +222,7 @@ impl Circuit {
                             // Get all port values feeding into value
                             let feed_it = self.graph[node].links.iter()
                                 .filter(|p| self.graph[p.gate].port_props[p.index].ty.accepts_output())
-                                .map(|&p| self.state.get_port_value(p));
+                                .map(|&p| self.state.value(p));
                             // Find value and short circuit status
                             let (result, occupied) = feed_it.fold(
                                 (BitArray::floating(s), Some(0)),
@@ -243,7 +243,7 @@ impl Circuit {
                         }
                     };
 
-                    propagate_update = self.state.get_node_value(node) != result;
+                    propagate_update = self.state.value(node) != result;
                     self.state[node].value = result;
                 }
 
@@ -299,9 +299,10 @@ impl Circuit {
         }
     }
 
-    pub fn get_issues(&self, key: ValueKey) -> &HashSet<ValueIssue> {
-        self.state[key].get_issues()
+    pub fn state(&self) -> &CircuitState {
+        &self.state
     }
+
     pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), ()> {
         match self.state[key].set_value(val) {
             true => Ok(()),
@@ -311,19 +312,5 @@ impl Circuit {
     pub fn set(&mut self, key: ValueKey, val: BitArray) {
         self.try_set(key, val)
             .expect("Tried to set value with wrong bitsize")
-    }
-}
-impl Index<ValueKey> for Circuit {
-    type Output = BitArray;
-
-    fn index(&self, index: ValueKey) -> &Self::Output {
-        &self.state[index].value
-    }
-}
-impl Index<FunctionKey> for Circuit {
-    type Output = ComponentFn;
-
-    fn index(&self, index: FunctionKey) -> &Self::Output {
-        &self.graph[index].func
     }
 }

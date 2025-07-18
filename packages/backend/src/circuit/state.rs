@@ -6,6 +6,25 @@ use crate::bitarray::BitArray;
 use crate::circuit::{CircuitGraph, FunctionKey, Port, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn};
 
+pub trait StateGetter {
+    fn get_value(&self, state: &CircuitState) -> BitArray;
+}
+impl StateGetter for ValueKey {
+    fn get_value(&self, state: &CircuitState) -> BitArray {
+        state[*self].get_value()
+    }
+}
+impl StateGetter for Port {
+    fn get_value(&self, state: &CircuitState) -> BitArray {
+        state[self.gate].ports[self.index]
+    }
+}
+impl<K: StateGetter> StateGetter for &K {
+    fn get_value(&self, state: &CircuitState) -> BitArray {
+        (*self).get_value(state)
+    }
+}
+
 #[derive(Default)]
 pub struct CircuitState {
     pub(crate) values: HashMap<ValueKey, ValueState>,
@@ -24,7 +43,7 @@ impl CircuitState {
         }
     }
 
-    pub(crate) fn init_from_graph(&mut self, graph: &CircuitGraph) {
+    fn init_from_graph(&mut self, graph: &CircuitGraph) {
         let mut state = CircuitState::default();
         for k in graph.values.keys() {
             state.init_value(k);
@@ -34,11 +53,11 @@ impl CircuitState {
         }
     }
 
-    pub(crate) fn get_node_value(&self, k: ValueKey) -> BitArray {
-        self[k].value
+    pub(crate) fn value<K: StateGetter>(&self, k: K) -> BitArray {
+        K::get_value(&k, self)
     }
-    pub(crate) fn get_port_value(&self, port: Port) -> BitArray {
-        self[port.gate].ports[port.index]
+    pub(crate) fn issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
+        &self[k].issues
     }
 }
 
@@ -84,11 +103,7 @@ impl ValueState {
     }
     #[must_use]
     pub fn set_value(&mut self, new_val: BitArray) -> bool {
-        let success = self.value.len() == new_val.len();
-        if success {
-            self.value = new_val;
-        }
-        success
+        self.value.try_overwrite(new_val)
     }
 
     pub fn get_issues(&self) -> &HashSet<ValueIssue> {
@@ -112,6 +127,14 @@ impl FunctionState {
 
         func.initialize(&mut ports);
         Self { ports }
+    }
+
+    pub fn get_port(&self, index: usize) -> BitArray {
+        self.ports[index]
+    }
+    #[must_use]
+    pub fn set_port(&mut self, index: usize, new_val: BitArray) -> bool {
+        self.ports[index].try_overwrite(new_val)
     }
 }
 

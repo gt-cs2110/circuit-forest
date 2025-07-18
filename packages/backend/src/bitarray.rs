@@ -284,6 +284,14 @@ impl BitArray {
             self.set_raw(i, st);
         }
     }
+    #[must_use]
+    pub(crate) fn try_overwrite(&mut self, value: BitArray) -> bool {
+        let success = self.len() == value.len();
+        if success {
+            *self = value;
+        }
+        success
+    }
     /// Creates a new BitState with the state at index `i` replaced with `st`.
     pub fn with(mut self, i: u8, st: BitState) -> Self {
         self.set(i, st);
