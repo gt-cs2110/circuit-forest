@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use crate::bitarray::BitArray;
-use crate::circuit::{CircuitGraph, FunctionKey, ValueIssue, ValueKey};
+use crate::circuit::{CircuitGraph, FunctionKey, Port, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn};
 
 #[derive(Default)]
@@ -32,6 +32,13 @@ impl CircuitState {
         for (k, f) in graph.functions.iter() {
             state.init_func(k, &f.func);
         }
+    }
+
+    pub(crate) fn get_node_value(&self, k: ValueKey) -> BitArray {
+        self[k].value
+    }
+    pub(crate) fn get_port_value(&self, port: Port) -> BitArray {
+        self[port.gate].ports[port.index]
     }
 }
 

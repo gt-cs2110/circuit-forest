@@ -432,21 +432,12 @@ impl BitArray {
         
         Self { data, spec, len }
     }
-    /// Checks whether connecting these bit arrays would cause a short circuit.
-    /// 
-    /// A short circuit occurs if multiple non-Z bit values are connected together.
-    pub(crate) fn short_circuits(values: impl IntoIterator<Item=BitArray>) -> bool {
-        let mut occupied = 0;
-        for val in values {
-            let not_z = val.is(BitState::Low) | val.is(BitState::High) | val.is(BitState::Unk);
 
-            // Short circuit if multiple bits have non-Z
-            if occupied & not_z != 0 {
-                return true;
-            }
-            occupied |= not_z;
-        }
-        false
+    pub(crate) fn short_circuits(self, occupied: u64) -> Option<u64> {
+        let not_z = !self.is(BitState::Imped) & self.norm_mask();
+
+        // Short circuit if multiple bits have non-Z
+        (occupied & not_z == 0).then_some(occupied | not_z)
     }
 }
 impl From<BitState> for BitArray {

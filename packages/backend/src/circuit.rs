@@ -24,7 +24,7 @@ pub struct Port {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueIssue {
     ShortCircuit,
-    MismatchedBitsizes { val_size: u8, port_size: u8, port: Port, is_input: bool },
+    MismatchedBitsizes,
     OscillationDetected
 }
 
@@ -38,12 +38,19 @@ impl ValueNode {
     fn new() -> Self {
         Default::default()
     }
-    fn with_bitsize(bitsize: u8) -> Self {
+    fn with_default_bitsize(bitsize: u8) -> Self {
         Self {
             default_bitsize: Some(bitsize),
             bitsize: Some(bitsize),
             links: HashSet::new(),
         }
+    }
+
+    fn is_singleton(&self) -> bool {
+        self.links.is_empty()
+    }
+    fn has_mismatched_bitsize(&self) -> bool {
+        !self.is_singleton() && self.bitsize.is_none()
     }
 }
 struct FunctionNode {
@@ -74,7 +81,10 @@ impl CircuitGraph {
     }
 
     fn attach_bitsize(&mut self, key: ValueKey, bitsize: u8) {
-        self.values[key].bitsize = self.values[key].bitsize.filter(|&s| s == bitsize);
+        self.values[key].bitsize = match self.values[key].links.len() {
+            2.. => self.values[key].bitsize.filter(|&s| s == bitsize),
+            _ => Some(bitsize)
+        }
     }
     fn recalculate_bitsize(&mut self, key: ValueKey) {
         // None if no elements or conflicting elements
@@ -190,8 +200,8 @@ impl Circuit {
         let mut iteration = 0;
         while !self.state.transient.resolved() {
             if iteration > RUN_ITER_LIMIT {
-                for &key in self.state.transient.triggers.keys() {
-                    index_mut(&mut self.state.values, &key).add_issue(ValueIssue::OscillationDetected);
+                for key in self.state.transient.triggers.keys() {
+                    index_mut(&mut self.state.values, key).add_issue(ValueIssue::OscillationDetected);
                 }
                 break;
             }
@@ -207,28 +217,41 @@ impl Circuit {
 
                 let mut propagate_update = true;
                 if recalculate {
-                    // todo: assert right bitsize
-                    // Get all port values feeding into value:
-                    let it = self.graph[node].links.iter()
-                        .filter(|&&Port { gate, index }| self.graph[gate].port_props[index].ty.accepts_output())
-                        .map(|&Port { gate, index }| self.state[gate].ports[index]);
-                    // Join:
-                    let result = it.clone()
-                        .fold(BitArray::floating(self[node].len()), BitArray::join);
-                    // Short circuit check:
-                    if BitArray::short_circuits(it) {
-                        self.state[node].add_issue(ValueIssue::ShortCircuit);
-                    }
+                    let result = match self.graph[node].bitsize {
+                        Some(s) => {
+                            // Get all port values feeding into value
+                            let feed_it = self.graph[node].links.iter()
+                                .filter(|p| self.graph[p.gate].port_props[p.index].ty.accepts_output())
+                                .map(|&p| self.state.get_port_value(p));
+                            // Find value and short circuit status
+                            let (result, occupied) = feed_it.fold(
+                                (BitArray::floating(s), Some(0)),
+                                |(array, m_occupied), current| (
+                                    array.join(current),
+                                    m_occupied.and_then(|occupied| current.short_circuits(occupied))
+                                )
+                            );
 
-                    propagate_update = self[node] != result;
-                    self.state[node].set_value(result);
+                            if occupied.is_none() {
+                                self.state[node].add_issue(ValueIssue::ShortCircuit);
+                            }
+                            result
+                        },
+                        None => {
+                            self.state[node].add_issue(ValueIssue::MismatchedBitsizes);
+                            BitArray::new()
+                        }
+                    };
+
+                    propagate_update = self.state.get_node_value(node) != result;
+                    self.state[node].value = result;
                 }
 
                 if propagate_update {
                     self.state.transient.frontier.extend({
                         self.graph[node].links.iter()
-                            .filter(|&&Port { gate, index }| self.graph[gate].port_props[index].ty.accepts_input())
-                            .map(|&Port { gate, index: _ }| gate)
+                            .filter(|p| self.graph[p.gate].port_props[p.index].ty.accepts_input())
+                            .map(|p| p.gate)
                     });
                 }
             }
@@ -241,35 +264,29 @@ impl Circuit {
                 let old_values = state.ports.clone();
                 let it = gate.links.iter()
                     .zip(&gate.port_props)
-                    .zip(&mut state.ports)
-                    .enumerate();
-                for (index, ((&port, props), port_value)) in it {
+                    .zip(&mut state.ports);
+                for ((&port, props), port_value) in it {
                     if matches!(props.ty, PortType::Output) { continue; }
                     // Only update inputs and inouts
                     let input = port.and_then(|n| {
                         let node = index_mut(&mut self.state.values, &n);
-                        let node_value = node.get_value();
-                        match node_value.len() == port_value.len() {
-                            true  => Some(node_value),
+                        match self.graph[n].bitsize == Some(props.bitsize) {
+                            true  => Some(node.get_value()),
                             false => {
-                                node.add_issue(ValueIssue::MismatchedBitsizes {
-                                    val_size: node_value.len(),
-                                    port_size: port_value.len(),
-                                    port: Port { gate: gate_idx, index },
-                                    is_input: true
-                                });
+                                node.add_issue(ValueIssue::MismatchedBitsizes);
                                 None
                             }
                         }
                     });
                     
-                    *port_value = input.unwrap_or_else(|| BitArray::floating(port_value.len()));
+                    *port_value = input.unwrap_or_else(|| BitArray::floating(props.bitsize));
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
                     debug_assert!(self.graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
+                    debug_assert_eq!(self.graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
                     if self.state[gate_idx].ports[index] != value {
-                        self.state[gate_idx].ports[index] = value; // todo: assert right bitsize
+                        self.state[gate_idx].ports[index] = value;
                         
                         if let Some(sink_idx) = self.graph[gate_idx].links[index] {
                             self.state.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
