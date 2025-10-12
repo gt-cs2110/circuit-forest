@@ -2,7 +2,7 @@
 
 @layer base {
     html {
-        --scrollbar-bg: var(--color-zinc-800);
+        --scrollbar-bg: var(--color-zinc-900);
         --scrollbar-thumb: var(--color-zinc-700);
     }
 
@@ -21,9 +21,5 @@
 
     ::-webkit-scrollbar-thumb {
         background-color: var(--scrollbar-thumb);
-    }
-
-    body {
-        @apply bg-zinc-950 text-zinc-200;
     }
 }
