@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+@layer base {
+    html {
+        --scrollbar-bg: var(--color-zinc-800);
+        --scrollbar-thumb: var(--color-zinc-700);
+    }
+
+    * {
+        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+        scrollbar-width: thin;
+    }
+
+    ::-webkit-scrollbar {
+        width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: var(--scrollbar-bg);
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb);
+    }
+
+    body {
+        @apply bg-zinc-950 text-zinc-200;
+    }
+}
