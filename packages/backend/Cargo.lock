@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "circuitsim2"
+name = "circuitsim-engine"
 version = "0.1.0"
 dependencies = [
  "slotmap",
