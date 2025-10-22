@@ -341,3 +341,28 @@ impl Circuit {
             .expect("Tried to set value with wrong bitsize")
     }
 }
+
+#[test]
+fn test_try_set_and_set() {
+    use crate::bitarray::BitState::Low;
+    use crate::bitarray::BitState::High;
+    use crate::bitarray::BitArray;
+    
+    let mut circuit = Circuit::new(); // create empty circuit
+    
+    
+    
+    let value = BitArray::repeat(Low, 8); // Create a 8 bit BitArray 
+    let key = circuit.add_value_node(value); //add a ValueKey of 8 bits
+
+    // try_set should succeed
+    assert!(circuit.try_set(key, value.clone()).is_ok());
+
+    // set should succeed 
+    let value = BitArray::repeat(High, 8); // Create a 8 bit BitArray of high 
+    circuit.set(key, value.clone());
+
+    // intentionally wrong bitsize should fail
+    let wrong_value = BitArray::repeat(Low, 16); // 16 bits instead of 8
+    assert!(circuit.try_set(key, wrong_value).is_err());
+}
