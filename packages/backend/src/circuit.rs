@@ -1,3 +1,5 @@
+//! Circuit module used to create circuits/sub-circuits.
+
 mod state;
 
 use std::collections::HashSet;
@@ -11,23 +13,36 @@ use crate::node::{Component, ComponentFn, PortProperties, PortType, PortUpdate};
 
 
 new_key_type! {
+    /// Key type for maps to values
     pub struct ValueKey;
+    /// Key type for maps to functions
     pub struct FunctionKey;
 }
 
+/// Ports that link nodes together
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 pub struct Port {
     gate: FunctionKey,
     index: usize
 }
 
+/// Enum to associate improper connections with an error type 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueIssue {
+    /// Represents a collision of bit values (short circuit)
     ShortCircuit,
+
+    /// Represents a connection with two different bitsizes
     MismatchedBitsizes,
+
+    /// Represents a connection whose value is unstable
     OscillationDetected
 }
 
+/// Circuit node, containing:
+/// - `default_bitsize`: Component's *default* bitsize 
+/// - `bitsize`: Component's *current* bitsize, 
+/// - `links`: Set of input/output ports
 #[derive(Default)]
 struct ValueNode {
     default_bitsize: Option<u8>,
@@ -153,6 +168,10 @@ impl IndexMut<FunctionKey> for CircuitGraph {
         &mut self.functions[index]
     }
 }
+
+/// A circuit struct (or as we know them, sub-circuit): 
+/// - `graph`: graph of value & function nodes
+/// - `state`: current state (current values and functions, along with the signal updates that haven't been processed yet)
 #[derive(Default)]
 pub struct Circuit {
     graph: CircuitGraph,
@@ -160,6 +179,8 @@ pub struct Circuit {
 }
 
 impl Circuit {
+
+    /// Constructs a completely empty Circuit
     pub fn new() -> Self {
         Default::default()
     }
@@ -169,26 +190,35 @@ impl Circuit {
         self.state.init_value(key);
         key
     }
+
+    /// Create a value node (input/output pins) with the passed value
     pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
         let key = self.add_empty_value_node();
         self.state.values.insert(key, ValueState::new(arr));
         key
     }
 
+    /// Create a function node with the passed component function
     pub fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
         let key = self.graph.add_function(f.into());
         self.state.init_func(key, &self.graph.functions[key].func);
         key
     }
+
+    /// Connect a wire to a port in the Circuit's graph
     pub fn connect(&mut self, wire: ValueKey, port: Port) {
         self.graph.connect(wire, port);
     }
+
+    /// Clear the function node of connections and connect all of the passed ports to it
     pub fn connect_all(&mut self, gate: FunctionKey, ports: &[ValueKey]) {
         self.graph.clear_edges(gate);
         ports.iter().copied()
             .enumerate()
             .for_each(|(index, wire)| self.connect(wire, Port { gate, index }));
     }
+
+    /// Updates the circuit given all input values
     pub fn run(&mut self, inputs: &[ValueKey]) {
         const RUN_ITER_LIMIT: usize = 10_000;
 
@@ -292,16 +322,20 @@ impl Circuit {
         }
     }
 
+    /// Gets current circuit state
     pub fn state(&self) -> &CircuitState {
         &self.state
     }
 
+    /// Attempt to update a ValueNode to a certain value
     pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), ()> {
         match self.state[key].set_value(val) {
             true => Ok(()),
             false => Err(())
         }
     }
+
+    /// Attempts to update a ValueNode, *panics if bitsizes don't match*
     pub fn set(&mut self, key: ValueKey, val: BitArray) {
         self.try_set(key, val)
             .expect("Tried to set value with wrong bitsize")
