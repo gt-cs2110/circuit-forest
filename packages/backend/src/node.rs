@@ -105,7 +105,7 @@ pub struct GateProperties {
 }
 
 macro_rules! gates {
-    ($($Id:ident: $f:expr),*$(,)?) => {
+    ($($Id:ident: $f:expr; invert: $Invert:expr),*$(,)?) => {
         $(
             pub struct $Id {
                 props: GateProperties
@@ -131,6 +131,7 @@ macro_rules! gates {
                         .cloned()
                         .reduce($f)
                         .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
+                    let value = if $Invert { !value } else { value };
     
                     vec![PortUpdate { index: usize::from(self.props.n_inputs), value }]
                 }
@@ -140,12 +141,12 @@ macro_rules! gates {
 }
 
 gates! {
-    And:  |a, b| a & b,
-    Or:   |a, b| a | b,
-    Xor:  |a, b| a ^ b,
-    Nand: |a, b| !(a & b),
-    Nor:  |a, b| !(a | b),
-    Xnor: |a, b| !(a ^ b),
+    And:  |a, b| a & b; invert: false,
+    Or:   |a, b| a | b; invert: false,
+    Xor:  |a, b| a ^ b; invert: false,
+    Nand: |a, b| a & b; invert: true,
+    Nor:  |a, b| a | b; invert: true,
+    Xnor: |a, b| a ^ b; invert: true,
 }
 
 pub struct BufNotProperties {
