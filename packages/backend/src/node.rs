@@ -16,6 +16,7 @@ pub struct PortProperties {
     pub bitsize: u8
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct PortUpdate {
     pub index: usize,
     pub value: BitArray
@@ -207,7 +208,7 @@ impl Component for TriState {
 }
 
 pub const MIN_SELSIZE: u8 = 1;
-pub const MAX_SELSIZE: u8 = 8;
+pub const MAX_SELSIZE: u8 = 6;
 pub struct MuxProperties {
     bitsize: u8,
     selsize: u8
@@ -387,6 +388,200 @@ impl Component for Register {
             vec![PortUpdate { index: 4, value: inp[0] }]
         } else {
             vec![]
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod muxes {
+        use super::*;
+        use crate::bitarray::BitArray;
+
+        #[test]
+        fn test_mux() {
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize *data* inputs
+                let input_count = 1 << selsize;
+
+                // create mux
+                let mux = Mux::new(4, selsize);
+                let ports = mux.ports();
+    
+                assert_eq!(ports.len(), input_count + 2, "Mux with selsize {selsize} should have {} ports", input_count + 2);
+                assert_eq!(ports[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Mux port should be an input selector of bitsize {selsize}");
+                assert_eq!(ports[input_count + 1], PortProperties { ty: PortType::Output, bitsize: 4 }, "Last Mux port should be an output of bitsize 4");
+                assert_eq!(
+                    ports[1..=input_count],
+                    vec![PortProperties { ty: PortType::Input, bitsize: 4 }; input_count],
+                    "Mux with selsize {selsize} should have {input_count} input ports"
+                );
+
+                // inputs are random-ish values
+                let inputs: Vec<BitArray> = (0..input_count)
+                    .map(|i| (i + 1) * 13)
+                    .map(|val| BitArray::from(val as u64 & 0xF))
+                    .collect();
+
+                // test all possible selector values
+                for sel in 0..selsize {
+                    let mut inp = vec![BitArray::from(sel as u64)];
+                    inp.push(inputs[sel as usize]);
+
+                    let outputs = mux.run(&inp, &inp);
+    
+                    assert_eq!(
+                        outputs,
+                        vec![PortUpdate { index: 1 + input_count, value: inputs[sel as usize] }],
+                        "Mux with selsize {selsize} and selector {sel} should output correct value"
+                    )
+                }
+            }
+        }
+
+        #[test]
+        fn test_demux() {
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize *data* inputs
+                let input_count = 1 << selsize;
+
+                // create demux
+                let demux = Demux::new(4, selsize);
+                let ports = demux.ports();
+
+                assert_eq!(ports.len(), input_count + 2, "Demux with selsize {selsize} should have {} ports", input_count + 2);
+                assert_eq!(ports[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Demux port should be an input selector of bitsize {selsize}");
+                assert_eq!(ports[1], PortProperties { ty: PortType::Input, bitsize: 4 }, "Last Demux port should be an output of bitsize 4");
+                assert_eq!(
+                    ports[2..=input_count + 1],
+                    vec![PortProperties { ty: PortType::Output, bitsize: 4 }; input_count],
+                    "Demux with selsize {selsize} should have {input_count} output ports"
+                );
+
+                // inputs are random-ish values
+                let inputs: Vec<BitArray> = (0..input_count)
+                    .map(|i| (i + 1) * 13)
+                    .map(|val| BitArray::from(val as u64 & 0xF))
+                    .collect();
+
+                // test all possible selector values
+                for sel in 0..=selsize {
+                    let mut inp = vec![BitArray::from(sel as u64)];
+                    inp.push(inputs[sel as usize]);
+    
+                    let outputs = demux.run(&inp, &inp);
+
+                    let expected = (0..input_count)
+                        .map(|i| {
+                            if i == sel as usize {
+                                inputs[sel as usize]
+                            } else {
+                                BitArray::repeat(BitState::Low, 4)
+                                // BitArray::from(0u64)
+                            }
+                        })
+                        .enumerate()
+                        .map(|(i, value)| PortUpdate { index: 2 + i, value })
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(
+                        outputs,
+                        expected,
+                        "Demux with selsize {selsize} and selector {sel} should output correct value"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn test_decoder() {
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize outputs
+                let output_count = 1 << selsize;
+
+                // create decoder
+                let decoder = Decoder::new(selsize);
+                let ports = decoder.ports();
+
+                assert_eq!(ports.len(), output_count + 1, "Decoder with selsize {selsize} should have {} ports", output_count + 1);
+                assert_eq!(ports[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Decoder port should be an input selector of bitsize {selsize}");
+                assert_eq!(
+                    ports[1..],
+                    vec![PortProperties { ty: PortType::Output, bitsize: 1 }; output_count],
+                    "Decoder with selsize {selsize} should have {output_count} output ports"
+                );
+
+                // test all possible selector values
+                for sel in 0..=selsize {
+                    let inp = vec![BitArray::from(sel as u64)];
+    
+                    let outputs = decoder.run(&inp, &inp);
+
+                    let expected = (0..output_count)
+                        .map(|i| {
+                            if i == sel as usize {
+                                BitArray::from_iter([BitState::High])
+                            } else {
+                                BitArray::from_iter([BitState::Low])
+                            }
+                        })
+                        .enumerate()
+                        .map(|(i, value)| PortUpdate { index: 1 + i, value })
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(
+                        outputs,
+                        expected,
+                        "Decoder with selsize {selsize} and selector {sel} should output correct value"
+                    );
+                }
+            }
+        }
+    }
+
+    mod splitter {
+        use super::*;
+        use crate::bitarray::BitArray;
+
+        #[test]
+        fn test_splitter() {
+            for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
+                let splitter = Splitter::new(bitsize);
+                let ports = splitter.ports();
+
+                assert_eq!(ports.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
+                assert_eq!(ports[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
+                assert_eq!(
+                    ports[1..],
+                    vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize],
+                    "Splitter with bitsize {bitsize} should have {bitsize} split ports"
+                );
+
+                let old_inp = vec![BitArray::from_iter(vec![BitState::Low; bitsize as usize])];
+                let inp = vec![BitArray::from_iter(
+                    (0..bitsize).map(|i| if i % 2 == 0 { BitState::High } else { BitState::Low })
+                )];
+
+                let outputs = splitter.run(&old_inp, &inp);
+
+                let expected: Vec<PortUpdate> = (0..bitsize)
+                    .map(|i| {
+                        let bit = inp[0].index(i);
+                        PortUpdate { index: 1 + i as usize, value: BitArray::from_iter([bit]) }
+                    })
+                    .collect();
+
+                assert_eq!(
+                    outputs,
+                    expected,
+                    "Splitter should correctly split the input bits"
+                );
+            }
         }
     }
 }
