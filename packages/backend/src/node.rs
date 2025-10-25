@@ -208,7 +208,7 @@ pub struct GateProperties {
 }
 
 macro_rules! gates {
-    ($($(#[$m:meta])? $Id:ident: $f:expr),*$(,)?) => {
+    ($($(#[$m:meta])? $Id:ident: $f:expr, $invert:literal),*$(,)?) => {
         $(
             $(#[$m])?
             pub struct $Id {
@@ -237,7 +237,10 @@ macro_rules! gates {
                         .reduce($f)
                         .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
     
-                    vec![PortUpdate { index: usize::from(self.props.n_inputs), value }]
+                    vec![PortUpdate {
+                        index: usize::from(self.props.n_inputs),
+                        value: if $invert { !value } else { value }
+                    }]
                 }
             }
         )*
@@ -246,17 +249,17 @@ macro_rules! gates {
 
 gates! {
     /// An AND gate component.
-    And:  |a, b| a & b,
+    And:  |a, b| a & b, false,
     /// An OR gate component.
-    Or:   |a, b| a | b,
+    Or:   |a, b| a | b, false,
     /// An XOR gate component.
-    Xor:  |a, b| a ^ b,
+    Xor:  |a, b| a ^ b, false,
     /// A NAND gate component.
-    Nand: |a, b| !(a & b),
+    Nand: |a, b| a & b, true,
     /// A NOR gate component.
-    Nor:  |a, b| !(a | b),
+    Nor:  |a, b| a | b, true,
     /// A XNOR gate component.
-    Xnor: |a, b| !(a ^ b),
+    Xnor: |a, b| a ^ b, true,
 }
 
 /// A structure that holds properties for buffer and NOT gates.
