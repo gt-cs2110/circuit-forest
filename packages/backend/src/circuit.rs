@@ -7,7 +7,7 @@ use std::ops::{Index, IndexMut};
 
 use slotmap::{new_key_type, SlotMap};
 
-use crate::bitarray::BitArray;
+use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::state::{index_mut, CircuitState, TriggerState, ValueState};
 use crate::node::{Component, ComponentFn, PortProperties, PortType, PortUpdate};
 
@@ -288,7 +288,7 @@ impl Circuit {
                                 .map(|&p| self.state.value(p));
                             // Find value and short circuit status
                             let (result, occupied) = feed_it.fold(
-                                (BitArray::floating(s), Some(0)),
+                                (bitarr![Z; s], Some(0)),
                                 |(array, m_occupied), current| (
                                     array.join(current),
                                     m_occupied.and_then(|occupied| current.short_circuits(occupied))
@@ -335,7 +335,7 @@ impl Circuit {
                     *port_value = port
                         .filter(|&n| self.graph[n].bitsize == Some(props.bitsize))
                         .map(|n| self.state.values[&n].get_value())
-                        .unwrap_or_else(|| BitArray::floating(props.bitsize));
+                        .unwrap_or_else(|| bitarr![Z; props.bitsize]);
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
