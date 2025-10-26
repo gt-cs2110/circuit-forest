@@ -882,6 +882,86 @@ mod tests {
         }
     }
 
+    mod input_validation {
+        use super::*;
 
+        #[test]
+        #[should_panic]
+        fn input_validate_and() {
+            let gate = And::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_or() {
+            let gate = Or::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_xor() {
+            let gate = Xor::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_nand() {
+            let gate = Nand::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_nor() {
+            let gate = Nor::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_xnor() {
+            let gate = Xnor::new(4, 2);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let good_in = BitArray::from_str("1010").unwrap();
+            let _ = gate.run(&[], &[bad_in, good_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_not() {
+            let gate = Not::new(4);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let _ = gate.run(&[], &[bad_in]);
+        } 
+
+        #[test]
+        #[should_panic]
+        fn input_validate_tristate() {
+            let gate = TriState::new(4);
+            // Should fail input validation
+            let bad_in = BitArray::from_str("111").unwrap();
+            let _ = gate.run(&[], &[bad_in]);
+        } 
+    }
 }
 
