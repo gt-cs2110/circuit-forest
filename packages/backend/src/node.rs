@@ -93,18 +93,18 @@ pub trait Component {
     /// of updated ports. This function is wrapped by run to ensure input validation
     fn run_inner(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate>;
 
-    /// Validates inputs to ensure bitarray matches port bitsize
+    /// Validates inputs to ensure all ports match port bitsize.
     fn validate_ports(&self, inp: &[BitArray]) {
-        let ports = self.ports();
-        for (i, (bit_vec, port)) in inp.iter().zip(&ports).enumerate() {
-            assert_eq!(
-                bit_vec.len(),
-                port.bitsize,
-                "Input port {} has incorrect bit width: expected {}, got {}",
-                i,
-                port.bitsize,
-                bit_vec.len()
-            );
+        // Only run in debug mode
+        if cfg!(debug_assertions) {
+            let ports = self.ports();
+            for (i, (bit_vec, port)) in inp.iter().zip(ports).enumerate() {
+                debug_assert_eq!(
+                    bit_vec.len(),
+                    port.bitsize,
+                    "Port {i} has incorrect bit width"
+                );
+            }
         }
     }
 }
