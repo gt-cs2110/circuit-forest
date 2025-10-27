@@ -249,6 +249,8 @@ impl Circuit {
     /// Connect a wire to a port in the Circuit's graph.
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         self.graph.connect(wire, port);
+        self.state.transient.triggers.insert(wire, TriggerState { recalculate: true });
+        self.propagate();
     }
 
     /// Clear the function node of connections and connect all of the passed ports to it.
@@ -256,7 +258,11 @@ impl Circuit {
         self.graph.clear_edges(gate);
         ports.iter().copied()
             .enumerate()
-            .for_each(|(index, wire)| self.connect_one(wire, FunctionPort { gate, index }));
+            .for_each(|(index, wire)| {
+                self.graph.connect(wire, FunctionPort { gate, index });
+                self.state.transient.triggers.insert(wire, TriggerState { recalculate: true });
+            });
+        self.propagate();
     }
 
     /// Propagates an update through the circuit
@@ -264,12 +270,18 @@ impl Circuit {
     /// 
     /// The provided `input` argument indicates which value nodes were updated.
     pub fn run(&mut self, inputs: &[ValueKey]) {
-        const RUN_ITER_LIMIT: usize = 10_000;
-
         self.state.transient.triggers = inputs.iter().copied()
             .map(|k| (k, TriggerState { recalculate: false }))
             .collect();
         self.state.transient.frontier.clear();
+
+        self.propagate();
+    }
+
+    /// Pushes transient state, propagating any updates through
+    /// (until the circuit stabilizes or an oscillation occurs).
+    pub fn propagate(&mut self) {
+        const RUN_ITER_LIMIT: usize = 10_000;
 
         let mut iteration = 0;
         while !self.state.transient.resolved() {
@@ -350,6 +362,7 @@ impl Circuit {
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
+                    // Push outputs:
                     debug_assert!(self.graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
                     debug_assert_eq!(self.graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
                     if self.state[gate_idx].ports[index] != value {

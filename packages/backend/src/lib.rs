@@ -20,8 +20,8 @@ mod tests {
         let b = 0x19182934_19AFFC94;
 
         // Wires
-        let a_in = circuit.add_value_node(BitArray::from(a));
-        let b_in = circuit.add_value_node(BitArray::from(b));
+        let a_in = circuit.add_input(BitArray::from(a));
+        let b_in = circuit.add_input(BitArray::from(b));
         let out  = circuit.add_value_node(bitarr![Z; 64]);
         // Gates
         let gate = circuit.add_function_node(node::Xor::new(64, 2));
@@ -43,10 +43,10 @@ mod tests {
         let d = 0xA8293129_FC03919D;
 
         // Wires
-        let a_in = circuit.add_value_node(BitArray::from(a));
-        let b_in = circuit.add_value_node(BitArray::from(b));
-        let c_in = circuit.add_value_node(BitArray::from(c));
-        let d_in = circuit.add_value_node(BitArray::from(d));
+        let a_in = circuit.add_input(BitArray::from(a));
+        let b_in = circuit.add_input(BitArray::from(b));
+        let c_in = circuit.add_input(BitArray::from(c));
+        let d_in = circuit.add_input(BitArray::from(d));
         let ab_mid = circuit.add_value_node(bitarr![Z; 64]);
         let cd_mid = circuit.add_value_node(bitarr![Z; 64]);
         let out = circuit.add_value_node(bitarr![Z; 64]);
@@ -73,7 +73,7 @@ mod tests {
         let a = 0x98A85409_19182A9F;
 
         let wires = [
-            circuit.add_value_node(BitArray::from(a)),
+            circuit.add_value_node(bitarr![Z; 64]),
             circuit.add_value_node(bitarr![Z; 64]),
         ];
         let gates = [
@@ -83,6 +83,8 @@ mod tests {
 
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
         circuit.connect_all(gates[1], &[wires[1], wires[0]]);
+
+        circuit.set(wires[0], BitArray::from(a));
         circuit.run(&[wires[0]]);
 
         let (l1, r1) = (a, u64::try_from(circuit.state().value(wires[0])).unwrap());
@@ -95,7 +97,7 @@ mod tests {
     fn nand_propagate() {
         let mut circuit = Circuit::new();
 
-        let inp  = circuit.add_value_node(bitarr![0]);
+        let inp  = circuit.add_input(bitarr![0]);
         let out0 = circuit.add_value_node(bitarr![Z]);
         let out1 = circuit.add_value_node(bitarr![Z]);
         let gates = [
@@ -117,9 +119,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_value_node(bitarr![0]);
-        let hi = circuit.add_value_node(bitarr![1]);
-        let out = circuit.add_value_node(bitarr![X]);
+        let lo = circuit.add_input(bitarr![0]);
+        let hi = circuit.add_input(bitarr![1]);
+        let out = circuit.add_value_node(bitarr![Z]);
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -138,9 +140,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_value_node(bitarr![0]);
-        let hi = circuit.add_value_node(bitarr![1]);
-        let out = circuit.add_value_node(bitarr![X]);
+        let lo = circuit.add_input(bitarr![0]);
+        let hi = circuit.add_input(bitarr![1]);
+        let out = circuit.add_value_node(bitarr![Z]);
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -159,8 +161,8 @@ mod tests {
         let mut circuit = Circuit::new();
         
         // Wires
-        let inp = circuit.add_value_node(bitarr![0]); 
-        let mid = circuit.add_value_node(bitarr![0]);
+        let inp = circuit.add_input(bitarr![0]); 
+        let mid = circuit.add_input(bitarr![0]);
         let out = circuit.add_value_node(bitarr![0]);
         // Gates
         let gates = [
@@ -181,8 +183,8 @@ mod tests {
     fn rs_latch() {
         let mut circuit = Circuit::new();
         let [r, s, q, qp] = [
-            circuit.add_value_node(bitarr![1]), // R
-            circuit.add_value_node(bitarr![1]), // S
+            circuit.add_input(bitarr![1]), // R
+            circuit.add_input(bitarr![1]), // S
             circuit.add_value_node(bitarr![1]), // Q
             circuit.add_value_node(bitarr![0]), // Q'
         ];
@@ -196,9 +198,10 @@ mod tests {
         circuit.connect_all(snand, &[s, qp, q]);
         circuit.run(&[r, s]);
 
-        assert_eq!(u64::try_from(circuit.state().value(q)).unwrap(), 1);
-        assert_eq!(u64::try_from(circuit.state().value(qp)).unwrap(), 0);
-        
+        // In an invalid state right now.
+        assert_eq!(circuit.state().value(q), bitarr![X]);
+        assert_eq!(circuit.state().value(qp), bitarr![X]);
+
         // R = 0, S = 1
         circuit.set(r, bitarr![0]);
         circuit.run(&[r]);
@@ -220,8 +223,8 @@ mod tests {
         let mut circuit = Circuit::new();
         // external
         let [din, wen, dout, doutp] = [
-            circuit.add_value_node(bitarr![0]),
-            circuit.add_value_node(bitarr![1]),
+            circuit.add_input(bitarr![0]),
+            circuit.add_input(bitarr![1]),
             circuit.add_value_node(bitarr![Z]),
             circuit.add_value_node(bitarr![Z]),
         ];
@@ -270,11 +273,11 @@ mod tests {
         let mut circuit = Circuit::new();
         
         // Wires
-        let a_in = circuit.add_value_node(bitarr![1]);
-        let b_in = circuit.add_value_node(bitarr![0]);
-        let c_in = circuit.add_value_node(bitarr![1]);
-        let d_in = circuit.add_value_node(bitarr![0]);
-        let e_in = circuit.add_value_node(bitarr![1]);
+        let a_in = circuit.add_input(bitarr![1]);
+        let b_in = circuit.add_input(bitarr![0]);
+        let c_in = circuit.add_input(bitarr![1]);
+        let d_in = circuit.add_input(bitarr![0]);
+        let e_in = circuit.add_input(bitarr![1]);
         let ab_mid = circuit.add_value_node(bitarr![Z; 1]);
         let abc_mid = circuit.add_value_node(bitarr![Z; 1]);
         let abcd_mid = circuit.add_value_node(bitarr![Z; 1]);
@@ -300,10 +303,11 @@ mod tests {
     fn oscillate() {
         let mut circuit = Circuit::new();
 
-        let a_in = circuit.add_value_node(bitarr![1]);
+        let a_in = circuit.add_value_node(bitarr![Z]);
         let gate = circuit.add_function_node(node::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
+        circuit.set(a_in, bitarr![1]);
         circuit.run(&[a_in]);
 
         assert!(circuit.state().issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
@@ -362,11 +366,11 @@ mod tests {
         let mut circuit = Circuit::new();
         let inputs = bitarr![1, 0, 1, 0, 1, 0, 1, 0];
         let nodes @ [din, enable, clock, clear, dout] = [
-            circuit.add_value_node(inputs),
-            circuit.add_value_node(bitarr![0]),
-            circuit.add_value_node(bitarr![0]),
-            circuit.add_value_node(bitarr![0]),
-            circuit.add_value_node(BitArray::repeat(BitState::Low, 8)), // TODO: this should be floating. on connect, it should update
+            circuit.add_input(inputs),
+            circuit.add_input(bitarr![0]),
+            circuit.add_input(bitarr![0]),
+            circuit.add_input(bitarr![0]),
+            circuit.add_value_node(bitarr![Z; 8]),
         ];
         let reg = circuit.add_function_node(node::Register::new(8));
         circuit.connect_all(reg, &nodes);
