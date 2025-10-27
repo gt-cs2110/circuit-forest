@@ -21,7 +21,7 @@ new_key_type! {
 
 /// A struct which identifies a port (from its function node and port index).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
-pub struct Port {
+pub struct FunctionPort {
     gate: FunctionKey,
     index: usize
 }
@@ -54,7 +54,7 @@ pub struct ValueNode {
     bitsize: Option<u8>,
 
     /// Ports this node is connected to.
-    links: HashSet<Port>
+    links: HashSet<FunctionPort>
 }
 impl ValueNode {
     /// Creates a new value node without a specified bitsize.
@@ -148,7 +148,7 @@ impl CircuitGraph {
     }
 
     /// Connect a value node to a function port.
-    pub fn connect(&mut self, wire: ValueKey, port: Port) {
+    pub fn connect(&mut self, wire: ValueKey, port: FunctionPort) {
         self.disconnect(port);
         self.functions[port.gate].links[port.index].replace(wire);
 
@@ -156,7 +156,7 @@ impl CircuitGraph {
         self.attach_bitsize(wire, self.functions[port.gate].port_props[port.index].bitsize);
     }
     /// Disconnect an associated value node (if one exists) from a function port.
-    pub fn disconnect(&mut self, port: Port) {
+    pub fn disconnect(&mut self, port: FunctionPort) {
         let old_port = self.functions[port.gate].links[port.index];
         // If there was something there, remove it from the other side:
         if let Some(node) = old_port {
@@ -171,7 +171,7 @@ impl CircuitGraph {
         for index in 0..self.functions[gate].links.len() {
             let Some(node) = self.functions[gate].links[index].take() else { continue };
 
-            let result = self.values[node].links.remove(&Port { gate, index });
+            let result = self.values[node].links.remove(&FunctionPort { gate, index });
             debug_assert!(result, "Gate should've been removed from assigned value node");
             self.recalculate_bitsize(node);
         }
@@ -236,7 +236,7 @@ impl Circuit {
     }
 
     /// Connect a wire to a port in the Circuit's graph.
-    pub fn connect(&mut self, wire: ValueKey, port: Port) {
+    pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         self.graph.connect(wire, port);
     }
 
@@ -245,7 +245,7 @@ impl Circuit {
         self.graph.clear_edges(gate);
         ports.iter().copied()
             .enumerate()
-            .for_each(|(index, wire)| self.connect(wire, Port { gate, index }));
+            .for_each(|(index, wire)| self.connect_one(wire, FunctionPort { gate, index }));
     }
 
     /// Propagates an update through the circuit
