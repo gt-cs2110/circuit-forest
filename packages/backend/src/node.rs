@@ -445,11 +445,11 @@ impl Component for Decoder {
         let m_sel = u64::try_from(inp[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![BitArray::from_iter([BitState::Low]); 1 << self.props.selsize];
-                result[sel as usize] = BitArray::from_iter([BitState::High]);
+                let mut result = vec![bitarr![0]; 1 << self.props.selsize];
+                result[sel as usize] = bitarr![1];
                 result
             },
-            Err(e) => vec![BitArray::from_iter([e.bit_state()]); 1 << self.props.selsize],
+            Err(e) => vec![BitArray::from(e.bit_state()); 1 << self.props.selsize],
         };
 
         result.into_iter()
@@ -483,7 +483,7 @@ impl Component for Splitter {
     fn run(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
         if Sensitivity::Anyedge.activated(old_inp[0], inp[0]) {
             std::iter::zip(1.., inp[0])
-                .map(|(index, bit)| PortUpdate { index, value: BitArray::from_iter([bit]) })
+                .map(|(index, bit)| PortUpdate { index, value: BitArray::from(bit) })
                 .collect()
         } else if Sensitivity::Anyedge.any_activated(&old_inp[1..], &inp[1..]) {
             let value = inp[1..].iter()
@@ -941,8 +941,7 @@ mod tests {
                             if i == sel as usize {
                                 inputs[sel as usize]
                             } else {
-                                BitArray::repeat(BitState::Low, 4)
-                                // BitArray::from(0u64)
+                                bitarr![0; 4]
                             }
                         })
                         .enumerate()
@@ -986,9 +985,9 @@ mod tests {
                     let expected = (0..output_count)
                         .map(|i| {
                             if i == sel as usize {
-                                BitArray::from_iter([BitState::High])
+                                bitarr![1]
                             } else {
-                                BitArray::from_iter([BitState::Low])
+                                bitarr![0]
                             }
                         })
                         .enumerate()
@@ -1023,7 +1022,7 @@ mod tests {
                     "Splitter with bitsize {bitsize} should have {bitsize} split ports"
                 );
 
-                let old_inp = vec![BitArray::from_iter(vec![BitState::Low; bitsize as usize])];
+                let old_inp = vec![bitarr![0; bitsize]];
                 let inp = vec![BitArray::from_iter(
                     (0..bitsize).map(|i| if i % 2 == 0 { BitState::High } else { BitState::Low })
                 )];
@@ -1033,7 +1032,7 @@ mod tests {
                 let expected: Vec<PortUpdate> = (0..bitsize)
                     .map(|i| {
                         let bit = inp[0].index(i);
-                        PortUpdate { index: 1 + i as usize, value: BitArray::from_iter([bit]) }
+                        PortUpdate { index: 1 + i as usize, value: BitArray::from(bit) }
                     })
                     .collect();
 
