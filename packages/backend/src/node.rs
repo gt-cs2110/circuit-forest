@@ -9,7 +9,7 @@
 //! - **[`PortType`] and [`PortProperties`]**: Enumerations and structures to define the types and properties of ports for components.
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
-use crate::bitarray::{BitArray, BitState};
+use crate::bitarray::{BitArray, BitState, bitarr};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 
@@ -127,11 +127,11 @@ impl Sensitivity {
     /// would create a trigger based on this sensitivity.
     /// 
     /// ```
-    /// use circuitsim_engine::bitarray::{BitState, BitArray};
+    /// use circuitsim_engine::bitarray::bitarr;
     /// use circuitsim_engine::node::Sensitivity;
     /// 
-    /// let lo = BitArray::from(BitState::Low);
-    /// let hi = BitArray::from(BitState::High);
+    /// let lo = bitarr![0];
+    /// let hi = bitarr![1];
     /// assert!(Sensitivity::Posedge.activated(lo, hi));
     /// assert!(Sensitivity::Negedge.activated(hi, lo));
     /// ```
@@ -149,11 +149,11 @@ impl Sensitivity {
     /// would create a trigger based on this sensitivity.
     /// 
     /// ```
-    /// use circuitsim_engine::bitarray::{BitState, BitArray};
+    /// use circuitsim_engine::bitarray::bitarr;
     /// use circuitsim_engine::node::Sensitivity;
     /// 
-    /// let lo = BitArray::from(BitState::Low);
-    /// let hi = BitArray::from(BitState::High);
+    /// let lo = bitarr![0];
+    /// let hi = bitarr![1];
     /// assert!(Sensitivity::Posedge.any_activated(&[lo, lo, lo, lo], &[lo, hi, lo, lo]));
     /// ```
     /// 
@@ -258,7 +258,7 @@ macro_rules! gates {
                     let value = new_ports[..usize::from(self.props.n_inputs)].iter()
                         .cloned()
                         .reduce($f)
-                        .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
+                        .unwrap_or_else(|| bitarr![X; self.props.bitsize]);
     
                     vec![PortUpdate {
                         index: usize::from(self.props.n_inputs),
@@ -344,8 +344,8 @@ impl Component for TriState {
         let gate = new_ports[0].index(0);
         let result = match gate {
             BitState::High => new_ports[1],
-            BitState::Low | BitState::Imped => BitArray::floating(self.props.bitsize),
-            BitState::Unk => BitArray::unknown(self.props.bitsize),
+            BitState::Low | BitState::Imped => bitarr![Z; self.props.bitsize],
+            BitState::Unk => bitarr![X; self.props.bitsize],
         };
         vec![PortUpdate { index: 2, value: result }]
     }
@@ -424,7 +424,7 @@ impl Component for Demux {
         let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![BitArray::repeat(BitState::Low, self.props.bitsize); 1 << self.props.selsize];
+                let mut result = vec![bitarr![0; self.props.bitsize]; 1 << self.props.selsize];
                 result[sel as usize] = new_ports[1];
                 result
             },
@@ -542,11 +542,11 @@ impl Component for Register {
         ])
     }
     fn initialize(&self, state: &mut [BitArray]) {
-        state[4] = BitArray::repeat(BitState::Low, self.props.bitsize);
+        state[4] = bitarr![0; self.props.bitsize];
     }
     fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
         if new_ports[3].all(BitState::High) {
-            vec![PortUpdate { index: 4, value: BitArray::repeat(BitState::Low, self.props.bitsize) }]
+            vec![PortUpdate { index: 4, value: bitarr![0; self.props.bitsize] }]
         } else if Sensitivity::Posedge.activated(old_ports[2], new_ports[2]) && new_ports[1].all(BitState::High) {
             vec![PortUpdate { index: 4, value: new_ports[0] }]
         } else {
@@ -558,16 +558,14 @@ impl Component for Register {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
-    use crate::bitarray::{BitArray, BitState};
 
     mod gates {
         use super::*;
         #[test]
         fn test_and_gate() {
             let gate = And::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
@@ -576,7 +574,7 @@ mod tests {
             // 1 & 0 = 0;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::Low) }],
+                vec![PortUpdate { index: 2, value: bitarr![0] }],
                 "Expected a single update with index=2 and value=0 (1 & 0 = 0)"
             );
         }
@@ -584,15 +582,15 @@ mod tests {
         #[test]
         fn test_and_gate_multi_bit() {
             let gate = And::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1100").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 0];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             // 1011 & 1100 = 1000;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("1000").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![1, 0, 0, 0] }],
                 "Expected a single update with index=2 and value=1000 (1011 & 1100 = 1000)"
             );
         }
@@ -600,16 +598,16 @@ mod tests {
         #[test]
         fn test_and_gate_3input_4bit() {
             let gate = And::new(4, 3); // 3 inputs, 4-bit each
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1100").unwrap();
-            let in_c = BitArray::from_str("1110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 0];
+            let in_c = bitarr![1, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // 1011 & 1100 & 1110 = 1000;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("1000").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![1, 0, 0, 0] }],
                 "Expected a single update with index=3 and value=1000 (1011 & 1100 & 1110 = 1000)"
             );
         }
@@ -617,15 +615,15 @@ mod tests {
         #[test]
         fn test_or_gate() {
             let gate = Or::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             // 1 | 0 = 1;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::High) }],
+                vec![PortUpdate { index: 2, value: bitarr![1] }],
                 "Expected a single update with index=2 and value=1 (1 | 0 = 1)"
             );
         }
@@ -633,15 +631,15 @@ mod tests {
         #[test]
         fn test_or_gate_multi_bit() {
             let gate = Or::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1100").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 0];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             // 1011 | 1100 = 1111;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("1111").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![1, 1, 1, 1] }],
                 "Expected a single update with index=2 and value=1111 (1011 | 1100 = 1111)"
             );
         }
@@ -649,16 +647,16 @@ mod tests {
         #[test]
         fn test_or_gate_3input_4bit() {
             let gate = Or::new(4, 3);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1100").unwrap();
-            let in_c = BitArray::from_str("0110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 0];
+            let in_c = bitarr![0, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // 1011 | 1100 | 0110 = 1111;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("1111").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![1, 1, 1, 1] }],
                 "Expected a single update with index=3 and value=1111 (1011 | 1100 | 0110 = 1111)"
             );
         }
@@ -666,15 +664,15 @@ mod tests {
         #[test]
         fn test_xor_gate() {
             let gate = Xor::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             // 1 ^ 0 = 1;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::High) }],
+                vec![PortUpdate { index: 2, value: bitarr![1] }],
                 "Expected a single update with index=2 and value=1 (1 ^ 0 = 1)"
             );
         }
@@ -682,15 +680,15 @@ mod tests {
         #[test]
         fn test_xor_gate_multi_bit() {
             let gate = Xor::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             // 1011 ^ 1101 = 0110;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("0110").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![0, 1, 1, 0] }],
                 "Expected a single update with index=2 and value=0110 (1011 ^ 1101 = 0110)"
             );
         }
@@ -698,16 +696,16 @@ mod tests {
         #[test]
         fn test_xor_gate_3input_4bit() {
             let gate = Xor::new(4, 3);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
-            let in_c = BitArray::from_str("0110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
+            let in_c = bitarr![0, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // 1011 ^ 1101 ^ 0110 = 0000;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("0000").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![0, 0, 0, 0] }],
                 "Expected a single update with index=3 and value=0000 (1011 ^ 1101 ^ 0110 = 0000)"
             );
         }
@@ -715,14 +713,14 @@ mod tests {
         #[test]
         fn test_nand_gate() {
             let gate = Nand::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::High) }],
+                vec![PortUpdate { index: 2, value: bitarr![1] }],
                 "Expected a single update with index=2 and value=1 (!(1 & 0) = 1)"
             );
         }
@@ -730,14 +728,14 @@ mod tests {
         #[test]
         fn test_nand_gate_multi_bit() {
             let gate = Nand::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("0110").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![0, 1, 1, 0] }],
                 "Expected a single update with index=2 and value=0110 (!(1011 & 1101) = 0110)"
             );
         }
@@ -745,16 +743,16 @@ mod tests {
         #[test]
         fn test_nand_gate_3input_4bit() {
             let gate = Nand::new(4, 3);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
-            let in_c = BitArray::from_str("1110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
+            let in_c = bitarr![1, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // !(1011 & 1101 & 1110) = 0111;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("0111").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![0, 1, 1, 1] }],
                 "Expected a single update with index=3 and value=0111 (!(1011 & 1101 & 1110) = 0111)"
             );
         }
@@ -762,14 +760,14 @@ mod tests {
         #[test]
         fn test_nor_gate() {
             let gate = Nor::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::Low) }],
+                vec![PortUpdate { index: 2, value: bitarr![0] }],
                 "Expected a single update with index=2 and value=0 (!(1 | 0) = 0)"
             );
         }
@@ -777,14 +775,14 @@ mod tests {
         #[test]
         fn test_nor_gate_multi_bit() {
             let gate = Nor::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("0000").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![0, 0, 0, 0] }],
                 "Expected a single update with index=2 and value=0000 (!(1011 | 1101) = 0000)"
             );
         }
@@ -792,16 +790,16 @@ mod tests {
         #[test]
         fn test_nor_gate_3input_4bit() {
             let gate = Nor::new(4, 3);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
-            let in_c = BitArray::from_str("0110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
+            let in_c = bitarr![0, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // !(1011 | 1101 | 0110) = 0000;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("0000").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![0, 0, 0, 0] }],
                 "Expected a single update with index=3 and value=0000 (!(1011 | 1101 | 0110) = 0000)"
             );
         }
@@ -809,14 +807,14 @@ mod tests {
         #[test]
         fn test_xnor_gate() {
             let gate = Xnor::new(1, 2);
-            let in_a = BitArray::from(BitState::Low);
-            let in_b = BitArray::from(BitState::High);
+            let in_a = bitarr![0];
+            let in_b = bitarr![1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from(BitState::Low) }],
+                vec![PortUpdate { index: 2, value: bitarr![0] }],
                 "Expected a single update with index=2 and value=0 (!(1 ^ 0) = 0)"
             );
         }
@@ -824,14 +822,14 @@ mod tests {
         #[test]
         fn test_xnor_gate_multi_bit() {
             let gate = Xnor::new(4, 2);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
 
             let updates = gate.run(&[], &[in_a, in_b]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 2, value: BitArray::from_str("1001").unwrap() }],
+                vec![PortUpdate { index: 2, value: bitarr![1, 0, 0, 1] }],
                 "Expected a single update with index=2 and value=1001 (!(1011 ^ 1101) = 1001)"
             );
         }
@@ -839,16 +837,16 @@ mod tests {
         #[test]
         fn test_xnor_gate_3input_4bit() {
             let gate = Xnor::new(4, 3);
-            let in_a = BitArray::from_str("1011").unwrap();
-            let in_b = BitArray::from_str("1101").unwrap();
-            let in_c = BitArray::from_str("0110").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
+            let in_b = bitarr![1, 1, 0, 1];
+            let in_c = bitarr![0, 1, 1, 0];
 
             let updates = gate.run(&[], &[in_a, in_b, in_c]);
 
             // !(1011 ^ 1101 ^ 0110) = 1111;
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 3, value: BitArray::from_str("1111").unwrap() }],
+                vec![PortUpdate { index: 3, value: bitarr![1, 1, 1, 1] }],
                 "Expected a single update with index=3 and value=1111 (!(1011 ^ 1101 ^ 0110) = 1111)"
             );
         }
@@ -856,13 +854,13 @@ mod tests {
         #[test]
         fn test_not_gate() {
             let gate = Not::new(1);
-            let in_a = BitArray::from(BitState::Low);
+            let in_a = bitarr![0];
 
             let updates = gate.run(&[], &[in_a]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 1, value: BitArray::from(BitState::High) }],
+                vec![PortUpdate { index: 1, value: bitarr![1] }],
                 "Expected a single update with index=1 and value=1 (!0 = 1)"
             );
         }
@@ -870,13 +868,13 @@ mod tests {
         #[test]
         fn test_not_gate_multi_bit() {
             let gate = Not::new(4);
-            let in_a = BitArray::from_str("1011").unwrap();
+            let in_a = bitarr![1, 0, 1, 1];
 
             let updates = gate.run(&[], &[in_a]);
 
             assert_eq!(
                 updates,
-                vec![PortUpdate { index: 1, value: BitArray::from_str("0100").unwrap() }],
+                vec![PortUpdate { index: 1, value: bitarr![0, 1, 0, 0] }],
                 "Expected a single update with index=1 and value=0100 (!1011 = 0100)"
             );
         }
@@ -890,8 +888,8 @@ mod tests {
         fn input_validate_and() {
             let gate = And::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -900,8 +898,8 @@ mod tests {
         fn input_validate_or() {
             let gate = Or::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -910,8 +908,8 @@ mod tests {
         fn input_validate_xor() {
             let gate = Xor::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -920,8 +918,8 @@ mod tests {
         fn input_validate_nand() {
             let gate = Nand::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -930,8 +928,8 @@ mod tests {
         fn input_validate_nor() {
             let gate = Nor::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -940,8 +938,8 @@ mod tests {
         fn input_validate_xnor() {
             let gate = Xnor::new(4, 2);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
-            let good_in = BitArray::from_str("1010").unwrap();
+            let bad_in = bitarr![1, 1, 1];
+            let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(&[], &[bad_in, good_in]);
         } 
 
@@ -950,7 +948,7 @@ mod tests {
         fn input_validate_not() {
             let gate = Not::new(4);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
+            let bad_in = bitarr![1, 1, 1];
             let _ = gate.run(&[], &[bad_in]);
         } 
 
@@ -959,7 +957,7 @@ mod tests {
         fn input_validate_tristate() {
             let gate = TriState::new(4);
             // Should fail input validation
-            let bad_in = BitArray::from_str("111").unwrap();
+            let bad_in = bitarr![1, 1, 1];
             let _ = gate.run(&[], &[bad_in]);
         } 
     }

@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
-use crate::bitarray::BitArray;
+use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, Port, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn};
 
@@ -122,7 +122,7 @@ pub struct FunctionState {
 impl FunctionState {
     pub fn initialize(func: &ComponentFn) -> Self {
         let mut ports: Vec<_> = func.ports().into_iter()
-            .map(|props| BitArray::floating(props.bitsize))
+            .map(|props| bitarr![Z; props.bitsize])
             .collect();
 
         func.initialize(&mut ports);
