@@ -353,7 +353,7 @@ impl Component for TriState {
 /// Minimum number of selector bits for Mux/Demux/Decoder.
 pub const MIN_SELSIZE: u8 = 1;
 /// Maximum number of selector bits for Mux/Demux/Decoder.
-pub const MAX_SELSIZE: u8 = 8;
+pub const MAX_SELSIZE: u8 = 6;
 
 /// A structure that holds properties for Mux and Demux components.
 pub struct MuxProperties {
@@ -468,11 +468,11 @@ impl Component for Decoder {
         let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![BitArray::from_iter([BitState::Low]); 1 << self.props.selsize];
-                result[sel as usize] = BitArray::from_iter([BitState::High]);
+                let mut result = vec![bitarr![0]; 1 << self.props.selsize];
+                result[sel as usize] = bitarr![1];
                 result
             },
-            Err(e) => vec![BitArray::from_iter([e.bit_state()]); 1 << self.props.selsize],
+            Err(e) => vec![BitArray::from(e.bit_state()); 1 << self.props.selsize],
         };
 
         result.into_iter()
@@ -504,9 +504,9 @@ impl Component for Splitter {
     }
 
     fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        if Sensitivity::Anyedge.activated(new_ports[0], new_ports[0]) {
+        if Sensitivity::Anyedge.activated(old_ports[0], new_ports[0]) {
             std::iter::zip(1.., new_ports[0])
-                .map(|(index, bit)| PortUpdate { index, value: BitArray::from_iter([bit]) })
+                .map(|(index, bit)| PortUpdate { index, value: BitArray::from(bit) })
                 .collect()
         } else if Sensitivity::Anyedge.any_activated(&old_ports[1..], &new_ports[1..]) {
             let value = new_ports[1..].iter()
@@ -558,6 +558,12 @@ impl Component for Register {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    fn floating_ports(properties: &[PortProperties]) -> Vec<BitArray> {
+        properties.iter()
+            .map(|p| bitarr![Z; p.bitsize])
+            .collect()
+    }
 
     mod gates {
         use super::*;
@@ -961,5 +967,243 @@ mod tests {
             let _ = gate.run(&[], &[bad_in]);
         } 
     }
-}
 
+    mod muxes {
+        use super::*;
+        use crate::bitarray::BitArray;
+
+        #[test]
+        fn test_mux() {
+            const BITSIZE: u8 = 4;
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize *data* inputs
+                let input_count = 1 << selsize;
+
+                // create mux
+                let mux = Mux::new(BITSIZE, selsize);
+                let props = mux.ports();
+    
+                assert_eq!(props.len(), input_count + 2, "Mux with selsize {selsize} should have {} ports", input_count + 2);
+                assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Mux port should be an input selector of bitsize {selsize}");
+                assert_eq!(props[input_count + 1], PortProperties { ty: PortType::Output, bitsize: BITSIZE }, "Last Mux port should be an output of bitsize {BITSIZE}");
+                assert_eq!(
+                    props[1..=input_count],
+                    vec![PortProperties { ty: PortType::Input, bitsize: BITSIZE }; input_count],
+                    "Mux with selsize {selsize} should have {input_count} input ports"
+                );
+
+                let mut ports = floating_ports(&props);
+                // Set mux inputs to random-ish values
+                for (i, p) in std::iter::zip(0.., &mut ports[1..=input_count]) {
+                    let value = (i + 1) * 13;
+                    assert!(p.try_overwrite(BitArray::from_bits(value, BITSIZE)));
+                }
+
+                // test all possible selector values
+                for sel in 0..input_count {
+                    // Update selector
+                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
+
+                    let actual = mux.run(&ports, &ports);
+                    let expected = vec![PortUpdate { index: 1 + input_count, value: ports[1 + sel] }];
+    
+                    assert_eq!(
+                        actual,
+                        expected,
+                        "Mux with selsize {selsize} and selector {sel} should output correct value"
+                    )
+                }
+            }
+        }
+
+        #[test]
+        fn test_demux() {
+            const BITSIZE: u8 = 4;
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize *data* inputs
+                let input_count = 1 << selsize;
+
+                // create demux
+                let demux = Demux::new(BITSIZE, selsize);
+                let props = demux.ports();
+
+                assert_eq!(props.len(), input_count + 2, "Demux with selsize {selsize} should have {} ports", input_count + 2);
+                assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Demux port should be an input selector of bitsize {selsize}");
+                assert_eq!(props[1], PortProperties { ty: PortType::Input, bitsize: BITSIZE }, "Last Demux port should be an output of bitsize {BITSIZE}");
+                assert_eq!(
+                    props[2..=input_count + 1],
+                    vec![PortProperties { ty: PortType::Output, bitsize: BITSIZE }; input_count],
+                    "Demux with selsize {selsize} should have {input_count} output ports"
+                );
+
+                // inputs are random-ish values
+                let inputs: Vec<BitArray> = (0..input_count)
+                    .map(|i| (i + 1) * 13)
+                    .map(|val| BitArray::from_bits(val as u64, BITSIZE))
+                    .collect();
+
+                let mut ports = floating_ports(&props);
+                // test all possible selector values
+                for (sel, &expected_out) in inputs.iter().enumerate() {
+                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
+                    assert!(ports[1].try_overwrite(expected_out));
+
+                    let actual = demux.run(&ports, &ports);
+                    let expected: Vec<_> = (0..input_count).map(|i| PortUpdate {
+                        index: 2 + i,
+                        // Outputs should update so that everything is 0000,
+                        // except for the selected output.
+                        value: if i == sel {
+                            inputs[sel]
+                        } else {
+                            bitarr![0; BITSIZE]
+                        }
+                    })
+                    .collect();
+
+                    assert_eq!(
+                        actual,
+                        expected,
+                        "Demux with selsize {selsize} and selector {sel} should output correct value"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn test_decoder() {
+            // use all possible selector sizes
+            for selsize in MIN_SELSIZE..=MAX_SELSIZE {
+                // 2^selsize outputs
+                let output_count = 1 << selsize;
+
+                // create decoder
+                let decoder = Decoder::new(selsize);
+                let props = decoder.ports();
+
+                assert_eq!(props.len(), output_count + 1, "Decoder with selsize {selsize} should have {} ports", output_count + 1);
+                assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Decoder port should be an input selector of bitsize {selsize}");
+                assert_eq!(
+                    props[1..],
+                    vec![PortProperties { ty: PortType::Output, bitsize: 1 }; output_count],
+                    "Decoder with selsize {selsize} should have {output_count} output ports"
+                );
+
+                let mut ports = floating_ports(&props);
+                // test all possible selector values
+                for sel in 0..output_count {
+                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
+                    
+                    let actual = decoder.run(&ports, &ports);
+                    let expected = (0..output_count).map(|i| PortUpdate {
+                        index: 1 + i,
+                        // Only selected index should be lit
+                        value: if i == sel {
+                                bitarr![1]
+                            } else {
+                                bitarr![0]
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(
+                        actual,
+                        expected,
+                        "Decoder with selsize {selsize} and selector {sel} should output correct value"
+                    );
+                }
+            }
+        }
+    }
+
+    mod splitter {
+        use super::*;
+        use crate::bitarray::BitArray;
+
+        #[test]
+        fn test_splitter_split() {
+            for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
+                let splitter = Splitter::new(bitsize);
+                let props = splitter.ports();
+
+                assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
+                assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
+                assert_eq!(
+                    props[1..],
+                    vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize],
+                    "Splitter with bitsize {bitsize} should have {bitsize} split ports"
+                );
+
+                let old_ports = floating_ports(&props);
+                let mut new_ports = floating_ports(&props);
+                
+                let data: Vec<_> = (0..bitsize)
+                    .map(|i| match i % 2 == 0 {
+                        true => BitState::High,
+                        false => BitState::Low
+                    }).collect();
+                
+                let joined = BitArray::from_iter(data.iter().copied());
+                assert!(new_ports[0].try_overwrite(joined));
+                
+                let actual = splitter.run(&old_ports, &new_ports);
+                let expected: Vec<_> = data.iter().enumerate()
+                    .map(|(i, &st)| PortUpdate {
+                        index: 1 + i,
+                        value: BitArray::from(st)
+                    })
+                    .collect();
+
+                assert_eq!(
+                    actual,
+                    expected,
+                    "Splitter should correctly split the input bits"
+                );
+            }
+        }
+
+        #[test]
+        fn test_splitter_join() {
+            for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
+                let splitter = Splitter::new(bitsize);
+                let props = splitter.ports();
+
+                assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
+                assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
+                assert_eq!(
+                    props[1..],
+                    vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize],
+                    "Splitter with bitsize {bitsize} should have {bitsize} split ports"
+                );
+
+                let old_ports = floating_ports(&props);
+                let mut new_ports = floating_ports(&props);
+                
+                let data: Vec<_> = (0..bitsize)
+                    .map(|i| match i % 2 == 0 {
+                        true => BitState::High,
+                        false => BitState::Low
+                    }).collect();
+                
+                let joined = BitArray::from_iter(data.iter().copied());
+                let split: Vec<_> = data.into_iter()
+                    .map(BitArray::from)
+                    .collect();
+                for (p, arr) in std::iter::zip(new_ports[1..].iter_mut(), split) {
+                    assert!(p.try_overwrite(arr));
+                }
+                
+                let actual = splitter.run(&old_ports, &new_ports);
+                let expected = vec![PortUpdate { index: 0, value: joined }];
+
+                assert_eq!(
+                    actual,
+                    expected,
+                    "Splitter should correctly split the input bits"
+                );
+            }
+        }
+    }
+}
