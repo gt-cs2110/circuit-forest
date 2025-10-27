@@ -175,6 +175,28 @@ pub struct BitArray {
     spec: u64,
     len: u8
 }
+
+/// Creates a [`BitState`].
+/// 
+/// This accepts the inputs 0, 1, Z, X.
+#[macro_export]
+macro_rules! bitstate {
+    (0) => { $crate::bitarray::BitState::Low };
+    (1) => { $crate::bitarray::BitState::High };
+    (Z) => { $crate::bitarray::BitState::Imped };
+    (X) => { $crate::bitarray::BitState::Unk };
+}
+/// Creates a [`BitArray`] containing the literal arguments.
+/// 
+/// Each element can be one of 0, 1, Z, X.
+#[macro_export]
+macro_rules! bitarr {
+    [$b:tt; $e:expr] => { $crate::bitarray::BitArray::repeat($crate::bitarray::bitstate!($b), $e) };
+    [$($b:tt),*$(,)?] => { $crate::bitarray::BitArray::from_iter([$($crate::bitarray::bitstate!($b)),*]) };
+}
+pub use bitstate;
+pub use bitarr;
+
 impl BitArray {
     /// The minimum possible size for the array.
     pub const MIN_BITSIZE: u8 = 1;
@@ -193,20 +215,6 @@ impl BitArray {
             spec: if spec { u64::MAX } else { 0 },
             len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
         }
-    }
-
-    /// Creates a new `len`-sized array that is all [`BitSize::Imped`].
-    /// 
-    /// This is equivalent to `BitArray::repeat(BitSize::Imped, len)`.
-    pub fn floating(len: u8) -> Self {
-        Self::repeat(BitState::Imped, len)
-    }
-
-    /// Creates a new `len`-sized array that is all [`BitSize::Unk`].
-    /// 
-    /// This is equivalent to `BitArray::repeat(BitSize::Unk, len)`.
-    pub fn unknown(len: u8) -> Self {
-        Self::repeat(BitState::Unk, len)
     }
 
     /// The length of the array.
