@@ -29,9 +29,9 @@ mod tests {
         circuit.connect_all(gate, &[a_in, b_in, out]);
         circuit.run(&[a_in, b_in]);
 
-        let left = a ^ b;
-        let right = u64::try_from(circuit.state().value(out)).unwrap();
-        assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
+        let left = circuit.state().value(out);
+        let right = BitArray::from(a ^ b);
+        assert_eq!(left, right);
     }
 
     #[test]
@@ -62,9 +62,9 @@ mod tests {
         circuit.connect_all(gates[2], &[ab_mid, cd_mid, out]);
         circuit.run(&[a_in, b_in, c_in, d_in]);
 
-        let left = a ^ b ^ c ^ d;
-        let right = u64::try_from(circuit.state().value(out)).unwrap();
-        assert_eq!(left, right, "0x{left:016X} != 0x{right:016X}");
+        let left = circuit.state().value(out);
+        let right = BitArray::from(a ^ b ^ c ^ d);
+        assert_eq!(left, right);
     }
 
     #[test]
@@ -87,10 +87,10 @@ mod tests {
         circuit.set(wires[0], BitArray::from(a));
         circuit.run(&[wires[0]]);
 
-        let (l1, r1) = (a, u64::try_from(circuit.state().value(wires[0])).unwrap());
-        let (l2, r2) = (!a, u64::try_from(circuit.state().value(wires[1])).unwrap());
-        assert_eq!(l1, r1, "0x{l1:016X} != 0x{r1:016X}");
-        assert_eq!(l2, r2, "0x{l2:016X} != 0x{r2:016X}");
+        let (l1, r1) = (circuit.state().value(wires[0]), BitArray::from(a));
+        let (l2, r2) = (circuit.state().value(wires[1]), BitArray::from(!a));
+        assert_eq!(l1, r1);
+        assert_eq!(l2, r2);
     }
 
     #[test]
@@ -109,9 +109,9 @@ mod tests {
         circuit.connect_all(gates[1], &[inp, out0, out1]);
         circuit.run(&[inp]);
 
-        assert_eq!(0, u64::try_from(circuit.state().value(inp)).unwrap());
-        assert_eq!(1, u64::try_from(circuit.state().value(out0)).unwrap());
-        assert_eq!(1, u64::try_from(circuit.state().value(out1)).unwrap());
+        assert_eq!(circuit.state().value(inp), bitarr![0]);
+        assert_eq!(circuit.state().value(out0), bitarr![1]);
+        assert_eq!(circuit.state().value(out1), bitarr![1]);
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
-        assert_eq!(1, u64::try_from(circuit.state().value(out)).unwrap());
+        assert_eq!(circuit.state().value(out), bitarr![1]);
     }
 
     #[test]
@@ -206,16 +206,16 @@ mod tests {
         circuit.set(r, bitarr![0]);
         circuit.run(&[r]);
 
-        assert_eq!(u64::try_from(circuit.state().value(q)).unwrap(), 0);
-        assert_eq!(u64::try_from(circuit.state().value(qp)).unwrap(), 1);
+        assert_eq!(circuit.state().value(q), bitarr![0]);
+        assert_eq!(circuit.state().value(qp), bitarr![1]);
 
         // R = 1, S = 0
         circuit.set(r, bitarr![1]);
         circuit.set(s, bitarr![0]);
         circuit.run(&[r, s]);
 
-        assert_eq!(u64::try_from(circuit.state().value(q)).unwrap(), 1);
-        assert_eq!(u64::try_from(circuit.state().value(qp)).unwrap(), 0);
+        assert_eq!(circuit.state().value(q), bitarr![1]);
+        assert_eq!(circuit.state().value(qp), bitarr![0]);
     }
 
     #[test]
@@ -250,23 +250,23 @@ mod tests {
         circuit.connect_all(snand, &[s, doutp, dout]);
         
         circuit.run(&[din, wen]);
-        assert_eq!(u64::try_from(circuit.state().value(dout)).unwrap(), 0);
-        assert_eq!(u64::try_from(circuit.state().value(doutp)).unwrap(), 1);
+        assert_eq!(circuit.state().value(dout), bitarr![0]);
+        assert_eq!(circuit.state().value(doutp), bitarr![1]);
 
         circuit.set(wen, bitarr![0]);
         circuit.run(&[wen]);
-        assert_eq!(u64::try_from(circuit.state().value(dout)).unwrap(), 0);
-        assert_eq!(u64::try_from(circuit.state().value(doutp)).unwrap(), 1);
+        assert_eq!(circuit.state().value(dout), bitarr![0]);
+        assert_eq!(circuit.state().value(doutp), bitarr![1]);
 
         circuit.set(din, bitarr![1]);
         circuit.run(&[din]);
-        assert_eq!(u64::try_from(circuit.state().value(dout)).unwrap(), 0);
-        assert_eq!(u64::try_from(circuit.state().value(doutp)).unwrap(), 1);
+        assert_eq!(circuit.state().value(dout), bitarr![0]);
+        assert_eq!(circuit.state().value(doutp), bitarr![1]);
 
         circuit.set(wen, bitarr![1]);
         circuit.run(&[wen]);
-        assert_eq!(u64::try_from(circuit.state().value(dout)).unwrap(), 1);
-        assert_eq!(u64::try_from(circuit.state().value(doutp)).unwrap(), 0);
+        assert_eq!(circuit.state().value(dout), bitarr![1]);
+        assert_eq!(circuit.state().value(doutp), bitarr![0]);
     }
     #[test]
     fn chain() {
@@ -296,7 +296,7 @@ mod tests {
         circuit.connect_all(gates[3], &[abcd_mid, e_in, out]);
         circuit.run(&[a_in, b_in, c_in, d_in, e_in]);
 
-        assert_eq!(u64::try_from(circuit.state().value(out)).unwrap(), 1);
+        assert_eq!(circuit.state().value(out), bitarr![1]);
     }
 
     #[test]
