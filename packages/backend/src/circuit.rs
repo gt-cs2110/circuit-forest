@@ -215,27 +215,21 @@ impl Circuit {
         Default::default()
     }
     
-    fn add_empty_value_node(&mut self) -> ValueKey {
-        let key = self.graph.add_value();
-        self.state.init_value(key);
-        key
-    }
-
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_input(&mut self, arr: BitArray) -> ValueKey {
         let func = self.add_function_node(crate::node::Input::new(arr));
-        let value = self.add_empty_value_node();
+        let value = self.add_value_node(arr.len());
 
         self.connect_all(func, &[value]);
 
         value
     }
     
-    /// Create a value node (essentially a wire) with the passed value.
-    pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
-        let key = self.add_empty_value_node();
-        self.state.values.insert(key, ValueState::new(arr));
+    /// Create a value node (essentially a wire) with the specified bitsize.
+    pub fn add_value_node(&mut self, bitsize: u8) -> ValueKey {
+        let key = self.graph.add_value();
+        self.state.values.insert(key, ValueState::new(bitarr![Z; bitsize]));
         key
     }
 
@@ -403,25 +397,19 @@ impl Circuit {
 
 #[test]
 fn test_try_set_and_set() {
-    use crate::bitarray::BitState::Low;
-    use crate::bitarray::BitState::High;
-    use crate::bitarray::BitArray;
-    
     let mut circuit = Circuit::new(); // create empty circuit
     
-    
-    
-    let value = BitArray::repeat(Low, 8); // Create a 8 bit BitArray 
-    let key = circuit.add_value_node(value); //add a ValueKey of 8 bits
+    let value = bitarr![0; 8]; // Create a 8 bit BitArray 
+    let key = circuit.add_value_node(8); //add a ValueKey of 8 bits
 
     // try_set should succeed
     assert!(circuit.try_set(key, value).is_ok());
 
     // set should succeed 
-    let value = BitArray::repeat(High, 8); // Create a 8 bit BitArray of high 
+    let value = bitarr![1; 8]; // Create a 8 bit BitArray of high 
     circuit.set(key, value);
 
     // intentionally wrong bitsize should fail
-    let wrong_value = BitArray::repeat(Low, 16); // 16 bits instead of 8
+    let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
     assert!(circuit.try_set(key, wrong_value).is_err());
 }
