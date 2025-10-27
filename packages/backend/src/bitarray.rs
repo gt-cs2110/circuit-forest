@@ -207,6 +207,17 @@ impl BitArray {
     pub fn new() -> Self {
         Default::default()
     }
+
+    /// Creates a new bitarray from specified two-valued data and a length.
+    /// 
+    /// - `data` represents the data of the bitarray (lows and highs), between bit 0 and bit `(len - 1)`
+    /// - `len` represents the length of the bitarray
+    /// 
+    /// Any bits after index `(len - 1)` in `data` are ignored.
+    pub fn from_bits(data: u64, len: u8) -> Self {
+        Self { data, spec: 0, len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE) }
+    }
+
     /// Creates a new array where the bit state is repeated `len` times.
     pub fn repeat(st: BitState, len: u8) -> Self {
         let (data, spec) = st.split();
@@ -324,7 +335,7 @@ impl FromIterator<BitState> for BitArray {
 }
 impl From<u64> for BitArray {
     fn from(data: u64) -> Self {
-        Self { data, spec: 0, len: 64 }
+        Self::from_bits(data, 64)
     }
 }
 impl TryFrom<BitArray> for u64 {
