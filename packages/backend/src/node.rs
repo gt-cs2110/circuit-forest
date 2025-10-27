@@ -504,7 +504,7 @@ impl Component for Splitter {
     }
 
     fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        if Sensitivity::Anyedge.activated(new_ports[0], new_ports[0]) {
+        if Sensitivity::Anyedge.activated(old_ports[0], new_ports[0]) {
             std::iter::zip(1.., new_ports[0])
                 .map(|(index, bit)| PortUpdate { index, value: BitArray::from(bit) })
                 .collect()
