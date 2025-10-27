@@ -190,7 +190,7 @@ macro_rules! decl_component_enum {
     }
 }
 decl_component_enum!(ComponentFn: 
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, 
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, Input,
     Mux, Demux, Decoder, Splitter, Register
 );
 /// Minimum number of inputs for multi-input logic gates.
@@ -327,6 +327,33 @@ impl Component for TriState {
         vec![PortUpdate { index: 2, value: result }]
     }
 }
+
+/// An input.
+pub struct Input {
+    value: BitArray
+}
+impl Input {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(value: BitArray) -> Self {
+        Self { value }
+    }
+}
+impl Component for Input {
+    fn ports(&self) -> Vec<PortProperties> {
+        port_list(&[
+            // output
+            (PortProperties { ty: PortType::Output, bitsize: self.value.len() }, 1),
+        ])
+    }
+
+    fn initialize(&self, state: &mut [BitArray]) {
+        state[0] = self.value;
+    }
+    fn run(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+        vec![]
+    }
+}
+
 /// Minimum number of selector bits for Mux/Demux/Decoder.
 pub const MIN_SELSIZE: u8 = 1;
 /// Maximum number of selector bits for Mux/Demux/Decoder.

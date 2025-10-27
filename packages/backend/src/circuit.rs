@@ -221,7 +221,18 @@ impl Circuit {
         key
     }
 
-    /// Create a value node (input/output pins) with the passed value.
+    /// Adds an input function node and value node (a wire connecting from the input)
+    /// using the passed value.
+    pub fn add_input(&mut self, arr: BitArray) -> ValueKey {
+        let func = self.add_function_node(crate::node::Input::new(arr));
+        let value = self.add_empty_value_node();
+
+        self.connect_all(func, &[value]);
+
+        value
+    }
+    
+    /// Create a value node (essentially a wire) with the passed value.
     pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
         let key = self.add_empty_value_node();
         self.state.values.insert(key, ValueState::new(arr));
