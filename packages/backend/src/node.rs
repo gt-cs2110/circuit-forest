@@ -83,22 +83,22 @@ pub trait Component {
     /// This function may also panic if `old_inp` and `inp` do not match the port properties
     /// specified by [`Component::ports`].
     #[must_use]
-    fn run(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate>{
-        self.validate_ports(inp);
-        self.validate_ports(old_inp);
-        self.run_inner(old_inp, inp)
+    fn run(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate>{
+        self.validate_ports(old_ports);
+        self.validate_ports(new_ports);
+        self.run_inner(old_ports, new_ports)
     }
 
     /// Inner run function that, given a set of inputs, applies its modifications to output a vector
     /// of updated ports. This function is wrapped by run to ensure input validation
-    fn run_inner(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate>;
+    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate>;
 
     /// Validates inputs to ensure all ports match port bitsize.
-    fn validate_ports(&self, inp: &[BitArray]) {
+    fn validate_ports(&self, ports: &[BitArray]) {
         // Only run in debug mode
         if cfg!(debug_assertions) {
-            let ports = self.ports();
-            for (i, (bit_vec, port)) in inp.iter().zip(ports).enumerate() {
+            let port_props = self.ports();
+            for (i, (bit_vec, port)) in ports.iter().zip(port_props).enumerate() {
                 debug_assert_eq!(
                     bit_vec.len(),
                     port.bitsize,
@@ -195,10 +195,10 @@ macro_rules! decl_component_enum {
                     )*
                 }
             }
-            fn run_inner(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
+            fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
                 match self {
                     $(
-                        Self::$Component(c) => c.run(old_inp, inp),
+                        Self::$Component(c) => c.run(old_ports, new_ports),
                     )*
                 }
             }
@@ -254,8 +254,8 @@ macro_rules! gates {
                         (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
                     ])
                 }
-                fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-                    let value = inp[..usize::from(self.props.n_inputs)].iter()
+                fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+                    let value = new_ports[..usize::from(self.props.n_inputs)].iter()
                         .cloned()
                         .reduce($f)
                         .unwrap_or_else(|| BitArray::unknown(self.props.bitsize));
@@ -312,8 +312,8 @@ impl Component for Not {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        vec![PortUpdate { index: 1, value: !inp[0] }]
+    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        vec![PortUpdate { index: 1, value: !new_ports[0] }]
     }
 }
 
@@ -340,10 +340,10 @@ impl Component for TriState {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        let gate = inp[0].index(0);
+    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        let gate = new_ports[0].index(0);
         let result = match gate {
-            BitState::High => inp[1],
+            BitState::High => new_ports[1],
             BitState::Low | BitState::Imped => BitArray::floating(self.props.bitsize),
             BitState::Unk => BitArray::unknown(self.props.bitsize),
         };
@@ -387,10 +387,10 @@ impl Component for Mux {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(inp[0]);
+    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
-            Ok(sel) => inp[sel as usize + 1],
+            Ok(sel) => new_ports[sel as usize + 1],
             Err(e) => BitArray::repeat(e.bit_state(), self.props.bitsize),
         };
         vec![PortUpdate { index: (1 << self.props.selsize) + 1, value: result }]
@@ -420,12 +420,12 @@ impl Component for Demux {
             (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1 << self.props.selsize),
         ])
     }
-    fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(inp[0]);
+    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![BitArray::repeat(BitState::Low, self.props.bitsize); 1 << self.props.selsize];
-                result[sel as usize] = inp[1];
+                result[sel as usize] = new_ports[1];
                 result
             },
             Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize); 1 << self.props.selsize],
@@ -464,8 +464,8 @@ impl Component for Decoder {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(inp[0]);
+    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![BitArray::from_iter([BitState::Low]); 1 << self.props.selsize];
@@ -503,13 +503,13 @@ impl Component for Splitter {
         ])
     }
 
-    fn run_inner(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        if Sensitivity::Anyedge.activated(old_inp[0], inp[0]) {
-            std::iter::zip(1.., inp[0])
+    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        if Sensitivity::Anyedge.activated(new_ports[0], new_ports[0]) {
+            std::iter::zip(1.., new_ports[0])
                 .map(|(index, bit)| PortUpdate { index, value: BitArray::from_iter([bit]) })
                 .collect()
-        } else if Sensitivity::Anyedge.any_activated(&old_inp[1..], &inp[1..]) {
-            let value = inp[1..].iter()
+        } else if Sensitivity::Anyedge.any_activated(&old_ports[1..], &new_ports[1..]) {
+            let value = new_ports[1..].iter()
                 .map(|b| b.index(0))
                 .collect();
             vec![PortUpdate { index: 0, value }]
@@ -544,11 +544,11 @@ impl Component for Register {
     fn initialize(&self, state: &mut [BitArray]) {
         state[4] = BitArray::repeat(BitState::Low, self.props.bitsize);
     }
-    fn run_inner(&self, old_inp: &[BitArray], inp: &[BitArray]) -> Vec<PortUpdate> {
-        if inp[3].all(BitState::High) {
+    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        if new_ports[3].all(BitState::High) {
             vec![PortUpdate { index: 4, value: BitArray::repeat(BitState::Low, self.props.bitsize) }]
-        } else if Sensitivity::Posedge.activated(old_inp[2], inp[2]) && inp[1].all(BitState::High) {
-            vec![PortUpdate { index: 4, value: inp[0] }]
+        } else if Sensitivity::Posedge.activated(old_ports[2], new_ports[2]) && new_ports[1].all(BitState::High) {
+            vec![PortUpdate { index: 4, value: new_ports[0] }]
         } else {
             vec![]
         }
