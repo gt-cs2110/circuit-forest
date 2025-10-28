@@ -372,7 +372,7 @@ impl Component for Input {
     fn initialize(&self, state: &mut [BitArray]) {
         state[0] = self.value;
     }
-    fn run(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
         vec![]
     }
 }
