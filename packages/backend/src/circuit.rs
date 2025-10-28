@@ -21,7 +21,7 @@ new_key_type! {
 
 /// A struct which identifies a port (from its function node and port index).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
-pub struct Port {
+pub struct FunctionPort {
     gate: FunctionKey,
     index: usize
 }
@@ -54,7 +54,7 @@ pub struct ValueNode {
     bitsize: Option<u8>,
 
     /// Ports this node is connected to.
-    links: HashSet<Port>
+    links: HashSet<FunctionPort>
 }
 impl ValueNode {
     /// Creates a new value node without a specified bitsize.
@@ -148,7 +148,7 @@ impl CircuitGraph {
     }
 
     /// Connect a value node to a function port.
-    pub fn connect(&mut self, wire: ValueKey, port: Port) {
+    pub fn connect(&mut self, wire: ValueKey, port: FunctionPort) {
         self.disconnect(port);
         self.functions[port.gate].links[port.index].replace(wire);
 
@@ -156,7 +156,7 @@ impl CircuitGraph {
         self.attach_bitsize(wire, self.functions[port.gate].port_props[port.index].bitsize);
     }
     /// Disconnect an associated value node (if one exists) from a function port.
-    pub fn disconnect(&mut self, port: Port) {
+    pub fn disconnect(&mut self, port: FunctionPort) {
         let old_port = self.functions[port.gate].links[port.index];
         // If there was something there, remove it from the other side:
         if let Some(node) = old_port {
@@ -171,7 +171,7 @@ impl CircuitGraph {
         for index in 0..self.functions[gate].links.len() {
             let Some(node) = self.functions[gate].links[index].take() else { continue };
 
-            let result = self.values[node].links.remove(&Port { gate, index });
+            let result = self.values[node].links.remove(&FunctionPort { gate, index });
             debug_assert!(result, "Gate should've been removed from assigned value node");
             self.recalculate_bitsize(node);
         }
@@ -215,16 +215,21 @@ impl Circuit {
         Default::default()
     }
     
-    fn add_empty_value_node(&mut self) -> ValueKey {
-        let key = self.graph.add_value();
-        self.state.init_value(key);
-        key
-    }
+    /// Adds an input function node and value node (a wire connecting from the input)
+    /// using the passed value.
+    pub fn add_input(&mut self, arr: BitArray) -> ValueKey {
+        let func = self.add_function_node(crate::node::Input::new(arr));
+        let value = self.add_value_node(arr.len());
 
-    /// Create a value node (input/output pins) with the passed value.
-    pub fn add_value_node(&mut self, arr: BitArray) -> ValueKey {
-        let key = self.add_empty_value_node();
-        self.state.values.insert(key, ValueState::new(arr));
+        self.connect_all(func, &[value]);
+
+        value
+    }
+    
+    /// Create a value node (essentially a wire) with the specified bitsize.
+    pub fn add_value_node(&mut self, bitsize: u8) -> ValueKey {
+        let key = self.graph.add_value();
+        self.state.values.insert(key, ValueState::new(bitarr![Z; bitsize]));
         key
     }
 
@@ -236,8 +241,10 @@ impl Circuit {
     }
 
     /// Connect a wire to a port in the Circuit's graph.
-    pub fn connect(&mut self, wire: ValueKey, port: Port) {
+    pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         self.graph.connect(wire, port);
+        self.state.transient.triggers.insert(wire, TriggerState { recalculate: true });
+        self.propagate();
     }
 
     /// Clear the function node of connections and connect all of the passed ports to it.
@@ -245,7 +252,11 @@ impl Circuit {
         self.graph.clear_edges(gate);
         ports.iter().copied()
             .enumerate()
-            .for_each(|(index, wire)| self.connect(wire, Port { gate, index }));
+            .for_each(|(index, wire)| {
+                self.graph.connect(wire, FunctionPort { gate, index });
+                self.state.transient.triggers.insert(wire, TriggerState { recalculate: true });
+            });
+        self.propagate();
     }
 
     /// Propagates an update through the circuit
@@ -253,12 +264,18 @@ impl Circuit {
     /// 
     /// The provided `input` argument indicates which value nodes were updated.
     pub fn run(&mut self, inputs: &[ValueKey]) {
-        const RUN_ITER_LIMIT: usize = 10_000;
-
         self.state.transient.triggers = inputs.iter().copied()
             .map(|k| (k, TriggerState { recalculate: false }))
             .collect();
         self.state.transient.frontier.clear();
+
+        self.propagate();
+    }
+
+    /// Pushes transient state, propagating any updates through
+    /// (until the circuit stabilizes or an oscillation occurs).
+    pub fn propagate(&mut self) {
+        const RUN_ITER_LIMIT: usize = 10_000;
 
         let mut iteration = 0;
         while !self.state.transient.resolved() {
@@ -339,6 +356,7 @@ impl Circuit {
                 }
                 
                 for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
+                    // Push outputs:
                     debug_assert!(self.graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
                     debug_assert_eq!(self.graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
                     if self.state[gate_idx].ports[index] != value {
@@ -379,25 +397,19 @@ impl Circuit {
 
 #[test]
 fn test_try_set_and_set() {
-    use crate::bitarray::BitState::Low;
-    use crate::bitarray::BitState::High;
-    use crate::bitarray::BitArray;
-    
     let mut circuit = Circuit::new(); // create empty circuit
     
-    
-    
-    let value = BitArray::repeat(Low, 8); // Create a 8 bit BitArray 
-    let key = circuit.add_value_node(value); //add a ValueKey of 8 bits
+    let value = bitarr![0; 8]; // Create a 8 bit BitArray 
+    let key = circuit.add_value_node(8); //add a ValueKey of 8 bits
 
     // try_set should succeed
     assert!(circuit.try_set(key, value).is_ok());
 
     // set should succeed 
-    let value = BitArray::repeat(High, 8); // Create a 8 bit BitArray of high 
+    let value = bitarr![1; 8]; // Create a 8 bit BitArray of high 
     circuit.set(key, value);
 
     // intentionally wrong bitsize should fail
-    let wrong_value = BitArray::repeat(Low, 16); // 16 bits instead of 8
+    let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
     assert!(circuit.try_set(key, wrong_value).is_err());
 }

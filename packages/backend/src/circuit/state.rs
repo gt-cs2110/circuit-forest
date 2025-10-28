@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::{CircuitGraph, FunctionKey, Port, ValueIssue, ValueKey};
+use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn};
 
 pub trait StateGetter {
@@ -14,7 +14,7 @@ impl StateGetter for ValueKey {
         state[*self].get_value()
     }
 }
-impl StateGetter for Port {
+impl StateGetter for FunctionPort {
     fn get_value(&self, state: &CircuitState) -> BitArray {
         state[self.gate].ports[self.index]
     }
