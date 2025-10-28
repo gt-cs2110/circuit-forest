@@ -44,13 +44,11 @@ pub enum ValueIssue {
 /// This node may only connect to function node ports.
 #[derive(Default)]
 pub struct ValueNode {
-    /// The default bitsize.
-    // FIXME: Is this needed?
-    default_bitsize: Option<u8>,
     /// The current bitsize.
     /// 
-    /// This is None if no default bitsize is provided and 
-    /// nothing is connected or there are mismatched bitsizes into this node.
+    /// This is used to check for bitsize mismatches.
+    /// This is None if there is nothing or mismatched bitsizes
+    /// connecting to or from this node.
     bitsize: Option<u8>,
 
     /// Ports this node is connected to.
@@ -60,23 +58,6 @@ impl ValueNode {
     /// Creates a new value node without a specified bitsize.
     pub fn new() -> Self {
         Default::default()
-    }
-    /// Creates a new value node with a specified bitsize.
-    pub fn with_default_bitsize(bitsize: u8) -> Self {
-        Self {
-            default_bitsize: Some(bitsize),
-            bitsize: Some(bitsize),
-            links: HashSet::new(),
-        }
-    }
-
-    /// Whether the node is connected to any other components.
-    fn is_singleton(&self) -> bool {
-        self.links.is_empty()
-    }
-    /// Whether the node is mismatched.
-    fn has_mismatched_bitsize(&self) -> bool {
-        !self.is_singleton() && self.bitsize.is_none()
     }
 }
 
@@ -134,17 +115,15 @@ impl CircuitGraph {
     fn recalculate_bitsize(&mut self, key: ValueKey) {
         // None if no elements or conflicting elements
         // Some(n) if there's exactly one
-        fn reduce(init: Option<u8>, mut it: impl Iterator<Item=u8>) -> Option<u8> {
-            let bitsize = init.or_else(|| it.next())?;
+        fn reduce(mut it: impl Iterator<Item=u8>) -> Option<u8> {
+            let bitsize = it.next()?;
             it.all(|s| bitsize == s).then_some(bitsize)
         }
 
-        self.values[key].bitsize = reduce(
-            self.values[key].default_bitsize, 
-            self.values[key].links.iter().map(|p| {
-                self.functions[p.gate].port_props[p.index].bitsize
-            })
-        );
+        // Iterator of all function ports connecting to & from value
+        let bitsize_it = self.values[key].links.iter()
+            .map(|p| self.functions[p.gate].port_props[p.index].bitsize);
+        self.values[key].bitsize = reduce(bitsize_it);
     }
 
     /// Connect a value node to a function port.
