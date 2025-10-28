@@ -196,7 +196,7 @@ impl Circuit {
     
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
-    pub fn add_input(&mut self, arr: BitArray) -> ValueKey {
+    pub fn add_input(&mut self, arr: BitArray) -> (FunctionKey, ValueKey) {
         let func = self.add_function_node(crate::node::Input::new(arr.len()));
         let value = self.add_value_node();
         
@@ -205,18 +205,18 @@ impl Circuit {
 
         self.connect_all(func, &[value]);
 
-        value
+        (func, value)
     }
     
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
-    pub fn add_output(&mut self, bitsize: u8) -> ValueKey {
+    pub fn add_output(&mut self, bitsize: u8) -> (FunctionKey, ValueKey) {
         let func = self.add_function_node(crate::node::Output::new(bitsize));
         let value = self.add_value_node();
 
         self.connect_all(func, &[value]);
 
-        value
+        (func, value)
     }
     
     /// Create a value node (essentially a wire) with the specified bitsize.
@@ -277,34 +277,44 @@ impl Circuit {
     }
 
     /// Updates a ValueNode with the specified value, raising `Err` if bitsizes do not match.
-    pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+    pub fn replace(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         self.state[key].replace_value(val)
     }
 
-    /// Updates a ValueNode with the specified value.
-    /// 
-    /// This function panics if the bitsize doesn't match.
-    pub fn set(&mut self, key: ValueKey, val: BitArray) {
-        self.try_set(key, val)
-            .expect("Tried to set value with wrong bitsize")
+    /// Sets the input state for the input.
+    #[allow(dead_code)]
+    pub(crate) fn set_input(&mut self, key: FunctionKey, value: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        assert!(matches!(self.graph.functions[key].func, ComponentFn::Input(_)), "Expected input function");
+        
+        self.state[key].set_port(0, value)?;
+        if let Some(wire) = self.graph[key].links[0] {
+            self.state.transient.triggers.insert(wire, TriggerState { recalculate: true });
+        }
+        // FIXME: Have alternative which doesn't propagate
+        self.propagate();
+
+        Ok(())
+    }
+
+    /// Sets the input state for the input.
+    #[allow(dead_code)]
+    pub(crate) fn get_output(&mut self, key: FunctionKey) -> BitArray {
+        assert!(matches!(self.graph.functions[key].func, ComponentFn::Output(_)), "Expected output function");
+        self.state[key].get_port(0)
     }
 }
 
 #[test]
-fn test_try_set_and_set() {
+fn test_replace() {
     let mut circuit = Circuit::new(); // create empty circuit
     
     let value = bitarr![0; 8]; // Create a 8 bit BitArray 
     let key = circuit.add_value_node();
 
-    // try_set should succeed
-    assert!(circuit.try_set(key, value).is_ok());
-
-    // set should succeed 
-    let value = bitarr![1; 8]; // Create a 8 bit BitArray of high 
-    circuit.set(key, value);
+    // replace should succeed
+    assert!(circuit.replace(key, value).is_ok());
 
     // intentionally wrong bitsize should fail
     let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
-    assert!(circuit.try_set(key, wrong_value).is_err());
+    assert!(circuit.replace(key, wrong_value).is_err());
 }

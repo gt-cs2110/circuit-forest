@@ -20,16 +20,16 @@ mod tests {
         let b = 0x19182934_19AFFC94;
 
         // Wires
-        let a_in = circuit.add_input(BitArray::from(a));
-        let b_in = circuit.add_input(BitArray::from(b));
-        let out  = circuit.add_output(64);
+        let (_, a_in) = circuit.add_input(BitArray::from(a));
+        let (_, b_in) = circuit.add_input(BitArray::from(b));
+        let (out_g, out) = circuit.add_output(64);
         // Gates
         let gate = circuit.add_function_node(node::Xor::new(64, 2));
 
         circuit.connect_all(gate, &[a_in, b_in, out]);
         circuit.run(&[a_in, b_in]);
 
-        let left = circuit.state().value(out);
+        let left = circuit.get_output(out_g);
         let right = BitArray::from(a ^ b);
         assert_eq!(left, right);
     }
@@ -43,13 +43,13 @@ mod tests {
         let d = 0xA8293129_FC03919D;
 
         // Wires
-        let a_in = circuit.add_input(BitArray::from(a));
-        let b_in = circuit.add_input(BitArray::from(b));
-        let c_in = circuit.add_input(BitArray::from(c));
-        let d_in = circuit.add_input(BitArray::from(d));
+        let (_, a_in) = circuit.add_input(BitArray::from(a));
+        let (_, b_in) = circuit.add_input(BitArray::from(b));
+        let (_, c_in) = circuit.add_input(BitArray::from(c));
+        let (_, d_in) = circuit.add_input(BitArray::from(d));
         let ab_mid = circuit.add_value_node();
         let cd_mid = circuit.add_value_node();
-        let out = circuit.add_output(64);
+        let (out_g, out) = circuit.add_output(64);
         // Gates
         let gates = [
             circuit.add_function_node(node::Xor::new(64, 2)),
@@ -62,7 +62,7 @@ mod tests {
         circuit.connect_all(gates[2], &[ab_mid, cd_mid, out]);
         circuit.run(&[a_in, b_in, c_in, d_in]);
 
-        let left = circuit.state().value(out);
+        let left = circuit.get_output(out_g);
         let right = BitArray::from(a ^ b ^ c ^ d);
         assert_eq!(left, right);
     }
@@ -84,7 +84,7 @@ mod tests {
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
         circuit.connect_all(gates[1], &[wires[1], wires[0]]);
 
-        circuit.set(wires[0], BitArray::from(a));
+        assert!(circuit.replace(wires[0], BitArray::from(a)).is_ok());
         circuit.run(&[wires[0]]);
 
         let (l1, r1) = (circuit.state().value(wires[0]), BitArray::from(a));
@@ -97,9 +97,9 @@ mod tests {
     fn nand_propagate() {
         let mut circuit = Circuit::new();
 
-        let inp  = circuit.add_input(bitarr![0]);
-        let out0 = circuit.add_output(1);
-        let out1 = circuit.add_output(1);
+        let (_, inp) = circuit.add_input(bitarr![0]);
+        let (out0_g, out0) = circuit.add_output(1);
+        let (out1_g, out1) = circuit.add_output(1);
         let gates = [
             circuit.add_function_node(node::Nand::new(1, 2)),
             circuit.add_function_node(node::Nand::new(1, 2)),
@@ -110,8 +110,8 @@ mod tests {
         circuit.run(&[inp]);
 
         assert_eq!(circuit.state().value(inp), bitarr![0]);
-        assert_eq!(circuit.state().value(out0), bitarr![1]);
-        assert_eq!(circuit.state().value(out1), bitarr![1]);
+        assert_eq!(circuit.get_output(out0_g), bitarr![1]);
+        assert_eq!(circuit.get_output(out1_g), bitarr![1]);
     }
 
     #[test]
@@ -119,9 +119,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_input(bitarr![0]);
-        let hi = circuit.add_input(bitarr![1]);
-        let out = circuit.add_output(1);
+        let (_, lo) = circuit.add_input(bitarr![0]);
+        let (_, hi) = circuit.add_input(bitarr![1]);
+        let (out_g, out) = circuit.add_output(1);
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -132,7 +132,7 @@ mod tests {
         circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
-        assert_eq!(circuit.state().value(out), bitarr![1]);
+        assert_eq!(circuit.get_output(out_g), bitarr![1]);
     }
 
     #[test]
@@ -140,9 +140,9 @@ mod tests {
         let mut circuit = Circuit::new();
 
         // Wires
-        let lo = circuit.add_input(bitarr![0]);
-        let hi = circuit.add_input(bitarr![1]);
-        let out = circuit.add_output(1);
+        let (_, lo) = circuit.add_input(bitarr![0]);
+        let (_, hi) = circuit.add_input(bitarr![1]);
+        let (_, out) = circuit.add_output(1);
         // Gates
         let gates = [
             circuit.add_function_node(node::TriState::new(1)),
@@ -161,9 +161,9 @@ mod tests {
         let mut circuit = Circuit::new();
         
         // Wires
-        let inp = circuit.add_input(bitarr![0]); 
-        let mid = circuit.add_input(bitarr![0]);
-        let out = circuit.add_output(1);
+        let (_, inp) = circuit.add_input(bitarr![0]); 
+        let (_, mid) = circuit.add_input(bitarr![0]);
+        let (_, out) = circuit.add_output(1);
         // Gates
         let gates = [
             circuit.add_function_node(node::Not::new(1)),
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn rs_latch() {
         let mut circuit = Circuit::new();
-        let [r, s, q, qp] = [
+        let [(r_g, r), (s_g, s), (q_g, q), (qp_g, qp)] = [
             circuit.add_input(bitarr![1]), // R
             circuit.add_input(bitarr![1]), // S
             circuit.add_output(1), // Q
@@ -199,30 +199,32 @@ mod tests {
         circuit.run(&[r, s]);
 
         // In an invalid state right now.
-        assert_eq!(circuit.state().value(q), bitarr![X]);
-        assert_eq!(circuit.state().value(qp), bitarr![X]);
+        assert_eq!(circuit.get_output(q_g), bitarr![X]);
+        assert_eq!(circuit.get_output(qp_g), bitarr![X]);
 
         // R = 0, S = 1
-        circuit.set(r, bitarr![0]);
+        assert!(circuit.set_input(r_g, bitarr![0]).is_ok());
+        println!("{}", circuit.state().value(r));
+        println!("{}", circuit.state().value(s));
         circuit.run(&[r]);
 
-        assert_eq!(circuit.state().value(q), bitarr![0]);
-        assert_eq!(circuit.state().value(qp), bitarr![1]);
+        assert_eq!(circuit.get_output(q_g), bitarr![0]);
+        assert_eq!(circuit.get_output(qp_g), bitarr![1]);
 
         // R = 1, S = 0
-        circuit.set(r, bitarr![1]);
-        circuit.set(s, bitarr![0]);
+        assert!(circuit.set_input(r_g, bitarr![1]).is_ok());
+        assert!(circuit.set_input(s_g, bitarr![0]).is_ok());
         circuit.run(&[r, s]);
 
-        assert_eq!(circuit.state().value(q), bitarr![1]);
-        assert_eq!(circuit.state().value(qp), bitarr![0]);
+        assert_eq!(circuit.get_output(q_g), bitarr![1]);
+        assert_eq!(circuit.get_output(qp_g), bitarr![0]);
     }
 
     #[test]
     fn d_latch() {
         let mut circuit = Circuit::new();
         // external
-        let [din, wen, dout, doutp] = [
+        let [(din_g, din), (wen_g, wen), (dout_g, dout), (doutp_g, doutp)] = [
             circuit.add_input(bitarr![0]),
             circuit.add_input(bitarr![1]),
             circuit.add_output(1),
@@ -250,38 +252,38 @@ mod tests {
         circuit.connect_all(snand, &[s, doutp, dout]);
         
         circuit.run(&[din, wen]);
-        assert_eq!(circuit.state().value(dout), bitarr![0]);
-        assert_eq!(circuit.state().value(doutp), bitarr![1]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0]);
+        assert_eq!(circuit.get_output(doutp_g), bitarr![1]);
 
-        circuit.set(wen, bitarr![0]);
+        assert!(circuit.set_input(wen_g, bitarr![0]).is_ok());
         circuit.run(&[wen]);
-        assert_eq!(circuit.state().value(dout), bitarr![0]);
-        assert_eq!(circuit.state().value(doutp), bitarr![1]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0]);
+        assert_eq!(circuit.get_output(doutp_g), bitarr![1]);
 
-        circuit.set(din, bitarr![1]);
+        assert!(circuit.set_input(din_g, bitarr![1]).is_ok());
         circuit.run(&[din]);
-        assert_eq!(circuit.state().value(dout), bitarr![0]);
-        assert_eq!(circuit.state().value(doutp), bitarr![1]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0]);
+        assert_eq!(circuit.get_output(doutp_g), bitarr![1]);
 
-        circuit.set(wen, bitarr![1]);
+        assert!(circuit.set_input(wen_g, bitarr![1]).is_ok());
         circuit.run(&[wen]);
-        assert_eq!(circuit.state().value(dout), bitarr![1]);
-        assert_eq!(circuit.state().value(doutp), bitarr![0]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![1]);
+        assert_eq!(circuit.get_output(doutp_g), bitarr![0]);
     }
     #[test]
     fn chain() {
         let mut circuit = Circuit::new();
         
         // Wires
-        let a_in = circuit.add_input(bitarr![1]);
-        let b_in = circuit.add_input(bitarr![0]);
-        let c_in = circuit.add_input(bitarr![1]);
-        let d_in = circuit.add_input(bitarr![0]);
-        let e_in = circuit.add_input(bitarr![1]);
+        let (_, a_in) = circuit.add_input(bitarr![1]);
+        let (_, b_in) = circuit.add_input(bitarr![0]);
+        let (_, c_in) = circuit.add_input(bitarr![1]);
+        let (_, d_in) = circuit.add_input(bitarr![0]);
+        let (_, e_in) = circuit.add_input(bitarr![1]);
         let ab_mid = circuit.add_value_node();
         let abc_mid = circuit.add_value_node();
         let abcd_mid = circuit.add_value_node();
-        let out = circuit.add_output(1);
+        let (out_g, out) = circuit.add_output(1);
         // Gates
         let gates = [
             circuit.add_function_node(node::Xor::new(1, 2)),
@@ -296,7 +298,7 @@ mod tests {
         circuit.connect_all(gates[3], &[abcd_mid, e_in, out]);
         circuit.run(&[a_in, b_in, c_in, d_in, e_in]);
 
-        assert_eq!(circuit.state().value(out), bitarr![1]);
+        assert_eq!(circuit.get_output(out_g), bitarr![1]);
     }
 
     #[test]
@@ -307,7 +309,7 @@ mod tests {
         let gate = circuit.add_function_node(node::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
-        circuit.set(a_in, bitarr![1]);
+        assert!(circuit.replace(a_in, bitarr![1]).is_ok());
         circuit.run(&[a_in]);
 
         assert!(circuit.state().issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
@@ -334,7 +336,7 @@ mod tests {
         ];
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
-        circuit.set(joined_node, joined);
+        assert!(circuit.replace(joined_node, joined).is_ok());
         circuit.run(&[nodes[0]]);
         assert_eq!(split_nodes.map(|n| circuit.state().value(n)), split);
 
@@ -352,7 +354,7 @@ mod tests {
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
         for (n, a) in std::iter::zip(split_nodes, split) {
-            circuit.set(n, a);
+            assert!(circuit.replace(n, a).is_ok());
         }
         circuit.run(&split_nodes);
         assert_eq!(circuit.state().value(joined_node), joined);
@@ -362,77 +364,79 @@ mod tests {
     fn register() {
         let mut circuit = Circuit::new();
         let inputs = bitarr![1, 0, 1, 0, 1, 0, 1, 0];
-        let nodes @ [din, enable, clock, clear, dout] = [
+        let nodes @ [(din_g, din), (enable_g, enable), (clock_g, clock), (clear_g, clear), (dout_g, _)] = [
             circuit.add_input(inputs),
             circuit.add_input(bitarr![0]),
             circuit.add_input(bitarr![0]),
             circuit.add_input(bitarr![0]),
             circuit.add_output(8),
         ];
+        let nodes = nodes.map(|(_, n)| n);
+
         let reg = circuit.add_function_node(node::Register::new(8));
         circuit.connect_all(reg, &nodes);
 
         // enable off, clock down
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), bitarr![0; 8]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
         
         // enable on, clock down
-        circuit.set(enable, bitarr![1]);
+        assert!(circuit.set_input(enable_g, bitarr![1]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), bitarr![0; 8]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
         
         // enable on, clock up
-        circuit.set(clock, bitarr![1]);
+        assert!(circuit.set_input(clock_g, bitarr![1]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), inputs);
+        assert_eq!(circuit.get_output(dout_g), inputs);
         
         // enable on, clock down
-        circuit.set(clock, bitarr![0]);
+        assert!(circuit.set_input(clock_g, bitarr![0]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), inputs);
+        assert_eq!(circuit.get_output(dout_g), inputs);
         
         // update din
         let neg_inputs = !inputs;
-        circuit.set(din, BitArray::from_iter(neg_inputs));
+        assert!(circuit.set_input(din_g, BitArray::from_iter(neg_inputs)).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), inputs);
+        assert_eq!(circuit.get_output(dout_g), inputs);
 
         for _ in 0..3 {
             // enable off, clock down
-            circuit.set(enable, bitarr![0]);
+            assert!(circuit.set_input(enable_g, bitarr![0]).is_ok());
             circuit.run(&[din, enable, clock, clear]);
-            assert_eq!(circuit.state().value(dout), inputs);
+            assert_eq!(circuit.get_output(dout_g), inputs);
     
             // enable off, clock up
-            circuit.set(clock, bitarr![1]);
+            assert!(circuit.set_input(clock_g, bitarr![1]).is_ok());
             circuit.run(&[din, enable, clock, clear]);
-            assert_eq!(circuit.state().value(dout), inputs);
+            assert_eq!(circuit.get_output(dout_g), inputs);
         }
 
         // enable off, clock down
-        circuit.set(clock, bitarr![0]);
+        assert!(circuit.set_input(clock_g, bitarr![0]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), inputs);
+        assert_eq!(circuit.get_output(dout_g), inputs);
 
         // enable on, clock up
-        circuit.set(enable, bitarr![1]);
-        circuit.set(clock, bitarr![1]);
+        assert!(circuit.set_input(enable_g, bitarr![1]).is_ok());
+        assert!(circuit.set_input(clock_g, bitarr![1]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), neg_inputs);
+        assert_eq!(circuit.get_output(dout_g), neg_inputs);
 
         // reset
-        circuit.set(clear, bitarr![1]);
+        assert!(circuit.set_input(clear_g, bitarr![1]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), bitarr![0; 8]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
         
         // reset, clock down
-        circuit.set(clock, bitarr![0]);
+        assert!(circuit.set_input(clock_g, bitarr![0]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), bitarr![0; 8]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
         
         // reset, clock up
-        circuit.set(clock, bitarr![1]);
+        assert!(circuit.set_input(clock_g, bitarr![1]).is_ok());
         circuit.run(&[din, enable, clock, clear]);
-        assert_eq!(circuit.state().value(dout), bitarr![0; 8]);
+        assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
     }
 }
