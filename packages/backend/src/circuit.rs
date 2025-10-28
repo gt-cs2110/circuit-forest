@@ -1,6 +1,6 @@
 //! Circuit module used to create circuits/sub-circuits.
 
-mod state;
+pub mod state;
 
 use std::collections::HashSet;
 use std::ops::{Index, IndexMut};

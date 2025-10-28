@@ -1,3 +1,10 @@
+//! Module which contains data about circuit state.
+//! 
+//! This notably includes types which hold the state within a circuit, such as:
+//! - [`CircuitState`]: The state in a circuit
+//! - [`ValueState`]: The state of a value node (wire)
+//! - [`FunctionState`]: The state of a function node
+
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Index, IndexMut};
@@ -6,7 +13,11 @@ use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
 use crate::node::{Component, ComponentFn, PortType, PortUpdate};
 
+/// Trait which allows reading a [`BitArray`] value from [`CircuitState`].
 pub trait StateGetter {
+    /// Gets the bit array value from the circuit state.
+    /// 
+    /// Panics if not in state.
     fn get_value(&self, state: &CircuitState) -> BitArray;
 }
 impl StateGetter for ValueKey {
@@ -25,6 +36,9 @@ impl<K: StateGetter> StateGetter for &K {
     }
 }
 
+/// The state of the circuit.
+/// 
+/// This includes all wire values, all port values, and internal function state.
 #[derive(Default)]
 pub struct CircuitState {
     pub(crate) values: HashMap<ValueKey, ValueState>,
@@ -32,19 +46,27 @@ pub struct CircuitState {
     pub(crate) transient: TransientState
 }
 impl CircuitState {
+    /// Creates a new empty CircuitState.
+    pub fn new() -> Self {
+        Default::default()
+    }
+    
+    /// Initializes a value node's state in this CircuitState.
     pub(crate) fn init_value(&mut self, key: ValueKey) {
         if let Entry::Vacant(e) = self.values.entry(key) {
             e.insert(ValueState::new(BitArray::new()));
         }
     }
+    /// Initializes a function node's state in this CircuitState.
     pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn) {
         if let Entry::Vacant(e) = self.functions.entry(key) {
-            e.insert(FunctionState::initialize(func));
+            e.insert(FunctionState::new(func));
         }
     }
 
-    fn init_from_graph(&mut self, graph: &CircuitGraph) {
-        let mut state = CircuitState::default();
+    /// Creates an initial [`CircuitState`] from a [`CircuitGraph`].
+    fn init_from_graph(graph: &CircuitGraph) -> Self {
+        let mut state = Self::default();
         for k in graph.values.keys() {
             state.init_value(k);
         }
@@ -58,6 +80,8 @@ impl CircuitState {
                 .map(|k| (k, TriggerState { recalculate: true }))
         });
         state.propagate(graph);
+
+        state
     }
 
     pub(crate) fn value<K: StateGetter>(&self, k: K) -> BitArray {
@@ -199,18 +223,32 @@ impl IndexMut<FunctionKey> for CircuitState {
     }
 }
 
+/// The state of a [`ValueNode`].
+/// 
+/// [`ValueNode`]: crate::circuit::ValueNode
 pub struct ValueState {
     pub(crate) value: BitArray,
     issues: HashSet<ValueIssue>
 }
 impl ValueState {
+    /// Creates a new ValueState from the given [`BitArray`].
     pub fn new(value: BitArray) -> Self {
         Self { value, issues: HashSet::new() }
     }
 
+    /// Gets the bit value in the state.
     pub fn get_value(&self) -> BitArray {
         self.value
     }
+    /// Sets the bit value in the state.
+    /// 
+    /// This raises an error if the bitsize of the new value
+    /// doesn't match the bitsize of the current.
+    /// 
+    /// Notably, if the current bit value is empty (size 0),
+    /// then this always succeeds and does not raise an error.
+    /// 
+    /// This also does **not** propagate the change through the circuit this ValueState is associated with.
     pub fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         match self.value.is_empty() {
             true => {
@@ -221,21 +259,30 @@ impl ValueState {
         }
     }
 
+
+    /// Gets any issues in the value node.
     pub fn get_issues(&self) -> &HashSet<ValueIssue> {
         &self.issues
     }
+    /// Adds an issue to the value node's issue list.
     pub fn add_issue(&mut self, issue: ValueIssue) {
         self.issues.insert(issue);
     }
+    /// Removes all issues from the value node's issue list.
     pub fn clear_issues(&mut self) {
         self.issues.clear()
     }
 }
+
+/// The state of a [`FunctionNode`].
+/// 
+/// [`FunctionNode`]: crate::circuit::FunctionNode
 pub struct FunctionState {
     pub(crate) ports: Vec<BitArray>
 }
 impl FunctionState {
-    pub fn initialize(func: &ComponentFn) -> Self {
+    /// Creates a new initial function state for the specified `func`.
+    pub fn new(func: &ComponentFn) -> Self {
         let mut ports: Vec<_> = func.ports().into_iter()
             .map(|props| bitarr![Z; props.bitsize])
             .collect();
@@ -244,9 +291,19 @@ impl FunctionState {
         Self { ports }
     }
 
+    /// Gets the bit value of a port.
     pub fn get_port(&self, index: usize) -> BitArray {
         self.ports[index]
     }
+    /// Sets the bit value of a port.
+    /// 
+    /// This raises an error if the bitsize of the new value
+    /// doesn't match the bitsize of the current.
+    /// 
+    /// Notably, if the current bit value is empty (size 0),
+    /// then this always succeeds and does not raise an error.
+    /// 
+    /// This also does **not** propagate the change through the circuit this FunctionState is associated with.
     pub fn set_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         self.ports[index].replace(new_val)
     }
@@ -257,7 +314,7 @@ pub(crate) struct TriggerState {
     pub(crate) recalculate: bool
 }
 #[derive(Default)]
-pub struct TransientState {
+pub(crate) struct TransientState {
     pub(crate) triggers: HashMap<ValueKey, TriggerState>,
     pub(crate) frontier: HashSet<FunctionKey>
 }
