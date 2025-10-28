@@ -101,9 +101,8 @@ impl ValueState {
     pub fn get_value(&self) -> BitArray {
         self.value
     }
-    #[must_use]
-    pub fn set_value(&mut self, new_val: BitArray) -> bool {
-        self.value.try_overwrite(new_val)
+    pub fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        self.value.replace(new_val)
     }
 
     pub fn get_issues(&self) -> &HashSet<ValueIssue> {
@@ -132,9 +131,8 @@ impl FunctionState {
     pub fn get_port(&self, index: usize) -> BitArray {
         self.ports[index]
     }
-    #[must_use]
-    pub fn set_port(&mut self, index: usize, new_val: BitArray) -> bool {
-        self.ports[index].try_overwrite(new_val)
+    pub fn set_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        self.ports[index].replace(new_val)
     }
 }
 

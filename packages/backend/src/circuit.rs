@@ -358,11 +358,8 @@ impl Circuit {
     }
 
     /// Updates a ValueNode with the specified value, raising `Err` if bitsizes do not match.
-    pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), ()> {
-        match self.state[key].set_value(val) {
-            true => Ok(()),
-            false => Err(())
-        }
+    pub fn try_set(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        self.state[key].replace_value(val)
     }
 
     /// Updates a ValueNode with the specified value.

@@ -1024,13 +1024,16 @@ mod tests {
                 // Set mux inputs to random-ish values
                 for (i, p) in std::iter::zip(0.., &mut ports[1..=input_count]) {
                     let value = (i + 1) * 13;
-                    assert!(p.try_overwrite(BitArray::from_bits(value, BITSIZE)));
+
+                    let result = p.replace(BitArray::from_bits(value, BITSIZE));
+                    assert!(result.is_ok());
                 }
 
                 // test all possible selector values
                 for sel in 0..input_count {
                     // Update selector
-                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
+                    let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
+                    assert!(result.is_ok());
 
                     let actual = mux.run(&ports, &ports);
                     let expected = vec![PortUpdate { index: 1 + input_count, value: ports[1 + sel] }];
@@ -1074,8 +1077,8 @@ mod tests {
                 let mut ports = floating_ports(&props);
                 // test all possible selector values
                 for (sel, &expected_out) in inputs.iter().enumerate() {
-                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
-                    assert!(ports[1].try_overwrite(expected_out));
+                    assert!(ports[0].replace(BitArray::from_bits(sel as u64, selsize)).is_ok());
+                    assert!(ports[1].replace(expected_out).is_ok());
 
                     let actual = demux.run(&ports, &ports);
                     let expected: Vec<_> = (0..input_count).map(|i| PortUpdate {
@@ -1121,7 +1124,8 @@ mod tests {
                 let mut ports = floating_ports(&props);
                 // test all possible selector values
                 for sel in 0..output_count {
-                    assert!(ports[0].try_overwrite(BitArray::from_bits(sel as u64, selsize)));
+                    let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
+                    assert!(result.is_ok());
                     
                     let actual = decoder.run(&ports, &ports);
                     let expected = (0..output_count).map(|i| PortUpdate {
@@ -1173,7 +1177,8 @@ mod tests {
                     }).collect();
                 
                 let joined = BitArray::from_iter(data.iter().copied());
-                assert!(new_ports[0].try_overwrite(joined));
+                let result = new_ports[0].replace(joined);
+                assert!(result.is_ok());
                 
                 let actual = splitter.run(&old_ports, &new_ports);
                 let expected: Vec<_> = data.iter().enumerate()
@@ -1219,7 +1224,8 @@ mod tests {
                     .map(BitArray::from)
                     .collect();
                 for (p, arr) in std::iter::zip(new_ports[1..].iter_mut(), split) {
-                    assert!(p.try_overwrite(arr));
+                    let result = p.replace(arr);
+                    assert!(result.is_ok());
                 }
                 
                 let actual = splitter.run(&old_ports, &new_ports);

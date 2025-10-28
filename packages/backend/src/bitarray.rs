@@ -65,6 +65,10 @@ impl NotTwoValuedErr {
     pub fn bit_state(&self) -> BitState { self.0 }
 }
 
+/// An error which occurs when trying to set to a bitarray using one of a different length.
+#[derive(Debug)]
+pub struct MismatchedBitsizes(());
+
 /// This error can occur when converting a [`char`] to a [`BitState`]
 /// if the [`char`] does not map to any [`BitState`] character.
 #[derive(Debug)]
@@ -303,13 +307,13 @@ impl BitArray {
             self.set_raw(i, st);
         }
     }
-    #[must_use]
-    pub(crate) fn try_overwrite(&mut self, value: BitArray) -> bool {
-        let success = self.len() == value.len();
-        if success {
+    pub(crate) fn replace(&mut self, value: BitArray) -> Result<(), MismatchedBitsizes> {
+        if self.len() == value.len() {
             *self = value;
+            Ok(())
+        } else {
+            Err(MismatchedBitsizes(()))
         }
-        success
     }
     /// Creates a new BitState with the state at index `i` replaced with `st`.
     pub fn with(mut self, i: u8, st: BitState) -> Self {
