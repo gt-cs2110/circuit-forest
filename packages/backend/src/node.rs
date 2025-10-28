@@ -213,7 +213,7 @@ macro_rules! decl_component_enum {
     }
 }
 decl_component_enum!(ComponentFn: 
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, Input,
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, Input, Output, Constant,
     Mux, Demux, Decoder, Splitter, Register
 );
 /// Minimum number of inputs for multi-input logic gates.
@@ -353,15 +353,63 @@ impl Component for TriState {
 
 /// An input.
 pub struct Input {
-    value: BitArray
+    props: BufNotProperties
 }
 impl Input {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(mut bitsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        Self { props: BufNotProperties { bitsize } }
+    }
+}
+impl Component for Input {
+    fn ports(&self) -> Vec<PortProperties> {
+        port_list(&[
+            // output
+            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+        ])
+    }
+
+    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+        vec![]
+    }
+}
+
+/// An input.
+pub struct Output {
+    props: BufNotProperties
+}
+impl Output {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(mut bitsize: u8) -> Self {
+        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        Self { props: BufNotProperties { bitsize } }
+    }
+}
+impl Component for Output {
+    fn ports(&self) -> Vec<PortProperties> {
+        port_list(&[
+            // output
+            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+        ])
+    }
+
+    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+        vec![]
+    }
+}
+
+/// An input.
+pub struct Constant {
+    value: BitArray
+}
+impl Constant {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
     pub fn new(value: BitArray) -> Self {
         Self { value }
     }
 }
-impl Component for Input {
+impl Component for Constant {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // output

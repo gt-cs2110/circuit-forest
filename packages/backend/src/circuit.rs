@@ -197,8 +197,22 @@ impl Circuit {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_input(&mut self, arr: BitArray) -> ValueKey {
-        let func = self.add_function_node(crate::node::Input::new(arr));
-        let value = self.add_value_node(arr.len());
+        let func = self.add_function_node(crate::node::Input::new(arr.len()));
+        let value = self.add_value_node();
+        
+        let result = self.state[func].set_port(0, arr);
+        debug_assert!(result.is_ok(), "Port was set to value with incorrect bitsize");
+
+        self.connect_all(func, &[value]);
+
+        value
+    }
+    
+    /// Adds an input function node and value node (a wire connecting from the input)
+    /// using the passed value.
+    pub fn add_output(&mut self, bitsize: u8) -> ValueKey {
+        let func = self.add_function_node(crate::node::Output::new(bitsize));
+        let value = self.add_value_node();
 
         self.connect_all(func, &[value]);
 
@@ -206,9 +220,9 @@ impl Circuit {
     }
     
     /// Create a value node (essentially a wire) with the specified bitsize.
-    pub fn add_value_node(&mut self, bitsize: u8) -> ValueKey {
+    pub fn add_value_node(&mut self) -> ValueKey {
         let key = self.graph.add_value();
-        self.state.values.insert(key, ValueState::new(bitarr![Z; bitsize]));
+        self.state.values.insert(key, ValueState::new(bitarr![]));
         key
     }
 
@@ -376,7 +390,7 @@ fn test_try_set_and_set() {
     let mut circuit = Circuit::new(); // create empty circuit
     
     let value = bitarr![0; 8]; // Create a 8 bit BitArray 
-    let key = circuit.add_value_node(8); //add a ValueKey of 8 bits
+    let key = circuit.add_value_node();
 
     // try_set should succeed
     assert!(circuit.try_set(key, value).is_ok());

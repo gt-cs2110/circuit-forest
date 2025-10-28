@@ -102,7 +102,13 @@ impl ValueState {
         self.value
     }
     pub fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
-        self.value.replace(new_val)
+        match self.value.is_empty() {
+            true => {
+                self.value = new_val;
+                Ok(())
+            },
+            false => self.value.replace(new_val)
+        }
     }
 
     pub fn get_issues(&self) -> &HashSet<ValueIssue> {
