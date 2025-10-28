@@ -221,47 +221,40 @@ pub const MIN_GATE_INPUTS: u8 = 2;
 /// Maximum number of inputs for multi-input logic gates.
 pub const MAX_GATE_INPUTS: u8 = 64;
 
-
-/// The properties for multi-input logic gates.
-pub struct GateProperties {
-    /// The size of the data the gate works with in bits.
-    pub bitsize: u8,
-    /// The number of input ports the gate has.
-    pub n_inputs: u8
-}
-
 macro_rules! gates {
     ($($(#[$m:meta])? $Id:ident: $f:expr, $invert:literal),*$(,)?) => {
         $(
             $(#[$m])?
             pub struct $Id {
-                props: GateProperties
+                bitsize: u8,
+                n_inputs: u8
             }
             impl $Id {
                 /// Creates a new instance of the gate with specified bitsize and number of inputs.
-                pub fn new(mut bitsize: u8, mut n_inputs: u8) -> Self {
-                    bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-                    n_inputs = n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS);
-                    Self { props: GateProperties { bitsize, n_inputs }}
+                pub fn new(bitsize: u8, n_inputs: u8) -> Self {
+                    Self {
+                        bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+                        n_inputs: n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS)
+                    }
                 }
             }
             impl Component for $Id {
                 fn ports(&self) -> Vec<PortProperties> {
                     port_list(&[
                         // inputs
-                        (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, self.props.n_inputs),
+                        (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, self.n_inputs),
                         // outputs
-                        (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+                        (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
                     ])
                 }
                 fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-                    let value = new_ports[..usize::from(self.props.n_inputs)].iter()
+                    let value = new_ports[..usize::from(self.n_inputs)].iter()
                         .cloned()
                         .reduce($f)
-                        .unwrap_or_else(|| bitarr![X; self.props.bitsize]);
+                        .unwrap_or_else(|| bitarr![X; self.bitsize]);
     
                     vec![PortUpdate {
-                        index: usize::from(self.props.n_inputs),
+                        index: usize::from(self.n_inputs),
                         value: if $invert { !value } else { value }
                     }]
                 }
@@ -285,30 +278,25 @@ gates! {
     Xnor: |a, b| a ^ b, true,
 }
 
-/// A structure that holds properties for buffer and NOT gates.
-pub struct BufNotProperties {
-    /// The size of the data the gate works with in bits.
-    pub bitsize: u8
-}
-
 /// A NOT gate component.
 pub struct Not {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl Not {
     /// Creates a new instance of the NOT gate with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize }}
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for Not {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
 
@@ -319,13 +307,14 @@ impl Component for Not {
 
 /// A tri-state buffer component.
 pub struct TriState {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl TriState {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize }}
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for TriState {
@@ -334,9 +323,9 @@ impl Component for TriState {
             // selector
             (PortProperties { ty: PortType::Input, bitsize: 1 }, 1),
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
 
@@ -344,8 +333,8 @@ impl Component for TriState {
         let gate = new_ports[0].index(0);
         let result = match gate {
             BitState::High => new_ports[1],
-            BitState::Low | BitState::Imped => bitarr![Z; self.props.bitsize],
-            BitState::Unk => bitarr![X; self.props.bitsize],
+            BitState::Low | BitState::Imped => bitarr![Z; self.bitsize],
+            BitState::Unk => bitarr![X; self.bitsize],
         };
         vec![PortUpdate { index: 2, value: result }]
     }
@@ -353,20 +342,21 @@ impl Component for TriState {
 
 /// An input.
 pub struct Input {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl Input {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize } }
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for Input {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
 
@@ -377,20 +367,21 @@ impl Component for Input {
 
 /// An input.
 pub struct Output {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl Output {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize } }
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for Output {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // output
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
         ])
     }
 
@@ -430,35 +421,29 @@ pub const MIN_SELSIZE: u8 = 1;
 /// Maximum number of selector bits for Mux/Demux/Decoder.
 pub const MAX_SELSIZE: u8 = 6;
 
-/// A structure that holds properties for Mux and Demux components.
-pub struct MuxProperties {
-    /// The size of the data the component works with
-    pub bitsize: u8,
-    /// The number of selector bits for component
-    pub selsize: u8
-}
-
 /// A multiplexer (mux) component.
 pub struct Mux {
-    props: MuxProperties
+    bitsize: u8,
+    selsize: u8
 }
 impl Mux {
     /// Creates a new instance of the Mux with specified bitsize and selector size.
-    pub fn new(mut bitsize: u8, mut selsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
-        Self { props: MuxProperties { bitsize, selsize }}
+    pub fn new(bitsize: u8, selsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+        }
     }
 }
 impl Component for Mux {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.props.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
             // inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1 << self.props.selsize),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1 << self.selsize),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
 
@@ -466,44 +451,46 @@ impl Component for Mux {
         let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => new_ports[sel as usize + 1],
-            Err(e) => BitArray::repeat(e.bit_state(), self.props.bitsize),
+            Err(e) => BitArray::repeat(e.bit_state(), self.bitsize),
         };
-        vec![PortUpdate { index: (1 << self.props.selsize) + 1, value: result }]
+        vec![PortUpdate { index: (1 << self.selsize) + 1, value: result }]
     }
 }
 
 /// A demultiplexer (demux) component.
 pub struct Demux {
-    props: MuxProperties
+    bitsize: u8,
+    selsize: u8
 }
 impl Demux {
     /// Creates a new instance of the Demux with specified bitsize and selector size.
-    pub fn new(mut bitsize: u8, mut selsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
-        Self { props: MuxProperties { bitsize, selsize }}
+    pub fn new(bitsize: u8, selsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+        }
     }
 }
 impl Component for Demux {
     fn ports(&self) -> Vec<PortProperties> {
             port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.props.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
             // outputs
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1 << self.props.selsize),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1 << self.selsize),
         ])
     }
     fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
         let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![bitarr![0; self.props.bitsize]; 1 << self.props.selsize];
+                let mut result = vec![bitarr![0; self.bitsize]; 1 << self.selsize];
                 result[sel as usize] = new_ports[1];
                 result
             },
-            Err(e) => vec![BitArray::repeat(e.bit_state(), self.props.bitsize); 1 << self.props.selsize],
+            Err(e) => vec![BitArray::repeat(e.bit_state(), self.bitsize); 1 << self.selsize],
         };
 
         result.into_iter()
@@ -513,29 +500,25 @@ impl Component for Demux {
     }
 }
 
-/// A structure that holds properties for decoder components.
-pub struct DecoderProperties {
-    selsize: u8
-}
-
 /// A decoder component.
 pub struct Decoder {
-    props: DecoderProperties
+    selsize: u8
 }
 impl Decoder {
     /// Creates a new instance of the Decoder with specified selector size.
-    pub fn new(mut selsize: u8) -> Self {
-        selsize = selsize.clamp(MIN_SELSIZE, MAX_SELSIZE);
-        Self { props: DecoderProperties { selsize }}
+    pub fn new(selsize: u8) -> Self {
+        Self {
+            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+        }
     }
 }
 impl Component for Decoder {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.props.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
             // outputs
-            (PortProperties { ty: PortType::Output, bitsize: 1 }, 1 << self.props.selsize),
+            (PortProperties { ty: PortType::Output, bitsize: 1 }, 1 << self.selsize),
         ])
     }
 
@@ -543,11 +526,11 @@ impl Component for Decoder {
         let m_sel = u64::try_from(new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![bitarr![0]; 1 << self.props.selsize];
+                let mut result = vec![bitarr![0]; 1 << self.selsize];
                 result[sel as usize] = bitarr![1];
                 result
             },
-            Err(e) => vec![BitArray::from(e.bit_state()); 1 << self.props.selsize],
+            Err(e) => vec![BitArray::from(e.bit_state()); 1 << self.selsize],
         };
 
         result.into_iter()
@@ -559,22 +542,23 @@ impl Component for Decoder {
 
 /// A splitter component.
 pub struct Splitter {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl Splitter {
     /// Creates a new instance of the Splitter with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize } }
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for Splitter {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // joined
-            (PortProperties { ty: PortType::Inout, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Inout, bitsize: self.bitsize }, 1),
             // split
-            (PortProperties { ty: PortType::Inout, bitsize: 1 }, self.props.bitsize),
+            (PortProperties { ty: PortType::Inout, bitsize: 1 }, self.bitsize),
         ])
     }
 
@@ -596,32 +580,33 @@ impl Component for Splitter {
 
 /// A register component.
 pub struct Register {
-    props: BufNotProperties
+    bitsize: u8
 }
 impl Register {
     /// Creates a new instance of the Register with specified bitsize.
-    pub fn new(mut bitsize: u8) -> Self {
-        bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
-        Self { props: BufNotProperties { bitsize } }
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
     }
 }
 impl Component for Register {
     fn ports(&self) -> Vec<PortProperties> {
         port_list(&[
             // din
-            (PortProperties { ty: PortType::Input, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
             // enable, clock, clear
             (PortProperties { ty: PortType::Input, bitsize: 1 }, 3),
             // dout
-            (PortProperties { ty: PortType::Output, bitsize: self.props.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
     fn initialize(&self, state: &mut [BitArray]) {
-        state[4] = bitarr![0; self.props.bitsize];
+        state[4] = bitarr![0; self.bitsize];
     }
     fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
         if new_ports[3].all(BitState::High) {
-            vec![PortUpdate { index: 4, value: bitarr![0; self.props.bitsize] }]
+            vec![PortUpdate { index: 4, value: bitarr![0; self.bitsize] }]
         } else if Sensitivity::Posedge.activated(old_ports[2], new_ports[2]) && new_ports[1].all(BitState::High) {
             vec![PortUpdate { index: 4, value: new_ports[0] }]
         } else {
