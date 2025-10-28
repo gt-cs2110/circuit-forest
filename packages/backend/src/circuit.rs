@@ -8,8 +8,8 @@ use std::ops::{Index, IndexMut};
 use slotmap::{new_key_type, SlotMap};
 
 use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::state::{index_mut, CircuitState, TriggerState, ValueState};
-use crate::node::{Component, ComponentFn, PortProperties, PortType, PortUpdate};
+use crate::circuit::state::{CircuitState, TriggerState, ValueState};
+use crate::node::{Component, ComponentFn, PortProperties};
 
 
 new_key_type! {
@@ -268,102 +268,7 @@ impl Circuit {
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).
     pub fn propagate(&mut self) {
-        const RUN_ITER_LIMIT: usize = 10_000;
-
-        let mut iteration = 0;
-        while !self.state.transient.resolved() {
-            if iteration > RUN_ITER_LIMIT {
-                for key in self.state.transient.triggers.keys() {
-                    index_mut(&mut self.state.values, key).add_issue(ValueIssue::OscillationDetected);
-                }
-                break;
-            }
-            // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, TriggerState { recalculate }) in std::mem::take(&mut self.state.transient.triggers) {
-                // Remove issues b/c of update
-                self.state[node].clear_issues();
-                
-                // Iterator of all port values
-                // We join them using a join algorithm.
-                // If the value changes after this join, 
-                // then we know we should propagate the update to the function.
-
-                let mut propagate_update = true;
-                if recalculate {
-                    let result = match self.graph[node].bitsize {
-                        Some(s) => {
-                            // Get all port values feeding into value
-                            let feed_it = self.graph[node].links.iter()
-                                .filter(|p| self.graph[p.gate].port_props[p.index].ty.accepts_output())
-                                .map(|&p| self.state.value(p));
-                            // Find value and short circuit status
-                            let (result, occupied) = feed_it.fold(
-                                (bitarr![Z; s], Some(0)),
-                                |(array, m_occupied), current| (
-                                    array.join(current),
-                                    m_occupied.and_then(|occupied| current.short_circuits(occupied))
-                                )
-                            );
-
-                            if occupied.is_none() {
-                                self.state[node].add_issue(ValueIssue::ShortCircuit);
-                            }
-                            result
-                        },
-                        None => {
-                            self.state[node].add_issue(ValueIssue::MismatchedBitsizes);
-                            BitArray::new()
-                        }
-                    };
-
-                    propagate_update = self.state.value(node) != result;
-                    self.state[node].value = result;
-                }
-
-                if propagate_update {
-                    self.state.transient.frontier.extend({
-                        self.graph[node].links.iter()
-                            .filter(|p| self.graph[p.gate].port_props[p.index].ty.accepts_input())
-                            .map(|p| p.gate)
-                    });
-                }
-            }
-            // 2. For all functions to waken, apply function and save triggers for next cycle
-            for gate_idx in std::mem::take(&mut self.state.transient.frontier) {
-                let gate = &self.graph[gate_idx];
-                let state = index_mut(&mut self.state.functions, &gate_idx);
-
-                // Update inputs:
-                let old_values = state.ports.clone();
-                let it = gate.links.iter()
-                    .zip(&gate.port_props)
-                    .zip(&mut state.ports);
-                for ((&port, props), port_value) in it {
-                    if matches!(props.ty, PortType::Output) { continue; }
-                    // Update inputs and inouts
-                    // Replace any disconnected ports and mismatched bitsizes with floating
-                    *port_value = port
-                        .filter(|&n| self.graph[n].bitsize == Some(props.bitsize))
-                        .map(|n| self.state.values[&n].get_value())
-                        .unwrap_or_else(|| bitarr![Z; props.bitsize]);
-                }
-                
-                for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
-                    // Push outputs:
-                    debug_assert!(self.graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
-                    debug_assert_eq!(self.graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
-                    if self.state[gate_idx].ports[index] != value {
-                        self.state[gate_idx].ports[index] = value;
-                        
-                        if let Some(sink_idx) = self.graph[gate_idx].links[index] {
-                            self.state.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
-                        }
-                    }
-                }
-            }
-
-            iteration += 1;
-        }
+        self.state.propagate(&self.graph);
     }
 
     /// Gets current circuit state.
