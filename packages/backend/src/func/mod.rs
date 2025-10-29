@@ -110,6 +110,7 @@ pub trait Component {
         // Only run in debug mode
         if cfg!(debug_assertions) {
             let port_props = self.ports();
+            debug_assert_eq!(ports.len(), port_props.len(), "Expected correct number of ports");
             for (i, (bit_vec, port)) in ports.iter().zip(port_props).enumerate() {
                 debug_assert_eq!(
                     bit_vec.len(),
