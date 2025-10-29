@@ -68,6 +68,30 @@ mod tests {
     }
 
     #[test]
+    fn simple_io() {
+        let mut circuit = Circuit::new();
+        let inp = circuit.add_function_node(node::Input::new(1));
+        let out = circuit.add_function_node(node::Output::new(1));
+        let wire = circuit.add_value_node();
+
+        circuit.connect_all(inp, &[wire]);
+        circuit.connect_all(out, &[wire]);
+
+        circuit.run(&[wire]);
+
+        assert_eq!(circuit.state().value(wire), bitarr![Z]);
+        assert_eq!(circuit.get_output(out), bitarr![Z]);
+
+        assert!(circuit.set_input(inp, bitarr![0]).is_ok());
+        assert_eq!(circuit.state().value(wire), bitarr![0]);
+        assert_eq!(circuit.get_output(out), bitarr![0]);
+
+        assert!(circuit.set_input(inp, bitarr![1]).is_ok());
+        assert_eq!(circuit.state().value(wire), bitarr![1]);
+        assert_eq!(circuit.get_output(out), bitarr![1]);
+    }
+
+    #[test]
     fn metastable() {
         let mut circuit = Circuit::new();
         let a = 0x98A85409_19182A9F;
