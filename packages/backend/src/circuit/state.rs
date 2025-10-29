@@ -39,7 +39,7 @@ impl<K: StateGetter> StateGetter for &K {
 /// The state of the circuit.
 /// 
 /// This includes all wire values, all port values, and internal function state.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CircuitState {
     pub(crate) values: HashMap<ValueKey, ValueState>,
     pub(crate) functions: HashMap<FunctionKey, FunctionState>,
@@ -226,6 +226,7 @@ impl IndexMut<FunctionKey> for CircuitState {
 /// The state of a [`ValueNode`].
 /// 
 /// [`ValueNode`]: crate::circuit::ValueNode
+#[derive(Debug)]
 pub struct ValueState {
     pub(crate) value: BitArray,
     issues: HashSet<ValueIssue>
@@ -277,6 +278,7 @@ impl ValueState {
 /// The state of a [`FunctionNode`].
 /// 
 /// [`FunctionNode`]: crate::circuit::FunctionNode
+#[derive(Debug)]
 pub struct FunctionState {
     pub(crate) ports: Vec<BitArray>
 }
@@ -309,11 +311,11 @@ impl FunctionState {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct TriggerState {
     pub(crate) recalculate: bool
 }
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct TransientState {
     pub(crate) triggers: HashMap<ValueKey, TriggerState>,
     pub(crate) frontier: HashSet<FunctionKey>

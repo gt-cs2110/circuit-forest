@@ -174,6 +174,7 @@ fn port_list(config: &[(PortProperties, u8)]) -> Vec<PortProperties> {
 macro_rules! decl_component_enum {
     ($ComponentEnum:ident: $($Component:ident),*$(,)?) => {
         /// An enum that represents all supported digital logic components.
+        #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
         pub enum $ComponentEnum {
             $(
                 #[allow(missing_docs)]
@@ -225,6 +226,7 @@ macro_rules! gates {
     ($($(#[$m:meta])? $Id:ident: $f:expr, $invert:literal),*$(,)?) => {
         $(
             $(#[$m])?
+            #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
             pub struct $Id {
                 bitsize: u8,
                 n_inputs: u8
@@ -279,6 +281,7 @@ gates! {
 }
 
 /// A NOT gate component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Not {
     bitsize: u8
 }
@@ -306,6 +309,7 @@ impl Component for Not {
 }
 
 /// A tri-state buffer component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct TriState {
     bitsize: u8
 }
@@ -341,6 +345,7 @@ impl Component for TriState {
 }
 
 /// An input.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Input {
     bitsize: u8
 }
@@ -365,7 +370,8 @@ impl Component for Input {
     }
 }
 
-/// An input.
+/// An output.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Output {
     bitsize: u8
 }
@@ -390,7 +396,8 @@ impl Component for Output {
     }
 }
 
-/// An input.
+/// A constant.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Constant {
     value: BitArray
 }
@@ -422,6 +429,7 @@ pub const MIN_SELSIZE: u8 = 1;
 pub const MAX_SELSIZE: u8 = 6;
 
 /// A multiplexer (mux) component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Mux {
     bitsize: u8,
     selsize: u8
@@ -458,6 +466,7 @@ impl Component for Mux {
 }
 
 /// A demultiplexer (demux) component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Demux {
     bitsize: u8,
     selsize: u8
@@ -501,6 +510,7 @@ impl Component for Demux {
 }
 
 /// A decoder component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Decoder {
     selsize: u8
 }
@@ -541,6 +551,7 @@ impl Component for Decoder {
 }
 
 /// A splitter component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
     bitsize: u8
 }
@@ -579,6 +590,7 @@ impl Component for Splitter {
 }
 
 /// A register component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Register {
     bitsize: u8
 }

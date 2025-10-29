@@ -10,7 +10,7 @@ use crate::node::ComponentFn;
 
 
 /// Issues which can occur to a value node.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum ValueIssue {
     /// Represents a collision of bit values (short circuit).
     ShortCircuit,
@@ -23,7 +23,7 @@ pub enum ValueIssue {
 }
 
 /// A circuit, which includes its structure ([`CircuitGraph`]) and its state ([`CircuitState`]).
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Circuit {
     graph: CircuitGraph,
     state: CircuitState
