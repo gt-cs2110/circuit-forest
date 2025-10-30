@@ -10,6 +10,7 @@
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
 use crate::bitarray::{BitArray, BitState};
+use crate::circuit::state::InnerFunctionState;
 
 use enum_dispatch::enum_dispatch;
 pub use gates::*;
@@ -92,18 +93,18 @@ pub trait Component {
     /// When that occurs, this function is called with the original state and updated state
     /// of this component's ports.
     /// 
-    /// This function may also panic if `old_inp` and `inp` do not match the port properties
+    /// This function may also panic if the port fields of [`RunContext`] do not match the port properties
     /// specified by [`Component::ports`].
     #[must_use]
-    fn run(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate>{
-        self.validate_ports(old_ports);
-        self.validate_ports(new_ports);
-        self.run_inner(old_ports, new_ports)
+    fn run(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        self.validate_ports(ctx.old_ports);
+        self.validate_ports(ctx.new_ports);
+        self.run_inner(ctx)
     }
 
     /// Inner run function that, given a set of inputs, applies its modifications to output a vector
     /// of updated ports. This function is wrapped by run to ensure input validation
-    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate>;
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate>;
 
     /// Validates inputs to ensure all ports match port bitsize.
     fn validate_ports(&self, ports: &[BitArray]) {
@@ -190,6 +191,16 @@ impl Sensitivity {
         std::iter::zip(old, new)
             .any(|(&o, &n)| self.activated(o, n))
     }
+}
+
+/// All properties available when running a component.
+pub struct RunContext<'a> {
+    /// The value of the ports before update.
+    pub old_ports: &'a [BitArray],
+    /// The value of the ports after an update.
+    pub new_ports: &'a [BitArray],
+    /// The inner state of the component.
+    pub inner_state: Option<&'a mut InnerFunctionState>
 }
 
 /// Helper function to more easily define port lists (for [`Component::ports`]).

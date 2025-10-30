@@ -13,7 +13,7 @@ use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
-use crate::func::{Component, ComponentFn, PortType, PortUpdate};
+use crate::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
 /// Trait which allows reading a [`BitArray`] value from [`CircuitState`].
 pub trait StateGetter {
@@ -178,7 +178,12 @@ impl CircuitState {
                         .unwrap_or_else(|| bitarr![Z; props.bitsize]);
                 }
                 
-                for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
+                let ctx = RunContext {
+                    old_ports: &old_values,
+                    new_ports: &state.ports,
+                    inner_state: state.inner.as_mut()
+                };
+                for PortUpdate { index, value } in gate.func.run(ctx) {
                     // Push outputs:
                     debug_assert!(graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
                     debug_assert_eq!(graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
@@ -274,12 +279,24 @@ impl ValueState {
     }
 }
 
+/// Internal state for a function node.
+/// 
+/// This isn't needed if all the information can be pulled from port data,
+/// but is useful for when larger state is needed (e.g., subcircuits, RAM).
+#[derive(Debug)]
+pub enum InnerFunctionState {
+    /// Subcircuit data.
+    Subcircuit(CircuitState),
+}
+
+
 /// The state of a [`FunctionNode`].
 /// 
 /// [`FunctionNode`]: crate::circuit::graph::FunctionNode
 #[derive(Debug)]
 pub struct FunctionState {
-    pub(crate) ports: Vec<BitArray>
+    pub(crate) ports: Vec<BitArray>,
+    pub(crate) inner: Option<InnerFunctionState>
 }
 impl FunctionState {
     /// Creates a new initial function state for the specified `func`.
@@ -288,8 +305,9 @@ impl FunctionState {
             .map(|props| bitarr![Z; props.bitsize])
             .collect();
 
+        let inner = None;
         func.initialize(&mut ports);
-        Self { ports }
+        Self { ports, inner }
     }
 
     /// Gets the bit value of a port.

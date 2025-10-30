@@ -1,5 +1,5 @@
 
-use crate::func::{Component, PortProperties, PortType, PortUpdate, port_list};
+use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarr, bitarray::BitArray};
 
 /// Minimum number of selector bits for Mux/Demux/Decoder.
@@ -34,10 +34,10 @@ impl Component for Mux {
         ])
     }
 
-    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(new_ports[0]);
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(ctx.new_ports[0]);
         let result = match m_sel {
-            Ok(sel) => new_ports[sel as usize + 1],
+            Ok(sel) => ctx.new_ports[sel as usize + 1],
             Err(e) => BitArray::repeat(e.bit_state(), self.bitsize),
         };
         vec![PortUpdate { index: (1 << self.selsize) + 1, value: result }]
@@ -70,12 +70,12 @@ impl Component for Demux {
             (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1 << self.selsize),
         ])
     }
-    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(new_ports[0]);
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(ctx.new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![bitarr![0; self.bitsize]; 1 << self.selsize];
-                result[sel as usize] = new_ports[1];
+                result[sel as usize] = ctx.new_ports[1];
                 result
             },
             Err(e) => vec![BitArray::repeat(e.bit_state(), self.bitsize); 1 << self.selsize],
@@ -111,8 +111,8 @@ impl Component for Decoder {
         ])
     }
 
-    fn run_inner(&self, _old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        let m_sel = u64::try_from(new_ports[0]);
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        let m_sel = u64::try_from(ctx.new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
                 let mut result = vec![bitarr![0]; 1 << self.selsize];
@@ -170,7 +170,11 @@ mod tests {
                 let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
                 assert!(result.is_ok());
 
-                let actual = mux.run(&ports, &ports);
+                let actual = mux.run(RunContext{
+                    old_ports: &ports,
+                    new_ports: &ports,
+                    inner_state: None
+                });
                 let expected = vec![PortUpdate { index: 1 + input_count, value: ports[1 + sel] }];
 
                 assert_eq!(
@@ -215,7 +219,11 @@ mod tests {
                 assert!(ports[0].replace(BitArray::from_bits(sel as u64, selsize)).is_ok());
                 assert!(ports[1].replace(expected_out).is_ok());
 
-                let actual = demux.run(&ports, &ports);
+                let actual = demux.run(RunContext{
+                    old_ports: &ports,
+                    new_ports: &ports,
+                    inner_state: None
+                });
                 let expected: Vec<_> = (0..input_count).map(|i| PortUpdate {
                     index: 2 + i,
                     // Outputs should update so that everything is 0000,
@@ -262,7 +270,11 @@ mod tests {
                 let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
                 assert!(result.is_ok());
                 
-                let actual = decoder.run(&ports, &ports);
+                let actual = decoder.run(RunContext{
+                    old_ports: &ports,
+                    new_ports: &ports,
+                    inner_state: None
+                });
                 let expected = (0..output_count).map(|i| PortUpdate {
                     index: 1 + i,
                     // Only selected index should be lit

@@ -1,5 +1,5 @@
 use crate::bitarray::BitArray;
-use crate::func::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list};
+use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -22,7 +22,7 @@ impl Component for Input {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+    fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {
         vec![]
     }
 }
@@ -48,7 +48,7 @@ impl Component for Output {
         ])
     }
 
-    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+    fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {
         vec![]
     }
 }
@@ -75,7 +75,7 @@ impl Component for Constant {
     fn initialize(&self, state: &mut [BitArray]) {
         state[0] = self.value;
     }
-    fn run_inner(&self, _old_inp: &[BitArray], _inp: &[BitArray]) -> Vec<PortUpdate> {
+    fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {
         vec![]
     }
 }
@@ -103,13 +103,13 @@ impl Component for Splitter {
         ])
     }
 
-    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        if Sensitivity::Anyedge.activated(old_ports[0], new_ports[0]) {
-            std::iter::zip(1.., new_ports[0])
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        if Sensitivity::Anyedge.activated(ctx.old_ports[0], ctx.new_ports[0]) {
+            std::iter::zip(1.., ctx.new_ports[0])
                 .map(|(index, bit)| PortUpdate { index, value: BitArray::from(bit) })
                 .collect()
-        } else if Sensitivity::Anyedge.any_activated(&old_ports[1..], &new_ports[1..]) {
-            let value = new_ports[1..].iter()
+        } else if Sensitivity::Anyedge.any_activated(&ctx.old_ports[1..], &ctx.new_ports[1..]) {
+            let value = ctx.new_ports[1..].iter()
                 .map(|b| b.index(0))
                 .collect();
             vec![PortUpdate { index: 0, value }]
@@ -151,7 +151,11 @@ mod tests {
             let result = new_ports[0].replace(joined);
             assert!(result.is_ok());
             
-            let actual = splitter.run(&old_ports, &new_ports);
+            let actual = splitter.run(RunContext {
+                old_ports: &old_ports, 
+                new_ports: &new_ports,
+                inner_state: None
+            });
             let expected: Vec<_> = data.iter().enumerate()
                 .map(|(i, &st)| PortUpdate {
                     index: 1 + i,
@@ -199,7 +203,11 @@ mod tests {
                 assert!(result.is_ok());
             }
             
-            let actual = splitter.run(&old_ports, &new_ports);
+            let actual = splitter.run(RunContext {
+                old_ports: &old_ports, 
+                new_ports: &new_ports,
+                inner_state: None
+            });
             let expected = vec![PortUpdate { index: 0, value: joined }];
 
             assert_eq!(

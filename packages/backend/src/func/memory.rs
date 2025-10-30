@@ -1,4 +1,4 @@
-use crate::{bitarray::{BitArray, BitState, bitarr}, func::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list}};
+use crate::{bitarray::{BitArray, BitState, bitarr}, func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list}};
 
 /// A register component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -27,11 +27,11 @@ impl Component for Register {
     fn initialize(&self, state: &mut [BitArray]) {
         state[4] = bitarr![0; self.bitsize];
     }
-    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-        if new_ports[3].all(BitState::High) {
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        if ctx.new_ports[3].all(BitState::High) {
             vec![PortUpdate { index: 4, value: bitarr![0; self.bitsize] }]
-        } else if Sensitivity::Posedge.activated(old_ports[2], new_ports[2]) && new_ports[1].all(BitState::High) {
-            vec![PortUpdate { index: 4, value: new_ports[0] }]
+        } else if Sensitivity::Posedge.activated(ctx.old_ports[2], ctx.new_ports[2]) && ctx.new_ports[1].all(BitState::High) {
+            vec![PortUpdate { index: 4, value: ctx.new_ports[0] }]
         } else {
             vec![]
         }
