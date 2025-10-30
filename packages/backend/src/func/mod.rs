@@ -81,10 +81,17 @@ pub trait Component {
     /// It is assumed that the result of this function will not change when called multiple times.
     fn ports(&self) -> Vec<PortProperties>;
     
-    /// Initializes the state (e.g., internal state and port state) of the component.
+    /// Initializes the port state of the component.
     /// 
     /// If not specified, by default, the initial port state is set to all floating.
-    fn initialize(&self, _state: &mut [BitArray]) {}
+    fn initialize_port_state(&self, _state: &mut [BitArray]) {}
+    
+    /// Initializes the internal state of the component.
+    /// 
+    /// If not specified, by default, this is `Default::default()`.
+    fn initialize_inner_state(&self) -> Option<InnerFunctionState> {
+        None
+    }
     
     /// "Runs" the component's function on a set of inputs, outputting a vector of updated ports
     /// after the function is applied.

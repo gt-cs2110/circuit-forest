@@ -72,7 +72,7 @@ impl Component for Constant {
         ])
     }
 
-    fn initialize(&self, state: &mut [BitArray]) {
+    fn initialize_port_state(&self, state: &mut [BitArray]) {
         state[0] = self.value;
     }
     fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {

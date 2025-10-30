@@ -304,9 +304,9 @@ impl FunctionState {
         let mut ports: Vec<_> = func.ports().into_iter()
             .map(|props| bitarr![Z; props.bitsize])
             .collect();
-
-        let inner = None;
-        func.initialize(&mut ports);
+        
+        func.initialize_port_state(&mut ports);
+        let inner = func.initialize_inner_state();
         Self { ports, inner }
     }
 

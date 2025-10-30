@@ -24,7 +24,7 @@ impl Component for Register {
             (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
-    fn initialize(&self, state: &mut [BitArray]) {
+    fn initialize_port_state(&self, state: &mut [BitArray]) {
         state[4] = bitarr![0; self.bitsize];
     }
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
