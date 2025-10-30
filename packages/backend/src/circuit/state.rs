@@ -5,9 +5,11 @@
 //! - [`ValueState`]: The state of a value node (wire)
 //! - [`FunctionState`]: The state of a function node
 
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ops::{Index, IndexMut};
+
+use slotmap::{SecondaryMap, SparseSecondaryMap};
+use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
@@ -41,8 +43,8 @@ impl<K: StateGetter> StateGetter for &K {
 /// This includes all wire values, all port values, and internal function state.
 #[derive(Default, Debug)]
 pub struct CircuitState {
-    pub(crate) values: HashMap<ValueKey, ValueState>,
-    pub(crate) functions: HashMap<FunctionKey, FunctionState>,
+    pub(crate) values: SecondaryMap<ValueKey, ValueState>,
+    pub(crate) functions: SecondaryMap<FunctionKey, FunctionState>,
     pub(crate) transient: TransientState
 }
 impl CircuitState {
@@ -53,13 +55,13 @@ impl CircuitState {
     
     /// Initializes a value node's state in this CircuitState.
     pub(crate) fn init_value(&mut self, key: ValueKey) {
-        if let Entry::Vacant(e) = self.values.entry(key) {
+        if let Some(Entry::Vacant(e)) = self.values.entry(key) {
             e.insert(ValueState::new(BitArray::new()));
         }
     }
     /// Initializes a function node's state in this CircuitState.
     pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn) {
-        if let Entry::Vacant(e) = self.functions.entry(key) {
+        if let Some(Entry::Vacant(e)) = self.functions.entry(key) {
             e.insert(FunctionState::new(func));
         }
     }
@@ -102,7 +104,7 @@ impl CircuitState {
         while !self.transient.resolved() {
             if iteration > RUN_ITER_LIMIT {
                 for key in self.transient.triggers.keys() {
-                    index_mut(&mut self.values, key).add_issue(ValueIssue::OscillationDetected);
+                    self.values[key].add_issue(ValueIssue::OscillationDetected);
                 }
                 break;
             }
@@ -159,7 +161,7 @@ impl CircuitState {
             // 2. For all functions to waken, apply function and save triggers for next cycle
             for gate_idx in std::mem::take(&mut self.transient.frontier) {
                 let gate = &graph[gate_idx];
-                let state = index_mut(&mut self.functions, &gate_idx);
+                let state = &mut self.functions[gate_idx];
 
                 // Update inputs:
                 let old_values = state.ports.clone();
@@ -172,7 +174,7 @@ impl CircuitState {
                     // Replace any disconnected ports and mismatched bitsizes with floating
                     *port_value = port
                         .filter(|&n| graph[n].bitsize == Some(props.bitsize))
-                        .map(|n| self.values[&n].get_value())
+                        .map(|n| self.values[n].get_value())
                         .unwrap_or_else(|| bitarr![Z; props.bitsize]);
                 }
                 
@@ -195,31 +197,28 @@ impl CircuitState {
     }
 }
 
-fn index_mut<'m, K: std::hash::Hash + Eq, V>(map: &'m mut HashMap<K, V>, index: &'_ K) -> &'m mut V {
-    map.get_mut(index).unwrap()
-}
 impl Index<ValueKey> for CircuitState {
     type Output = ValueState;
 
     fn index(&self, index: ValueKey) -> &Self::Output {
-        &self.values[&index]
+        &self.values[index]
     }
 }
 impl IndexMut<ValueKey> for CircuitState {
     fn index_mut(&mut self, index: ValueKey) -> &mut Self::Output {
-        index_mut(&mut self.values, &index)
+        &mut self.values[index]
     }
 }
 impl Index<FunctionKey> for CircuitState {
     type Output = FunctionState;
 
     fn index(&self, index: FunctionKey) -> &Self::Output {
-        &self.functions[&index]
+        &self.functions[index]
     }
 }
 impl IndexMut<FunctionKey> for CircuitState {
     fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
-        index_mut(&mut self.functions, &index)
+        &mut self.functions[index]
     }
 }
 
@@ -317,7 +316,7 @@ pub(crate) struct TriggerState {
 }
 #[derive(Default, Debug)]
 pub(crate) struct TransientState {
-    pub(crate) triggers: HashMap<ValueKey, TriggerState>,
+    pub(crate) triggers: SparseSecondaryMap<ValueKey, TriggerState>,
     pub(crate) frontier: HashSet<FunctionKey>
 }
 impl TransientState {
