@@ -224,7 +224,7 @@ impl IndexMut<FunctionKey> for CircuitState {
 
 /// The state of a [`ValueNode`].
 /// 
-/// [`ValueNode`]: crate::circuit::ValueNode
+/// [`ValueNode`]: crate::circuit::graph::ValueNode
 #[derive(Debug)]
 pub struct ValueState {
     pub(crate) value: BitArray,
@@ -276,7 +276,7 @@ impl ValueState {
 
 /// The state of a [`FunctionNode`].
 /// 
-/// [`FunctionNode`]: crate::circuit::FunctionNode
+/// [`FunctionNode`]: crate::circuit::graph::FunctionNode
 #[derive(Debug)]
 pub struct FunctionState {
     pub(crate) ports: Vec<BitArray>
