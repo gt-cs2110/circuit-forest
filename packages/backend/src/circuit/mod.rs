@@ -3,11 +3,42 @@
 pub mod state;
 pub mod graph;
 
+use slotmap::{SlotMap, new_key_type};
+
 use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionPort, ValueKey};
 use crate::circuit::state::{CircuitState, TriggerState, ValueState};
 use crate::func::ComponentFn;
 
+new_key_type! {
+    /// Key type for maps to circuits.
+    pub struct CircuitKey;
+}
+/// A group of circuits.
+/// 
+/// This encompasses multiple circuits.
+/// Circuits within this CircuitForest 
+/// can use any circuit within the forest
+/// as a subcircuit.
+#[derive(Default, Debug)]
+pub struct CircuitForest {
+    circuits: SlotMap<CircuitKey, Circuit>
+}
+impl CircuitForest {
+    /// Creates an empty [`CircuitForest`].
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Gets the graph associated with this key.
+    pub fn graph(&self, k: CircuitKey) -> &CircuitGraph {
+        &self.circuits[k].graph
+    }
+    /// Gets the top level state associated with this key.
+    pub fn top_level_state(&self, k: CircuitKey) -> &CircuitState {
+        &self.circuits[k].state
+    }
+}
 
 /// Issues which can occur to a value node.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
