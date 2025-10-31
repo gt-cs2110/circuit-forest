@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { settings } from "./store";
 
-const GRID_SIZE = 40;
+const GRID_SIZE = 25;
 
 let _offset = ref({ x: 0, y: 0 });
 let offset = computed({
@@ -104,8 +104,8 @@ function handleWheel(e: WheelEvent) {
                     <circle
                         :cx="(GRID_SIZE / 2) * scale"
                         :cy="(GRID_SIZE / 2) * scale"
-                        :r="2 * scale"
-                        fill="var(--color-zinc-600)"
+                        :r="1 * scale"
+                        fill="var(--color-zinc-500)"
                     />
                 </pattern>
             </defs>
