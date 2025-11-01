@@ -9,13 +9,15 @@ pub mod circuit;
 #[cfg(test)]
 mod tests {
     use crate::bitarray::{bitarr, BitArray, BitState};
-    use crate::circuit::{Circuit, ValueIssue};
+    use crate::circuit::{CircuitForest, ValueIssue};
 
     use super::*;
 
     #[test]
     fn simple() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+        
         let a = 0x9A3B2174_94093211;
         let b = 0x19182934_19AFFC94;
 
@@ -36,7 +38,9 @@ mod tests {
 
     #[test]
     fn dual() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let a = 0x9A3B2174_94093211;
         let b = 0x19182934_19AFFC94;
         let c = 0x92821734_182A9A9A;
@@ -69,7 +73,9 @@ mod tests {
 
     #[test]
     fn simple_io() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let inp = circuit.add_function_node(func::Input::new(1));
         let out = circuit.add_function_node(func::Output::new(1));
         let wire = circuit.add_value_node();
@@ -93,7 +99,9 @@ mod tests {
 
     #[test]
     fn metastable() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let a = 0x98A85409_19182A9F;
 
         let wires = [
@@ -119,7 +127,9 @@ mod tests {
 
     #[test]
     fn nand_propagate() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         let (_, inp) = circuit.add_input(bitarr![0]);
         let (out0_g, out0) = circuit.add_output(1);
@@ -140,7 +150,9 @@ mod tests {
 
     #[test]
     fn conflict_pass_z() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         // Wires
         let (_, lo) = circuit.add_input(bitarr![0]);
@@ -161,7 +173,9 @@ mod tests {
 
     #[test]
     fn conflict_fail() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         // Wires
         let (_, lo) = circuit.add_input(bitarr![0]);
@@ -182,7 +196,9 @@ mod tests {
 
     #[test]
     fn delay_conflict() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         
         // Wires
         let (_, inp) = circuit.add_input(bitarr![0]); 
@@ -205,7 +221,9 @@ mod tests {
 
     #[test]
     fn rs_latch() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let [(r_g, r), (s_g, s), (q_g, q), (qp_g, qp)] = [
             circuit.add_input(bitarr![1]), // R
             circuit.add_input(bitarr![1]), // S
@@ -246,7 +264,9 @@ mod tests {
 
     #[test]
     fn d_latch() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         // external
         let [(din_g, din), (wen_g, wen), (dout_g, dout), (doutp_g, doutp)] = [
             circuit.add_input(bitarr![0]),
@@ -296,7 +316,9 @@ mod tests {
     }
     #[test]
     fn chain() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         
         // Wires
         let (_, a_in) = circuit.add_input(bitarr![1]);
@@ -327,7 +349,9 @@ mod tests {
 
     #[test]
     fn oscillate() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         let a_in = circuit.add_value_node();
         let gate = circuit.add_function_node(func::Not::new(1));
@@ -341,7 +365,9 @@ mod tests {
 
     #[test]
     fn splitter() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
         let splitter = circuit.add_function_node(func::Splitter::new(8));
@@ -386,7 +412,9 @@ mod tests {
 
     #[test]
     fn register() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let inputs = bitarr![1, 0, 1, 0, 1, 0, 1, 0];
         let nodes @ [(din_g, din), (enable_g, enable), (clock_g, clock), (clear_g, clear), (dout_g, _)] = [
             circuit.add_input(inputs),
