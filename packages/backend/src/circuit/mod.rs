@@ -145,17 +145,23 @@ impl Circuit {
     }
 }
 
-#[test]
-fn test_replace() {
-    let mut circuit = Circuit::new(); // create empty circuit
+#[cfg(test)]
+mod tests {
+    use crate::bitarr;
+    use crate::circuit::Circuit;
+
+    #[test]
+    fn test_replace() {
+        let mut circuit = Circuit::new(); // create empty circuit
+        
+        let value = bitarr![0; 8]; // Create a 8 bit BitArray 
+        let key = circuit.add_value_node();
     
-    let value = bitarr![0; 8]; // Create a 8 bit BitArray 
-    let key = circuit.add_value_node();
-
-    // replace should succeed
-    assert!(circuit.replace(key, value).is_ok());
-
-    // intentionally wrong bitsize should fail
-    let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
-    assert!(circuit.replace(key, wrong_value).is_err());
+        // replace should succeed
+        assert!(circuit.replace(key, value).is_ok());
+    
+        // intentionally wrong bitsize should fail
+        let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
+        assert!(circuit.replace(key, wrong_value).is_err());
+    }
 }

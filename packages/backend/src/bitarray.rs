@@ -558,7 +558,7 @@ impl std::ops::Not for BitArray {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::bitarray::BitState;
 
     use super::BitArray;
