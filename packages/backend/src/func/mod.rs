@@ -11,6 +11,7 @@
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
 use crate::bitarray::{BitArray, BitState};
 
+use enum_dispatch::enum_dispatch;
 pub use gates::*;
 pub use memory::*;
 pub use muxes::*;
@@ -71,6 +72,7 @@ pub struct PortUpdate {
 }
 
 /// The interface defining how a digital logic component operates.
+#[enum_dispatch]
 pub trait Component {
     /// Returns the vector holding the properties of all ports associated with the component.
     /// 
@@ -119,6 +121,20 @@ pub trait Component {
     }
 }
 
+/// An enum that represents all supported digital logic components.
+#[enum_dispatch(Component)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[allow(missing_docs)]
+pub enum ComponentFn {
+    // Gates
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
+    // Wiring
+    Input, Output, Constant, Splitter,
+    // Muxes
+    Mux, Demux, Decoder,
+    // Memory
+    Register
+}
 
 /// The triggering conditions for components based on a signal change.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -181,52 +197,6 @@ fn port_list(config: &[(PortProperties, u8)]) -> Vec<PortProperties> {
         .flat_map(|&(props, ct)| std::iter::repeat_n(props, usize::from(ct)))
         .collect()
 }
-macro_rules! decl_component_enum {
-    ($ComponentEnum:ident: $($Component:ident),*$(,)?) => {
-        /// An enum that represents all supported digital logic components.
-        #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-        pub enum $ComponentEnum {
-            $(
-                #[allow(missing_docs)]
-                $Component($Component)
-            ),*
-        }
-        impl Component for $ComponentEnum {
-            fn ports(&self) -> Vec<PortProperties> {
-                match self {
-                    $(
-                        Self::$Component(c) => c.ports(),
-                    )*
-                }
-            }
-            fn initialize(&self, state: &mut [BitArray]) {
-                match self {
-                    $(
-                        Self::$Component(c) => c.initialize(state),
-                    )*
-                }
-            }
-            fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
-                match self {
-                    $(
-                        Self::$Component(c) => c.run(old_ports, new_ports),
-                    )*
-                }
-            }
-        }
-        $(
-            impl From<$Component> for $ComponentEnum {
-                fn from(value: $Component) -> Self {
-                    Self::$Component(value)
-                }
-            }
-        )*
-    }
-}
-decl_component_enum!(ComponentFn: 
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState, Input, Output, Constant,
-    Mux, Demux, Decoder, Splitter, Register
-);
 
 /// Test helper which initializes all of the ports a node should have,
 /// setting them all to floating.
