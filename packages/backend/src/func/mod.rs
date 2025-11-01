@@ -104,30 +104,18 @@ pub trait Component {
     /// specified by [`Component::ports`].
     #[must_use]
     fn run(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        self.validate_ports(ctx.old_ports);
-        self.validate_ports(ctx.new_ports);
+        // Only run in debug mode
+        if cfg!(debug_assertions) {
+            let props = self.ports();
+            validate_ports(&props, ctx.old_ports);
+            validate_ports(&props, ctx.new_ports);
+        }
         self.run_inner(ctx)
     }
 
     /// Inner run function that, given a set of inputs, applies its modifications to output a vector
     /// of updated ports. This function is wrapped by run to ensure input validation
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate>;
-
-    /// Validates inputs to ensure all ports match port bitsize.
-    fn validate_ports(&self, ports: &[BitArray]) {
-        // Only run in debug mode
-        if cfg!(debug_assertions) {
-            let port_props = self.ports();
-            debug_assert_eq!(ports.len(), port_props.len(), "Expected correct number of ports");
-            for (i, (bit_vec, port)) in ports.iter().zip(port_props).enumerate() {
-                debug_assert_eq!(
-                    bit_vec.len(),
-                    port.bitsize,
-                    "Port {i} has incorrect bit width"
-                );
-            }
-        }
-    }
 }
 
 /// An enum that represents all supported digital logic components.
@@ -210,6 +198,19 @@ pub struct RunContext<'a> {
     pub inner_state: Option<&'a mut InnerFunctionState>
 }
 
+/// Helper function to validate ports.
+/// 
+/// This panics if the ports do not align with the port properties.
+fn validate_ports(props: &[PortProperties], ports: &[BitArray]) {
+    assert_eq!(ports.len(), props.len(), "Expected correct number of ports");
+    for (i, (bit_vec, port)) in ports.iter().zip(props).enumerate() {
+        assert_eq!(
+            bit_vec.len(),
+            port.bitsize,
+            "Port {i} has incorrect bit width"
+        );
+    }
+}
 /// Helper function to more easily define port lists (for [`Component::ports`]).
 fn port_list(config: &[(PortProperties, u8)]) -> Vec<PortProperties> {
     config.iter()
