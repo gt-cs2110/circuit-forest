@@ -15,29 +15,6 @@ use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
 use crate::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
-/// Trait which allows reading a [`BitArray`] value from [`CircuitState`].
-pub trait StateGetter {
-    /// Gets the bit array value from the circuit state.
-    /// 
-    /// Panics if not in state.
-    fn get_value(&self, state: &CircuitState) -> BitArray;
-}
-impl StateGetter for ValueKey {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        state[*self].get_value()
-    }
-}
-impl StateGetter for FunctionPort {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        state[self.gate].ports[self.index]
-    }
-}
-impl<K: StateGetter> StateGetter for &K {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        (*self).get_value(state)
-    }
-}
-
 /// The state of the circuit.
 /// 
 /// This includes all wire values, all port values, and internal function state.
@@ -86,10 +63,16 @@ impl CircuitState {
         state
     }
 
-    pub(crate) fn value<K: StateGetter>(&self, k: K) -> BitArray {
-        K::get_value(&k, self)
+    /// Gets the bit value of a [`ValueNode`].
+    pub fn get_node_value(&self, k: ValueKey) -> BitArray {
+        self[k].get_value()
     }
-    pub(crate) fn issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
+    /// Gets the bit value of a port attached to a [`FunctionNode`].
+    pub fn get_port_value(&self, p: FunctionPort) -> BitArray {
+        self[p.gate].get_port(p.index)
+    }
+    /// Gets all issues associated with a given [`ValueNode`].
+    pub fn get_issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
         &self[k].issues
     }
 
@@ -125,7 +108,7 @@ impl CircuitState {
                             // Get all port values feeding into value
                             let feed_it = graph[node].links.iter()
                                 .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_output())
-                                .map(|&p| self.value(p));
+                                .map(|&p| self.get_port_value(p));
                             // Find value and short circuit status
                             let (result, occupied) = feed_it.fold(
                                 (bitarr![Z; s], Some(0)),
@@ -146,7 +129,7 @@ impl CircuitState {
                         }
                     };
 
-                    propagate_update = self.value(node) != result;
+                    propagate_update = self.get_node_value(node) != result;
                     self[node].value = result;
                 }
 

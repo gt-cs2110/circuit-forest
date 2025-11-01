@@ -85,15 +85,15 @@ mod tests {
 
         circuit.run(&[wire]);
 
-        assert_eq!(circuit.state().value(wire), bitarr![Z]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![Z]);
         assert_eq!(circuit.get_output(out), bitarr![Z]);
 
         assert!(circuit.set_input(inp, bitarr![0]).is_ok());
-        assert_eq!(circuit.state().value(wire), bitarr![0]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![0]);
         assert_eq!(circuit.get_output(out), bitarr![0]);
 
         assert!(circuit.set_input(inp, bitarr![1]).is_ok());
-        assert_eq!(circuit.state().value(wire), bitarr![1]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![1]);
         assert_eq!(circuit.get_output(out), bitarr![1]);
     }
 
@@ -119,8 +119,8 @@ mod tests {
         assert!(circuit.replace(wires[0], BitArray::from(a)).is_ok());
         circuit.run(&[wires[0]]);
 
-        let (l1, r1) = (circuit.state().value(wires[0]), BitArray::from(a));
-        let (l2, r2) = (circuit.state().value(wires[1]), BitArray::from(!a));
+        let (l1, r1) = (circuit.state().get_node_value(wires[0]), BitArray::from(a));
+        let (l2, r2) = (circuit.state().get_node_value(wires[1]), BitArray::from(!a));
         assert_eq!(l1, r1);
         assert_eq!(l2, r2);
     }
@@ -143,7 +143,7 @@ mod tests {
         circuit.connect_all(gates[1], &[inp, out0, out1]);
         circuit.run(&[inp]);
 
-        assert_eq!(circuit.state().value(inp), bitarr![0]);
+        assert_eq!(circuit.state().get_node_value(inp), bitarr![0]);
         assert_eq!(circuit.get_output(out0_g), bitarr![1]);
         assert_eq!(circuit.get_output(out1_g), bitarr![1]);
     }
@@ -191,7 +191,7 @@ mod tests {
         circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
-        assert!(circuit.state().issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
+        assert!(circuit.state().get_issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]
@@ -216,7 +216,7 @@ mod tests {
         circuit.connect_all(gates[2], &[inp, out]);
         circuit.run(&[inp]);
 
-        assert!(circuit.state().issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
+        assert!(circuit.state().get_issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]
@@ -246,8 +246,8 @@ mod tests {
 
         // R = 0, S = 1
         assert!(circuit.set_input(r_g, bitarr![0]).is_ok());
-        println!("{}", circuit.state().value(r));
-        println!("{}", circuit.state().value(s));
+        println!("{}", circuit.state().get_node_value(r));
+        println!("{}", circuit.state().get_node_value(s));
         circuit.run(&[r]);
 
         assert_eq!(circuit.get_output(q_g), bitarr![0]);
@@ -360,7 +360,7 @@ mod tests {
         assert!(circuit.replace(a_in, bitarr![1]).is_ok());
         circuit.run(&[a_in]);
 
-        assert!(circuit.state().issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
+        assert!(circuit.state().get_issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
     }
 
     #[test]
@@ -388,7 +388,7 @@ mod tests {
         let split = inputs.map(|st| BitArray::from_iter([st]));
         assert!(circuit.replace(joined_node, joined).is_ok());
         circuit.run(&[nodes[0]]);
-        assert_eq!(split_nodes.map(|n| circuit.state().value(n)), split);
+        assert_eq!(split_nodes.map(|n| circuit.state().get_node_value(n)), split);
 
         // split -> joined
         let inputs = [
@@ -407,7 +407,7 @@ mod tests {
             assert!(circuit.replace(n, a).is_ok());
         }
         circuit.run(&split_nodes);
-        assert_eq!(circuit.state().value(joined_node), joined);
+        assert_eq!(circuit.state().get_node_value(joined_node), joined);
     }
 
     #[test]
