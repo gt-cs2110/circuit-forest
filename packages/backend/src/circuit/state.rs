@@ -237,7 +237,7 @@ impl ValueState {
     /// then this always succeeds and does not raise an error.
     /// 
     /// This also does **not** propagate the change through the circuit this ValueState is associated with.
-    pub fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+    pub(crate) fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         match self.value.is_empty() {
             true => {
                 self.value = new_val;
@@ -306,7 +306,7 @@ impl FunctionState {
     /// then this always succeeds and does not raise an error.
     /// 
     /// This also does **not** propagate the change through the circuit this FunctionState is associated with.
-    pub fn set_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+    pub(crate) fn replace_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         self.ports[index].replace(new_val)
     }
 }

@@ -116,7 +116,7 @@ mod tests {
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
         circuit.connect_all(gates[1], &[wires[1], wires[0]]);
 
-        assert!(circuit.replace(wires[0], BitArray::from(a)).is_ok());
+        assert!(circuit.replace_value(wires[0], BitArray::from(a)).is_ok());
         circuit.run(&[wires[0]]);
 
         let (l1, r1) = (circuit.state().get_node_value(wires[0]), BitArray::from(a));
@@ -357,7 +357,7 @@ mod tests {
         let gate = circuit.add_function_node(func::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
-        assert!(circuit.replace(a_in, bitarr![1]).is_ok());
+        assert!(circuit.replace_value(a_in, bitarr![1]).is_ok());
         circuit.run(&[a_in]);
 
         assert!(circuit.state().get_issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
@@ -386,7 +386,7 @@ mod tests {
         ];
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
-        assert!(circuit.replace(joined_node, joined).is_ok());
+        assert!(circuit.replace_value(joined_node, joined).is_ok());
         circuit.run(&[nodes[0]]);
         assert_eq!(split_nodes.map(|n| circuit.state().get_node_value(n)), split);
 
@@ -404,7 +404,7 @@ mod tests {
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
         for (n, a) in std::iter::zip(split_nodes, split) {
-            assert!(circuit.replace(n, a).is_ok());
+            assert!(circuit.replace_value(n, a).is_ok());
         }
         circuit.run(&split_nodes);
         assert_eq!(circuit.state().get_node_value(joined_node), joined);

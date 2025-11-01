@@ -86,7 +86,7 @@ impl Circuit<'_> {
         let func = self.add_function_node(crate::func::Input::new(arr.len()));
         let value = self.add_value_node();
         
-        let result = self.forest.states[self.key][func].set_port(0, arr);
+        let result = self.replace_port(FunctionPort { gate: func, index: 0 }, arr);
         debug_assert!(result.is_ok(), "Port was set to value with incorrect bitsize");
 
         self.connect_all(func, &[value]);
@@ -162,9 +162,25 @@ impl Circuit<'_> {
         &self.forest.states[self.key]
     }
 
-    /// Updates a ValueNode with the specified value, raising `Err` if bitsizes do not match.
-    pub fn replace(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
-        self.forest.states[self.key][key].replace_value(val)
+    /// Updates a [`ValueNode`] with the specified value, raising `Err` if bitsizes do not match.
+    /// 
+    /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
+    pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        self.forest.states[self.key][key].replace_value(val)?;
+
+        self.forest.states[self.key].transient.triggers.insert(key, TriggerState { recalculate: false });
+        Ok(())
+    }
+    /// Updates the port of a [`FunctionNode`] with the specified value, raising `Err` if bitsizes do not match.
+    /// 
+    /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
+    pub fn replace_port(&mut self, port: FunctionPort, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+        self.forest.states[self.key][port.gate].replace_port(port.index, val)?;
+
+        if let Some(wire) = self.forest.graphs[self.key][port.gate].links[0] {
+            self.forest.states[self.key].transient.triggers.insert(wire, TriggerState { recalculate: true });
+        }
+        Ok(())
     }
 
     /// Sets the input state for the input.
@@ -172,10 +188,7 @@ impl Circuit<'_> {
     pub(crate) fn set_input(&mut self, key: FunctionKey, value: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         assert!(matches!(self.forest.graphs[self.key].functions[key].func, ComponentFn::Input(_)), "Expected input function");
         
-        self.forest.states[self.key][key].set_port(0, value)?;
-        if let Some(wire) = self.forest.graphs[self.key][key].links[0] {
-            self.forest.states[self.key].transient.triggers.insert(wire, TriggerState { recalculate: true });
-        }
+        self.replace_port(FunctionPort { gate: key, index: 0 }, value)?;
         // FIXME: Have alternative which doesn't propagate
         self.propagate();
 
@@ -186,7 +199,7 @@ impl Circuit<'_> {
     #[allow(dead_code)]
     pub(crate) fn get_output(&mut self, key: FunctionKey) -> BitArray {
         assert!(matches!(self.forest.graphs[self.key].functions[key].func, ComponentFn::Output(_)), "Expected output function");
-        self.forest.states[self.key][key].get_port(0)
+        self.forest.states[self.key].get_port_value(FunctionPort { gate: key, index: 0 })
     }
 }
 
@@ -204,10 +217,10 @@ mod tests {
         let key = circuit.add_value_node();
 
         // replace should succeed
-        assert!(circuit.replace(key, value).is_ok());
+        assert!(circuit.replace_value(key, value).is_ok());
 
         // intentionally wrong bitsize should fail
         let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
-        assert!(circuit.replace(key, wrong_value).is_err());
+        assert!(circuit.replace_value(key, wrong_value).is_err());
     }
 }
