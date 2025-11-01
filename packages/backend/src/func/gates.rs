@@ -510,6 +510,70 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_tristate_off() {
+        let gate = TriState::new(1);
+        let in_a = bitarr![0];
+
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[bitarr![0], in_a, bitarr![Z]]
+        );
+
+        assert_eq!(
+            updates,
+            vec![PortUpdate { index: 2, value: bitarr![Z] }]
+        );
+    }
+
+    #[test]
+    fn test_tristate_on() {
+        let gate = TriState::new(1);
+        let in_a = bitarr![0];
+
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[bitarr![1], in_a, bitarr![Z]]
+        );
+
+        assert_eq!(
+            updates,
+            vec![PortUpdate { index: 2, value: in_a }],
+        );
+    }
+
+    #[test]
+    fn test_tristate_multi_bit_off() {
+        let gate = TriState::new(4);
+        let in_a = bitarr![1, 0, 1, 1];
+
+        let updates = gate.run(
+            &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
+            &[bitarr![0], in_a, bitarr![Z; 4]]
+        );
+
+        assert_eq!(
+            updates,
+            vec![PortUpdate { index: 2, value: bitarr![Z; 4] }]
+        );
+    }
+
+    #[test]
+    fn test_tristate_multi_bit_on() {
+        let gate = TriState::new(4);
+        let in_a = bitarr![1, 0, 1, 1];
+
+        let updates = gate.run(
+            &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
+            &[bitarr![1], in_a, bitarr![Z; 4]]
+        );
+
+        assert_eq!(
+            updates,
+            vec![PortUpdate { index: 2, value: in_a }]
+        );
+    }
+
     mod input_validation {
         use super::*;
 
