@@ -1,0 +1,39 @@
+use crate::{bitarray::{BitArray, BitState, bitarr}, node::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list}};
+
+/// A register component.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Register {
+    bitsize: u8
+}
+impl Register {
+    /// Creates a new instance of the Register with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self {
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+        }
+    }
+}
+impl Component for Register {
+    fn ports(&self) -> Vec<PortProperties> {
+        port_list(&[
+            // din
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            // enable, clock, clear
+            (PortProperties { ty: PortType::Input, bitsize: 1 }, 3),
+            // dout
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+        ])
+    }
+    fn initialize(&self, state: &mut [BitArray]) {
+        state[4] = bitarr![0; self.bitsize];
+    }
+    fn run_inner(&self, old_ports: &[BitArray], new_ports: &[BitArray]) -> Vec<PortUpdate> {
+        if new_ports[3].all(BitState::High) {
+            vec![PortUpdate { index: 4, value: bitarr![0; self.bitsize] }]
+        } else if Sensitivity::Posedge.activated(old_ports[2], new_ports[2]) && new_ports[1].all(BitState::High) {
+            vec![PortUpdate { index: 4, value: new_ports[0] }]
+        } else {
+            vec![]
+        }
+    }
+}
