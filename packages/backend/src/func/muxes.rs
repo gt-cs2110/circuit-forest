@@ -1,5 +1,5 @@
 
-use crate::node::{Component, PortProperties, PortType, PortUpdate, port_list};
+use crate::func::{Component, PortProperties, PortType, PortUpdate, port_list};
 use crate::{bitarr, bitarray::BitArray};
 
 /// Minimum number of selector bits for Mux/Demux/Decoder.
@@ -132,7 +132,7 @@ impl Component for Decoder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{bitarray::BitArray, node::floating_ports};
+    use crate::{bitarray::BitArray, func::floating_ports};
 
     #[test]
     fn test_mux() {

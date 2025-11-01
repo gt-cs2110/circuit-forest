@@ -6,7 +6,7 @@ pub mod graph;
 use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionPort, ValueKey};
 use crate::circuit::state::{CircuitState, TriggerState, ValueState};
-use crate::node::ComponentFn;
+use crate::func::ComponentFn;
 
 
 /// Issues which can occur to a value node.
@@ -38,7 +38,7 @@ impl Circuit {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_input(&mut self, arr: BitArray) -> (FunctionKey, ValueKey) {
-        let func = self.add_function_node(crate::node::Input::new(arr.len()));
+        let func = self.add_function_node(crate::func::Input::new(arr.len()));
         let value = self.add_value_node();
         
         let result = self.state[func].set_port(0, arr);
@@ -52,7 +52,7 @@ impl Circuit {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_output(&mut self, bitsize: u8) -> (FunctionKey, ValueKey) {
-        let func = self.add_function_node(crate::node::Output::new(bitsize));
+        let func = self.add_function_node(crate::func::Output::new(bitsize));
         let value = self.add_value_node();
 
         self.connect_all(func, &[value]);

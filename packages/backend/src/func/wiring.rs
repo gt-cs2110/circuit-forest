@@ -1,5 +1,5 @@
 use crate::bitarray::BitArray;
-use crate::node::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list};
+use crate::func::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -122,7 +122,7 @@ impl Component for Splitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{bitarray::{BitArray, BitState}, node::floating_ports};
+    use crate::{bitarray::{BitArray, BitState}, func::floating_ports};
 
     #[test]
     fn test_splitter_split() {

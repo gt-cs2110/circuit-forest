@@ -1,5 +1,5 @@
 use crate::bitarray::{BitArray, BitState, bitarr};
-use crate::node::{Component, PortProperties, PortType, PortUpdate, port_list};
+use crate::func::{Component, PortProperties, PortType, PortUpdate, port_list};
 
 /// Minimum number of inputs for multi-input logic gates.
 pub const MIN_GATE_INPUTS: u8 = 2;

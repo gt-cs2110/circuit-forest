@@ -4,7 +4,7 @@
 //! multiplexers, demultiplexers, decoders, splitters, and registers as well as the
 //! traits and structures needed to represent and simulate their behavior.
 //! 
-//! ## The node module notably consists of:
+//! ## This module notably consists of:
 //! - **[`Component`]**: An interface for all digital logic components, defining methods for port configuration, initialization, and execution.
 //! - **[`PortType`] and [`PortProperties`]**: Enumerations and structures to define the types and properties of ports for components.
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
@@ -138,7 +138,7 @@ impl Sensitivity {
     /// 
     /// ```
     /// use circuitsim_engine::bitarray::bitarr;
-    /// use circuitsim_engine::node::Sensitivity;
+    /// use circuitsim_engine::func::Sensitivity;
     /// 
     /// let lo = bitarr![0];
     /// let hi = bitarr![1];
@@ -160,7 +160,7 @@ impl Sensitivity {
     /// 
     /// ```
     /// use circuitsim_engine::bitarray::bitarr;
-    /// use circuitsim_engine::node::Sensitivity;
+    /// use circuitsim_engine::func::Sensitivity;
     /// 
     /// let lo = bitarr![0];
     /// let hi = bitarr![1];

@@ -10,7 +10,7 @@ use std::ops::{Index, IndexMut};
 
 use slotmap::{SlotMap, new_key_type};
 
-use crate::node::{Component, ComponentFn, PortProperties};
+use crate::func::{Component, ComponentFn, PortProperties};
 
 
 new_key_type! {

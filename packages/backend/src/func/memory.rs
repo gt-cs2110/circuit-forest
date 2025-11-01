@@ -1,4 +1,4 @@
-use crate::{bitarray::{BitArray, BitState, bitarr}, node::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list}};
+use crate::{bitarray::{BitArray, BitState, bitarr}, func::{Component, PortProperties, PortType, PortUpdate, Sensitivity, port_list}};
 
 /// A register component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]

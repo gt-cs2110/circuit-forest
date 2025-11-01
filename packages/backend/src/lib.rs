@@ -3,7 +3,7 @@
 // TODO: Add actual doc comment above
 
 pub mod bitarray;
-pub mod node;
+pub mod func;
 pub mod circuit;
 
 #[cfg(test)]
@@ -24,7 +24,7 @@ mod tests {
         let (_, b_in) = circuit.add_input(BitArray::from(b));
         let (out_g, out) = circuit.add_output(64);
         // Gates
-        let gate = circuit.add_function_node(node::Xor::new(64, 2));
+        let gate = circuit.add_function_node(func::Xor::new(64, 2));
 
         circuit.connect_all(gate, &[a_in, b_in, out]);
         circuit.run(&[a_in, b_in]);
@@ -52,9 +52,9 @@ mod tests {
         let (out_g, out) = circuit.add_output(64);
         // Gates
         let gates = [
-            circuit.add_function_node(node::Xor::new(64, 2)),
-            circuit.add_function_node(node::Xor::new(64, 2)),
-            circuit.add_function_node(node::Xor::new(64, 2)),
+            circuit.add_function_node(func::Xor::new(64, 2)),
+            circuit.add_function_node(func::Xor::new(64, 2)),
+            circuit.add_function_node(func::Xor::new(64, 2)),
         ];
 
         circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);
@@ -70,8 +70,8 @@ mod tests {
     #[test]
     fn simple_io() {
         let mut circuit = Circuit::new();
-        let inp = circuit.add_function_node(node::Input::new(1));
-        let out = circuit.add_function_node(node::Output::new(1));
+        let inp = circuit.add_function_node(func::Input::new(1));
+        let out = circuit.add_function_node(func::Output::new(1));
         let wire = circuit.add_value_node();
 
         circuit.connect_all(inp, &[wire]);
@@ -101,8 +101,8 @@ mod tests {
             circuit.add_value_node(),
         ];
         let gates = [
-            circuit.add_function_node(node::Not::new(64)),
-            circuit.add_function_node(node::Not::new(64)),
+            circuit.add_function_node(func::Not::new(64)),
+            circuit.add_function_node(func::Not::new(64)),
         ];
 
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
@@ -125,8 +125,8 @@ mod tests {
         let (out0_g, out0) = circuit.add_output(1);
         let (out1_g, out1) = circuit.add_output(1);
         let gates = [
-            circuit.add_function_node(node::Nand::new(1, 2)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
         ];
 
         circuit.connect_all(gates[0], &[inp, out1, out0]);
@@ -148,8 +148,8 @@ mod tests {
         let (out_g, out) = circuit.add_output(1);
         // Gates
         let gates = [
-            circuit.add_function_node(node::TriState::new(1)),
-            circuit.add_function_node(node::TriState::new(1)),
+            circuit.add_function_node(func::TriState::new(1)),
+            circuit.add_function_node(func::TriState::new(1)),
         ];
 
         circuit.connect_all(gates[0], &[lo, lo, out]);
@@ -169,8 +169,8 @@ mod tests {
         let (_, out) = circuit.add_output(1);
         // Gates
         let gates = [
-            circuit.add_function_node(node::TriState::new(1)),
-            circuit.add_function_node(node::TriState::new(1)),
+            circuit.add_function_node(func::TriState::new(1)),
+            circuit.add_function_node(func::TriState::new(1)),
         ];
 
         circuit.connect_all(gates[0], &[hi, lo, out]);
@@ -190,9 +190,9 @@ mod tests {
         let (_, out) = circuit.add_output(1);
         // Gates
         let gates = [
-            circuit.add_function_node(node::Not::new(1)),
-            circuit.add_function_node(node::Not::new(1)),
-            circuit.add_function_node(node::Not::new(1)),
+            circuit.add_function_node(func::Not::new(1)),
+            circuit.add_function_node(func::Not::new(1)),
+            circuit.add_function_node(func::Not::new(1)),
         ];
 
         circuit.connect_all(gates[0], &[inp, mid]);
@@ -213,8 +213,8 @@ mod tests {
             circuit.add_output(1), // Q'
         ];
         let [rnand, snand] = [
-            circuit.add_function_node(node::Nand::new(1, 2)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
         ];
 
         // R = 1, S = 1
@@ -262,11 +262,11 @@ mod tests {
         ];
         // nodes
         let [dnot, dnand, dpnand, rnand, snand] = [
-            circuit.add_function_node(node::Not::new(1)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
-            circuit.add_function_node(node::Nand::new(1, 2)),
+            circuit.add_function_node(func::Not::new(1)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Nand::new(1, 2)),
         ];
 
         circuit.connect_all(dnot, &[din, dinp]);
@@ -310,10 +310,10 @@ mod tests {
         let (out_g, out) = circuit.add_output(1);
         // Gates
         let gates = [
-            circuit.add_function_node(node::Xor::new(1, 2)),
-            circuit.add_function_node(node::Xor::new(1, 2)),
-            circuit.add_function_node(node::Xor::new(1, 2)),
-            circuit.add_function_node(node::Xor::new(1, 2)),
+            circuit.add_function_node(func::Xor::new(1, 2)),
+            circuit.add_function_node(func::Xor::new(1, 2)),
+            circuit.add_function_node(func::Xor::new(1, 2)),
+            circuit.add_function_node(func::Xor::new(1, 2)),
         ];
 
         circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);
@@ -330,7 +330,7 @@ mod tests {
         let mut circuit = Circuit::new();
 
         let a_in = circuit.add_value_node();
-        let gate = circuit.add_function_node(node::Not::new(1));
+        let gate = circuit.add_function_node(func::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
         assert!(circuit.replace(a_in, bitarr![1]).is_ok());
@@ -344,7 +344,7 @@ mod tests {
         let mut circuit = Circuit::new();
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
-        let splitter = circuit.add_function_node(node::Splitter::new(8));
+        let splitter = circuit.add_function_node(func::Splitter::new(8));
         circuit.connect_all(splitter, &nodes);
 
         // joined -> split
@@ -397,7 +397,7 @@ mod tests {
         ];
         let nodes = nodes.map(|(_, n)| n);
 
-        let reg = circuit.add_function_node(node::Register::new(8));
+        let reg = circuit.add_function_node(func::Register::new(8));
         circuit.connect_all(reg, &nodes);
 
         // enable off, clock down

@@ -13,7 +13,7 @@ use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
 use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
-use crate::node::{Component, ComponentFn, PortType, PortUpdate};
+use crate::func::{Component, ComponentFn, PortType, PortUpdate};
 
 /// Trait which allows reading a [`BitArray`] value from [`CircuitState`].
 pub trait StateGetter {
