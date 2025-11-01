@@ -10,6 +10,7 @@
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
 use crate::bitarray::{BitArray, BitState};
+use crate::circuit::CircuitGraphMap;
 use crate::circuit::state::InnerFunctionState;
 
 use enum_dispatch::enum_dispatch;
@@ -79,7 +80,7 @@ pub trait Component {
     /// 
     /// This is called only once during initialization.
     /// It is assumed that the result of this function will not change when called multiple times.
-    fn ports(&self) -> Vec<PortProperties>;
+    fn ports(&self, graphs: &CircuitGraphMap) -> Vec<PortProperties>;
     
     /// Initializes the port state of the component.
     /// 
@@ -89,7 +90,7 @@ pub trait Component {
     /// Initializes the internal state of the component.
     /// 
     /// If not specified, by default, this is `Default::default()`.
-    fn initialize_inner_state(&self) -> Option<InnerFunctionState> {
+    fn initialize_inner_state(&self, _graphs: &CircuitGraphMap) -> Option<InnerFunctionState> {
         None
     }
     
@@ -106,7 +107,7 @@ pub trait Component {
     fn run(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         // Only run in debug mode
         if cfg!(debug_assertions) {
-            let props = self.ports();
+            let props = self.ports(ctx.graphs);
             validate_ports(&props, ctx.old_ports);
             validate_ports(&props, ctx.new_ports);
         }
@@ -190,6 +191,8 @@ impl Sensitivity {
 
 /// All properties available when running a component.
 pub struct RunContext<'a> {
+    /// A map of graphs.
+    pub graphs: &'a CircuitGraphMap,
     /// The value of the ports before update.
     pub old_ports: &'a [BitArray],
     /// The value of the ports after an update.

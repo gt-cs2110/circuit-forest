@@ -1,4 +1,5 @@
 
+use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarr, bitarray::BitArray};
 
@@ -23,7 +24,7 @@ impl Mux {
     }
 }
 impl Component for Mux {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // selector
             (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
@@ -60,7 +61,7 @@ impl Demux {
     }
 }
 impl Component for Demux {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
             port_list(&[
             // selector
             (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
@@ -102,7 +103,7 @@ impl Decoder {
     }
 }
 impl Component for Decoder {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // selector
             (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
@@ -144,7 +145,7 @@ mod tests {
 
             // create mux
             let mux = Mux::new(BITSIZE, selsize);
-            let props = mux.ports();
+            let props = mux.ports(&Default::default());
 
             assert_eq!(props.len(), input_count + 2, "Mux with selsize {selsize} should have {} ports", input_count + 2);
             assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Mux port should be an input selector of bitsize {selsize}");
@@ -170,7 +171,8 @@ mod tests {
                 let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
                 assert!(result.is_ok());
 
-                let actual = mux.run(RunContext{
+                let actual = mux.run(RunContext {
+                    graphs: &Default::default(),
                     old_ports: &ports,
                     new_ports: &ports,
                     inner_state: None
@@ -196,7 +198,7 @@ mod tests {
 
             // create demux
             let demux = Demux::new(BITSIZE, selsize);
-            let props = demux.ports();
+            let props = demux.ports(&Default::default());
 
             assert_eq!(props.len(), input_count + 2, "Demux with selsize {selsize} should have {} ports", input_count + 2);
             assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Demux port should be an input selector of bitsize {selsize}");
@@ -219,7 +221,8 @@ mod tests {
                 assert!(ports[0].replace(BitArray::from_bits(sel as u64, selsize)).is_ok());
                 assert!(ports[1].replace(expected_out).is_ok());
 
-                let actual = demux.run(RunContext{
+                let actual = demux.run(RunContext {
+                    graphs: &Default::default(),
                     old_ports: &ports,
                     new_ports: &ports,
                     inner_state: None
@@ -254,7 +257,7 @@ mod tests {
 
             // create decoder
             let decoder = Decoder::new(selsize);
-            let props = decoder.ports();
+            let props = decoder.ports(&Default::default());
 
             assert_eq!(props.len(), output_count + 1, "Decoder with selsize {selsize} should have {} ports", output_count + 1);
             assert_eq!(props[0], PortProperties { ty: PortType::Input, bitsize: selsize }, "First Decoder port should be an input selector of bitsize {selsize}");
@@ -270,7 +273,8 @@ mod tests {
                 let result = ports[0].replace(BitArray::from_bits(sel as u64, selsize));
                 assert!(result.is_ok());
                 
-                let actual = decoder.run(RunContext{
+                let actual = decoder.run(RunContext {
+                    graphs: &Default::default(),
                     old_ports: &ports,
                     new_ports: &ports,
                     inner_state: None

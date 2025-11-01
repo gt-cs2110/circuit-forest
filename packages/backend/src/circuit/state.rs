@@ -12,7 +12,7 @@ use slotmap::{SecondaryMap, SparseSecondaryMap};
 use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
+use crate::circuit::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueIssue, ValueKey};
 use crate::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
 /// The state of the circuit.
@@ -37,20 +37,22 @@ impl CircuitState {
         }
     }
     /// Initializes a function node's state in this CircuitState.
-    pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn) {
+    pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn, graphs: &CircuitGraphMap) {
         if let Some(Entry::Vacant(e)) = self.functions.entry(key) {
-            e.insert(FunctionState::new(func));
+            e.insert(FunctionState::new(func, graphs));
         }
     }
 
     /// Creates an initial [`CircuitState`] from a [`CircuitGraph`].
-    fn init_from_graph(graph: &CircuitGraph) -> Self {
+    fn init_from_graph(graphs: &CircuitGraphMap, key: CircuitKey) -> Self {
+        let graph = &graphs[key];
+
         let mut state = Self::default();
         for k in graph.values.keys() {
             state.init_value(k);
         }
         for (k, f) in graph.functions.iter() {
-            state.init_func(k, &f.func);
+            state.init_func(k, &f.func, graphs);
         }
 
         // All values tentatively need to be recomputed
@@ -58,7 +60,7 @@ impl CircuitState {
             graph.values.keys()
                 .map(|k| (k, TriggerState { recalculate: true }))
         });
-        state.propagate(graph);
+        state.propagate(graphs, key);
 
         state
     }
@@ -80,7 +82,8 @@ impl CircuitState {
     /// (until the circuit stabilizes or an oscillation occurs).
     /// 
     /// This takes the graph to determine the relationship between nodes.
-    pub fn propagate(&mut self, graph: &CircuitGraph) {
+    pub fn propagate(&mut self, graphs: &CircuitGraphMap, key: CircuitKey) {
+        let graph = &graphs[key];
         const RUN_ITER_LIMIT: usize = 10_000;
 
         let mut iteration = 0;
@@ -162,6 +165,7 @@ impl CircuitState {
                 }
                 
                 let ctx = RunContext {
+                    graphs,
                     old_ports: &old_values,
                     new_ports: &state.ports,
                     inner_state: state.inner.as_mut()
@@ -283,13 +287,13 @@ pub struct FunctionState {
 }
 impl FunctionState {
     /// Creates a new initial function state for the specified `func`.
-    pub fn new(func: &ComponentFn) -> Self {
-        let mut ports: Vec<_> = func.ports().into_iter()
+    pub fn new(func: &ComponentFn, graphs: &CircuitGraphMap) -> Self {
+        let mut ports: Vec<_> = func.ports(graphs).into_iter()
             .map(|props| bitarr![Z; props.bitsize])
             .collect();
         
         func.initialize_port_state(&mut ports);
-        let inner = func.initialize_inner_state();
+        let inner = func.initialize_inner_state(graphs);
         Self { ports, inner }
     }
 

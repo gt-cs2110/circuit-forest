@@ -1,4 +1,5 @@
 use crate::bitarray::BitArray;
+use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// An input.
@@ -15,7 +16,7 @@ impl Input {
     }
 }
 impl Component for Input {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // output
             (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
@@ -41,7 +42,7 @@ impl Output {
     }
 }
 impl Component for Output {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // output
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
@@ -65,7 +66,7 @@ impl Constant {
     }
 }
 impl Component for Constant {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // output
             (PortProperties { ty: PortType::Output, bitsize: self.value.len() }, 1),
@@ -94,7 +95,7 @@ impl Splitter {
     }
 }
 impl Component for Splitter {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // joined
             (PortProperties { ty: PortType::Inout, bitsize: self.bitsize }, 1),
@@ -128,7 +129,7 @@ mod tests {
     fn test_splitter_split() {
         for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
             let splitter = Splitter::new(bitsize);
-            let props = splitter.ports();
+            let props = splitter.ports(&Default::default());
 
             assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
             assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
@@ -152,6 +153,7 @@ mod tests {
             assert!(result.is_ok());
             
             let actual = splitter.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &old_ports, 
                 new_ports: &new_ports,
                 inner_state: None
@@ -175,7 +177,7 @@ mod tests {
     fn test_splitter_join() {
         for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
             let splitter = Splitter::new(bitsize);
-            let props = splitter.ports();
+            let props = splitter.ports(&Default::default());
 
             assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
             assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
@@ -204,6 +206,7 @@ mod tests {
             }
             
             let actual = splitter.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &old_ports, 
                 new_ports: &new_ports,
                 inner_state: None

@@ -10,6 +10,7 @@ use std::ops::{Index, IndexMut};
 
 use slotmap::{SlotMap, new_key_type};
 
+use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, ComponentFn, PortProperties};
 
 
@@ -66,8 +67,8 @@ pub struct FunctionNode {
 }
 impl FunctionNode {
     /// Creates a new function node with the specified component function type.
-    pub fn new(func: ComponentFn) -> Self {
-        let port_props = func.ports();
+    pub fn new(func: ComponentFn, graphs: &CircuitGraphMap) -> Self {
+        let port_props = func.ports(graphs);
         let links = vec![None; port_props.len()];
         
         Self { func, links, port_props }
@@ -90,8 +91,8 @@ impl CircuitGraph {
 
     /// Adds a new function node to the graph (using the provided component function)
     /// and returns its index.
-    pub fn add_function(&mut self, func: ComponentFn) -> FunctionKey {
-        self.functions.insert(FunctionNode::new(func))
+    pub fn add_function(&mut self, node: FunctionNode) -> FunctionKey {
+        self.functions.insert(node)
     }
 
     /// When connecting another port to the value node,

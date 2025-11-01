@@ -14,6 +14,9 @@ new_key_type! {
     /// Key type for maps to circuits.
     pub struct CircuitKey;
 }
+
+/// The map of circuit graphs.
+pub type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// A group of circuits.
 /// 
 /// This encompasses multiple circuits.
@@ -114,8 +117,9 @@ impl Circuit<'_> {
 
     /// Create a function node with the passed component function.
     pub fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
-        let key = self.forest.graphs[self.key].add_function(f.into());
-        self.forest.states[self.key].init_func(key, &self.forest.graphs[self.key].functions[key].func);
+        let node = FunctionNode::new(f.into(), &self.forest.graphs);
+        let key = self.forest.graphs[self.key].add_function(node);
+        self.forest.states[self.key].init_func(key, &self.forest.graphs[self.key].functions[key].func, &self.forest.graphs);
         key
     }
 
@@ -154,7 +158,7 @@ impl Circuit<'_> {
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).
     pub fn propagate(&mut self) {
-        self.forest.states[self.key].propagate(&self.forest.graphs[self.key]);
+        self.forest.states[self.key].propagate(&self.forest.graphs, self.key);
     }
 
     /// Gets current circuit state.

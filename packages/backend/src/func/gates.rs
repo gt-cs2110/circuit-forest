@@ -1,4 +1,5 @@
 use crate::bitarray::{BitArray, BitState, bitarr};
+use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 
 /// Minimum number of inputs for multi-input logic gates.
@@ -25,7 +26,7 @@ macro_rules! gates {
                 }
             }
             impl Component for $Id {
-                fn ports(&self) -> Vec<PortProperties> {
+                fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
                     port_list(&[
                         // inputs
                         (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, self.n_inputs),
@@ -78,7 +79,7 @@ impl Not {
     }
 }
 impl Component for Not {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // input
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
@@ -107,7 +108,7 @@ impl TriState {
     }
 }
 impl Component for TriState {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // selector
             (PortProperties { ty: PortType::Input, bitsize: 1 }, 1),
@@ -139,6 +140,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -161,6 +163,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -182,6 +185,7 @@ mod tests {
         let in_c = bitarr![1, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -202,6 +206,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -222,6 +227,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -243,6 +249,7 @@ mod tests {
         let in_c = bitarr![0, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -263,6 +270,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -283,6 +291,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -304,6 +313,7 @@ mod tests {
         let in_c = bitarr![0, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -324,6 +334,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -343,6 +354,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -363,6 +375,7 @@ mod tests {
         let in_c = bitarr![1, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -383,6 +396,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -402,6 +416,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -422,6 +437,7 @@ mod tests {
         let in_c = bitarr![0, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -442,6 +458,7 @@ mod tests {
         let in_b = bitarr![1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[in_a, in_b, bitarr![Z]],
             inner_state: None
@@ -461,6 +478,7 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 3],
             new_ports: &[in_a, in_b, bitarr![Z; 4]],
             inner_state: None
@@ -481,6 +499,7 @@ mod tests {
         let in_c = bitarr![0, 1, 1, 0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 4],
             new_ports: &[in_a, in_b, in_c, bitarr![Z; 4]],
             inner_state: None
@@ -500,6 +519,7 @@ mod tests {
         let in_a = bitarr![0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 2],
             new_ports: &[in_a, bitarr![Z]],
             inner_state: None
@@ -518,6 +538,7 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z; 4]; 2],
             new_ports: &[in_a, bitarr![Z; 4]],
             inner_state: None
@@ -536,6 +557,7 @@ mod tests {
         let in_a = bitarr![0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[bitarr![0], in_a, bitarr![Z]],
             inner_state: None
@@ -553,6 +575,7 @@ mod tests {
         let in_a = bitarr![0];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z]; 3],
             new_ports: &[bitarr![1], in_a, bitarr![Z]],
             inner_state: None
@@ -570,6 +593,7 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
             new_ports: &[bitarr![0], in_a, bitarr![Z; 4]],
             inner_state: None
@@ -587,6 +611,7 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
 
         let updates = gate.run(RunContext {
+            graphs: &Default::default(),
             old_ports: &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
             new_ports: &[bitarr![1], in_a, bitarr![Z; 4]],
             inner_state: None
@@ -609,6 +634,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -623,6 +649,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -637,6 +664,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -651,6 +679,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -665,6 +694,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -679,6 +709,7 @@ mod tests {
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 3],
                 new_ports: &[bad_in, good_in, bitarr![Z; 4]],
                 inner_state: None
@@ -692,6 +723,7 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z; 4]; 2],
                 new_ports: &[bad_in, bitarr![Z; 4]],
                 inner_state: None
@@ -705,6 +737,7 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let _ = gate.run(RunContext {
+                graphs: &Default::default(),
                 old_ports: &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
                 new_ports: &[bitarr![Z], bad_in, bitarr![Z; 4]],
                 inner_state: None

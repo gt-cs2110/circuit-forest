@@ -1,4 +1,7 @@
-use crate::{bitarray::{BitArray, BitState, bitarr}, func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list}};
+use crate::bitarr;
+use crate::bitarray::{BitArray, BitState};
+use crate::circuit::CircuitGraphMap;
+use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// A register component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -14,7 +17,7 @@ impl Register {
     }
 }
 impl Component for Register {
-    fn ports(&self) -> Vec<PortProperties> {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // din
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
