@@ -45,6 +45,7 @@ impl Component for Subcircuit {
             .filter(|&(k, _)| matches!(&ctx.graphs[self.key][k].func, ComponentFn::Input(_)))
             .zip(ctx.new_ports)
         {
+            // FIXME: This is equivalent to [`Circuit::replace_port`].
             let result = fst.replace_port(0, value);
             if let Some(wire) = ctx.graphs[self.key].functions[fk].links[0] {
                 st.transient.triggers.insert(wire, TriggerState { recalculate: true });
