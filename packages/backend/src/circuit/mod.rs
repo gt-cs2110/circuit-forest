@@ -5,9 +5,9 @@ pub mod graph;
 
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
-use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionPort, ValueKey};
-use crate::circuit::state::{CircuitState, TriggerState, ValueState};
+use crate::bitarray::BitArray;
+use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionNode, FunctionPort, ValueKey};
+use crate::circuit::state::{CircuitState, TriggerState};
 use crate::func::ComponentFn;
 
 new_key_type! {
@@ -108,7 +108,7 @@ impl Circuit<'_> {
     /// Create a value node (essentially a wire) with the specified bitsize.
     pub fn add_value_node(&mut self) -> ValueKey {
         let key = self.forest.graphs[self.key].add_value();
-        self.forest.states[self.key].values.insert(key, ValueState::new(bitarr![]));
+        self.forest.states[self.key].init_value(key);
         key
     }
 
