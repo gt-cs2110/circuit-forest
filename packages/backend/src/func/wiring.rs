@@ -14,6 +14,11 @@ impl Input {
             bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
         }
     }
+
+    /// Gets the bitsize of this component.
+    pub fn get_bitsize(&self) -> u8 {
+        self.bitsize
+    }
 }
 impl Component for Input {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
@@ -39,6 +44,11 @@ impl Output {
         Self {
             bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
         }
+    }
+
+    /// Gets the bitsize of this component.
+    pub fn get_bitsize(&self) -> u8 {
+        self.bitsize
     }
 }
 impl Component for Output {

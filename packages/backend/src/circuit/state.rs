@@ -44,7 +44,7 @@ impl CircuitState {
     }
 
     /// Creates an initial [`CircuitState`] from a [`CircuitGraph`].
-    fn init_from_graph(graphs: &CircuitGraphMap, key: CircuitKey) -> Self {
+    pub(crate) fn init_from_graph(graphs: &CircuitGraphMap, key: CircuitKey) -> Self {
         let graph = &graphs[key];
 
         let mut state = Self::default();
