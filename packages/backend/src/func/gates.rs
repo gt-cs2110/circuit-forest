@@ -138,7 +138,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         // Checks if we have only one update. Should be 1 for logic gates
         // Checks if port 2, the output port for two input gates was updated
@@ -156,7 +159,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         // 1011 & 1100 = 1000;
         assert_eq!(
@@ -173,7 +179,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 0];
         let in_c = bitarr![1, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // 1011 & 1100 & 1110 = 1000;
         assert_eq!(
@@ -189,7 +198,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         // 1 | 0 = 1;
         assert_eq!(
@@ -205,7 +217,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         // 1011 | 1100 = 1111;
         assert_eq!(
@@ -222,7 +237,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 0];
         let in_c = bitarr![0, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // 1011 | 1100 | 0110 = 1111;
         assert_eq!(
@@ -238,7 +256,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         // 1 ^ 0 = 1;
         assert_eq!(
@@ -254,7 +275,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         // 1011 ^ 1101 = 0110;
         assert_eq!(
@@ -271,7 +295,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // 1011 ^ 1101 ^ 0110 = 0000;
         assert_eq!(
@@ -287,7 +314,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         assert_eq!(
             updates,
@@ -302,7 +332,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         assert_eq!(
             updates,
@@ -318,7 +351,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![1, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // !(1011 & 1101 & 1110) = 0111;
         assert_eq!(
@@ -334,7 +370,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         assert_eq!(
             updates,
@@ -349,7 +388,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         assert_eq!(
             updates,
@@ -365,7 +407,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // !(1011 | 1101 | 0110) = 0000;
         assert_eq!(
@@ -381,7 +426,10 @@ mod tests {
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z]; 3],
+            &[in_a, in_b, bitarr![Z]]
+        );
 
         assert_eq!(
             updates,
@@ -396,7 +444,10 @@ mod tests {
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
-        let updates = gate.run(&[], &[in_a, in_b]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 3],
+            &[in_a, in_b, bitarr![Z; 4]]
+        );
 
         assert_eq!(
             updates,
@@ -412,7 +463,10 @@ mod tests {
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
 
-        let updates = gate.run(&[], &[in_a, in_b, in_c]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 4],
+            &[in_a, in_b, in_c, bitarr![Z; 4]]
+        );
 
         // !(1011 ^ 1101 ^ 0110) = 1111;
         assert_eq!(
@@ -427,7 +481,10 @@ mod tests {
         let gate = Not::new(1);
         let in_a = bitarr![0];
 
-        let updates = gate.run(&[], &[in_a]);
+        let updates = gate.run(
+            &[bitarr![Z]; 2],
+            &[in_a, bitarr![Z]]
+        );
 
         assert_eq!(
             updates,
@@ -441,7 +498,10 @@ mod tests {
         let gate = Not::new(4);
         let in_a = bitarr![1, 0, 1, 1];
 
-        let updates = gate.run(&[], &[in_a]);
+        let updates = gate.run(
+            &[bitarr![Z; 4]; 2],
+            &[in_a, bitarr![Z; 4]]
+        );
 
         assert_eq!(
             updates,
@@ -460,7 +520,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -470,7 +533,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -480,7 +546,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -490,7 +559,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -500,7 +572,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -510,7 +585,10 @@ mod tests {
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
-            let _ = gate.run(&[], &[bad_in, good_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 3],
+                &[bad_in, good_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -519,7 +597,10 @@ mod tests {
             let gate = Not::new(4);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
-            let _ = gate.run(&[], &[bad_in]);
+            let _ = gate.run(
+                &[bitarr![Z; 4]; 2],
+                &[bad_in, bitarr![Z; 4]]
+            );
         } 
 
         #[test]
@@ -528,7 +609,10 @@ mod tests {
             let gate = TriState::new(4);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
-            let _ = gate.run(&[], &[bad_in]);
+            let _ = gate.run(
+                &[bitarr![Z], bitarr![Z; 4], bitarr![Z; 4]],
+                &[bitarr![Z], bad_in, bitarr![Z; 4]]
+            );
         } 
     }
 }
