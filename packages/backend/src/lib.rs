@@ -9,13 +9,15 @@ pub mod circuit;
 #[cfg(test)]
 mod tests {
     use crate::bitarray::{bitarr, BitArray, BitState};
-    use crate::circuit::{Circuit, ValueIssue};
+    use crate::circuit::{CircuitForest, ValueIssue};
 
     use super::*;
 
     #[test]
     fn simple() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+        
         let a = 0x9A3B2174_94093211;
         let b = 0x19182934_19AFFC94;
 
@@ -36,7 +38,9 @@ mod tests {
 
     #[test]
     fn dual() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let a = 0x9A3B2174_94093211;
         let b = 0x19182934_19AFFC94;
         let c = 0x92821734_182A9A9A;
@@ -69,7 +73,9 @@ mod tests {
 
     #[test]
     fn simple_io() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let inp = circuit.add_function_node(func::Input::new(1));
         let out = circuit.add_function_node(func::Output::new(1));
         let wire = circuit.add_value_node();
@@ -79,21 +85,23 @@ mod tests {
 
         circuit.run(&[wire]);
 
-        assert_eq!(circuit.state().value(wire), bitarr![Z]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![Z]);
         assert_eq!(circuit.get_output(out), bitarr![Z]);
 
         assert!(circuit.set_input(inp, bitarr![0]).is_ok());
-        assert_eq!(circuit.state().value(wire), bitarr![0]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![0]);
         assert_eq!(circuit.get_output(out), bitarr![0]);
 
         assert!(circuit.set_input(inp, bitarr![1]).is_ok());
-        assert_eq!(circuit.state().value(wire), bitarr![1]);
+        assert_eq!(circuit.state().get_node_value(wire), bitarr![1]);
         assert_eq!(circuit.get_output(out), bitarr![1]);
     }
 
     #[test]
     fn metastable() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let a = 0x98A85409_19182A9F;
 
         let wires = [
@@ -108,18 +116,20 @@ mod tests {
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
         circuit.connect_all(gates[1], &[wires[1], wires[0]]);
 
-        assert!(circuit.replace(wires[0], BitArray::from(a)).is_ok());
+        assert!(circuit.replace_value(wires[0], BitArray::from(a)).is_ok());
         circuit.run(&[wires[0]]);
 
-        let (l1, r1) = (circuit.state().value(wires[0]), BitArray::from(a));
-        let (l2, r2) = (circuit.state().value(wires[1]), BitArray::from(!a));
+        let (l1, r1) = (circuit.state().get_node_value(wires[0]), BitArray::from(a));
+        let (l2, r2) = (circuit.state().get_node_value(wires[1]), BitArray::from(!a));
         assert_eq!(l1, r1);
         assert_eq!(l2, r2);
     }
 
     #[test]
     fn nand_propagate() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         let (_, inp) = circuit.add_input(bitarr![0]);
         let (out0_g, out0) = circuit.add_output(1);
@@ -133,14 +143,16 @@ mod tests {
         circuit.connect_all(gates[1], &[inp, out0, out1]);
         circuit.run(&[inp]);
 
-        assert_eq!(circuit.state().value(inp), bitarr![0]);
+        assert_eq!(circuit.state().get_node_value(inp), bitarr![0]);
         assert_eq!(circuit.get_output(out0_g), bitarr![1]);
         assert_eq!(circuit.get_output(out1_g), bitarr![1]);
     }
 
     #[test]
     fn conflict_pass_z() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         // Wires
         let (_, lo) = circuit.add_input(bitarr![0]);
@@ -161,7 +173,9 @@ mod tests {
 
     #[test]
     fn conflict_fail() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         // Wires
         let (_, lo) = circuit.add_input(bitarr![0]);
@@ -177,12 +191,14 @@ mod tests {
         circuit.connect_all(gates[1], &[hi, hi, out]);
         circuit.run(&[lo, hi]);
 
-        assert!(circuit.state().issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
+        assert!(circuit.state().get_issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]
     fn delay_conflict() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         
         // Wires
         let (_, inp) = circuit.add_input(bitarr![0]); 
@@ -200,12 +216,14 @@ mod tests {
         circuit.connect_all(gates[2], &[inp, out]);
         circuit.run(&[inp]);
 
-        assert!(circuit.state().issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
+        assert!(circuit.state().get_issues(out).contains(&ValueIssue::ShortCircuit), "Node 'out' should short circuit");
     }
 
     #[test]
     fn rs_latch() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let [(r_g, r), (s_g, s), (q_g, q), (qp_g, qp)] = [
             circuit.add_input(bitarr![1]), // R
             circuit.add_input(bitarr![1]), // S
@@ -228,8 +246,8 @@ mod tests {
 
         // R = 0, S = 1
         assert!(circuit.set_input(r_g, bitarr![0]).is_ok());
-        println!("{}", circuit.state().value(r));
-        println!("{}", circuit.state().value(s));
+        println!("{}", circuit.state().get_node_value(r));
+        println!("{}", circuit.state().get_node_value(s));
         circuit.run(&[r]);
 
         assert_eq!(circuit.get_output(q_g), bitarr![0]);
@@ -246,7 +264,9 @@ mod tests {
 
     #[test]
     fn d_latch() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         // external
         let [(din_g, din), (wen_g, wen), (dout_g, dout), (doutp_g, doutp)] = [
             circuit.add_input(bitarr![0]),
@@ -294,9 +314,126 @@ mod tests {
         assert_eq!(circuit.get_output(dout_g), bitarr![1]);
         assert_eq!(circuit.get_output(doutp_g), bitarr![0]);
     }
+
+    #[test]
+    fn subcircuit() {
+        let mut forest = CircuitForest::new();
+        let sub_key = forest.add_circuit();
+        let super_key = forest.add_circuit();
+
+        // NAND gate
+        let mut sub_circuit = forest.circuit(sub_key);
+        let [(_, a), (_, b), (_, out)] = [
+            sub_circuit.add_input(bitarr![0]),
+            sub_circuit.add_input(bitarr![0]),
+            sub_circuit.add_output(1),
+        ];
+        let gate = sub_circuit.add_function_node(func::Nand::new(1, 2));
+        sub_circuit.connect_all(gate, &[a, b, out]);
+
+        // Using gates
+        let mut super_circuit = forest.circuit(super_key);
+        let [(a_g, a), (b_g, b), (out_g, out)] = [
+            super_circuit.add_input(bitarr![0]),
+            super_circuit.add_input(bitarr![0]),
+            super_circuit.add_output(1),
+        ];
+        let gate = super_circuit.add_function_node(func::Subcircuit::new(sub_key));
+        super_circuit.connect_all(gate, &[a, b, out]);
+
+        // A = 0, B = 0
+        assert!(super_circuit.set_input(a_g, bitarr![0]).is_ok());
+        assert!(super_circuit.set_input(b_g, bitarr![0]).is_ok());
+        super_circuit.run(&[a, b]);
+        assert_eq!(super_circuit.get_output(out_g), bitarr![1]);
+
+        // A = 0, B = 1
+        assert!(super_circuit.set_input(a_g, bitarr![0]).is_ok());
+        assert!(super_circuit.set_input(b_g, bitarr![1]).is_ok());
+        super_circuit.run(&[a, b]);
+        assert_eq!(super_circuit.get_output(out_g), bitarr![1]);
+        
+        // A = 1, B = 0
+        assert!(super_circuit.set_input(a_g, bitarr![1]).is_ok());
+        assert!(super_circuit.set_input(b_g, bitarr![0]).is_ok());
+        super_circuit.run(&[a, b]);
+        assert_eq!(super_circuit.get_output(out_g), bitarr![1]);
+        
+        // A = 1, B = 1
+        assert!(super_circuit.set_input(a_g, bitarr![1]).is_ok());
+        assert!(super_circuit.set_input(b_g, bitarr![1]).is_ok());
+        super_circuit.run(&[a, b]);
+        assert_eq!(super_circuit.get_output(out_g), bitarr![0]);
+    }
+
+    #[test]
+    fn subcircuit_rs_d() {
+        let mut forest = CircuitForest::new();
+        let rs_key = forest.add_circuit();
+        let d_key = forest.add_circuit();
+
+        let mut rs_circuit = forest.circuit(rs_key);
+        {
+            let [(_, r), (_, s), (_, q), (_, qp)] = [
+                rs_circuit.add_input(bitarr![1]), // R
+                rs_circuit.add_input(bitarr![1]), // S
+                rs_circuit.add_output(1), // Q
+                rs_circuit.add_output(1), // Q'
+            ];
+            let [rnand, snand] = [
+                rs_circuit.add_function_node(func::Nand::new(1, 2)),
+                rs_circuit.add_function_node(func::Nand::new(1, 2)),
+            ];
+            rs_circuit.connect_all(rnand, &[r, q, qp]);
+            rs_circuit.connect_all(snand, &[s, qp, q]);
+        }
+
+        let mut d_circuit = forest.circuit(d_key);
+        let [(din_g, din), (wen_g, wen), (dout_g, dout)] = [
+            d_circuit.add_input(bitarr![0]),
+            d_circuit.add_input(bitarr![1]),
+            d_circuit.add_output(1),
+        ];
+        // internal
+        let [dinp, r, s] = [
+            d_circuit.add_value_node(),
+            d_circuit.add_value_node(),
+            d_circuit.add_value_node(),
+        ];
+        // nodes
+        let [dnot, dnand, dpnand, rs] = [
+            d_circuit.add_function_node(func::Not::new(1)),
+            d_circuit.add_function_node(func::Nand::new(1, 2)),
+            d_circuit.add_function_node(func::Nand::new(1, 2)),
+            d_circuit.add_function_node(func::Subcircuit::new(rs_key))
+        ];
+
+        d_circuit.connect_all(dnot, &[din, dinp]);
+        d_circuit.connect_all(dnand, &[din, wen, s]);
+        d_circuit.connect_all(dpnand, &[dinp, wen, r]);
+        d_circuit.connect_all(rs, &[r, s, dout]);
+        
+        d_circuit.run(&[din, wen]);
+        assert_eq!(d_circuit.get_output(dout_g), bitarr![0]);
+
+        assert!(d_circuit.set_input(wen_g, bitarr![0]).is_ok());
+        d_circuit.run(&[wen]);
+        assert_eq!(d_circuit.get_output(dout_g), bitarr![0]);
+
+        assert!(d_circuit.set_input(din_g, bitarr![1]).is_ok());
+        d_circuit.run(&[din]);
+        assert_eq!(d_circuit.get_output(dout_g), bitarr![0]);
+
+        assert!(d_circuit.set_input(wen_g, bitarr![1]).is_ok());
+        d_circuit.run(&[wen]);
+        assert_eq!(d_circuit.get_output(dout_g), bitarr![1]);
+    }
+
     #[test]
     fn chain() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         
         // Wires
         let (_, a_in) = circuit.add_input(bitarr![1]);
@@ -327,21 +464,25 @@ mod tests {
 
     #[test]
     fn oscillate() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
 
         let a_in = circuit.add_value_node();
         let gate = circuit.add_function_node(func::Not::new(1));
         
         circuit.connect_all(gate, &[a_in, a_in]);
-        assert!(circuit.replace(a_in, bitarr![1]).is_ok());
+        assert!(circuit.replace_value(a_in, bitarr![1]).is_ok());
         circuit.run(&[a_in]);
 
-        assert!(circuit.state().issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
+        assert!(circuit.state().get_issues(a_in).contains(&ValueIssue::OscillationDetected), "Node 'in' should oscillate");
     }
 
     #[test]
     fn splitter() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
         let splitter = circuit.add_function_node(func::Splitter::new(8));
@@ -360,9 +501,9 @@ mod tests {
         ];
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
-        assert!(circuit.replace(joined_node, joined).is_ok());
+        assert!(circuit.replace_value(joined_node, joined).is_ok());
         circuit.run(&[nodes[0]]);
-        assert_eq!(split_nodes.map(|n| circuit.state().value(n)), split);
+        assert_eq!(split_nodes.map(|n| circuit.state().get_node_value(n)), split);
 
         // split -> joined
         let inputs = [
@@ -378,15 +519,17 @@ mod tests {
         let joined = BitArray::from_iter(inputs);
         let split = inputs.map(|st| BitArray::from_iter([st]));
         for (n, a) in std::iter::zip(split_nodes, split) {
-            assert!(circuit.replace(n, a).is_ok());
+            assert!(circuit.replace_value(n, a).is_ok());
         }
         circuit.run(&split_nodes);
-        assert_eq!(circuit.state().value(joined_node), joined);
+        assert_eq!(circuit.state().get_node_value(joined_node), joined);
     }
 
     #[test]
     fn register() {
-        let mut circuit = Circuit::new();
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
         let inputs = bitarr![1, 0, 1, 0, 1, 0, 1, 0];
         let nodes @ [(din_g, din), (enable_g, enable), (clock_g, clock), (clear_g, clear), (dout_g, _)] = [
             circuit.add_input(inputs),

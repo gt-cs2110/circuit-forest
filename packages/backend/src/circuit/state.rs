@@ -12,31 +12,8 @@ use slotmap::{SecondaryMap, SparseSecondaryMap};
 use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::{CircuitGraph, FunctionKey, FunctionPort, ValueIssue, ValueKey};
-use crate::func::{Component, ComponentFn, PortType, PortUpdate};
-
-/// Trait which allows reading a [`BitArray`] value from [`CircuitState`].
-pub trait StateGetter {
-    /// Gets the bit array value from the circuit state.
-    /// 
-    /// Panics if not in state.
-    fn get_value(&self, state: &CircuitState) -> BitArray;
-}
-impl StateGetter for ValueKey {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        state[*self].get_value()
-    }
-}
-impl StateGetter for FunctionPort {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        state[self.gate].ports[self.index]
-    }
-}
-impl<K: StateGetter> StateGetter for &K {
-    fn get_value(&self, state: &CircuitState) -> BitArray {
-        (*self).get_value(state)
-    }
-}
+use crate::circuit::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueIssue, ValueKey};
+use crate::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
 /// The state of the circuit.
 /// 
@@ -60,20 +37,22 @@ impl CircuitState {
         }
     }
     /// Initializes a function node's state in this CircuitState.
-    pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn) {
+    pub(crate) fn init_func(&mut self, key: FunctionKey, func: &ComponentFn, graphs: &CircuitGraphMap) {
         if let Some(Entry::Vacant(e)) = self.functions.entry(key) {
-            e.insert(FunctionState::new(func));
+            e.insert(FunctionState::new(func, graphs));
         }
     }
 
     /// Creates an initial [`CircuitState`] from a [`CircuitGraph`].
-    fn init_from_graph(graph: &CircuitGraph) -> Self {
+    pub(crate) fn init_from_graph(graphs: &CircuitGraphMap, key: CircuitKey) -> Self {
+        let graph = &graphs[key];
+
         let mut state = Self::default();
         for k in graph.values.keys() {
             state.init_value(k);
         }
         for (k, f) in graph.functions.iter() {
-            state.init_func(k, &f.func);
+            state.init_func(k, &f.func, graphs);
         }
 
         // All values tentatively need to be recomputed
@@ -81,15 +60,21 @@ impl CircuitState {
             graph.values.keys()
                 .map(|k| (k, TriggerState { recalculate: true }))
         });
-        state.propagate(graph);
+        state.propagate(graphs, key);
 
         state
     }
 
-    pub(crate) fn value<K: StateGetter>(&self, k: K) -> BitArray {
-        K::get_value(&k, self)
+    /// Gets the bit value of a [`ValueNode`].
+    pub fn get_node_value(&self, k: ValueKey) -> BitArray {
+        self[k].get_value()
     }
-    pub(crate) fn issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
+    /// Gets the bit value of a port attached to a [`FunctionNode`].
+    pub fn get_port_value(&self, p: FunctionPort) -> BitArray {
+        self[p.gate].get_port(p.index)
+    }
+    /// Gets all issues associated with a given [`ValueNode`].
+    pub fn get_issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
         &self[k].issues
     }
 
@@ -97,7 +82,8 @@ impl CircuitState {
     /// (until the circuit stabilizes or an oscillation occurs).
     /// 
     /// This takes the graph to determine the relationship between nodes.
-    pub fn propagate(&mut self, graph: &CircuitGraph) {
+    pub fn propagate(&mut self, graphs: &CircuitGraphMap, key: CircuitKey) {
+        let graph = &graphs[key];
         const RUN_ITER_LIMIT: usize = 10_000;
 
         let mut iteration = 0;
@@ -125,7 +111,7 @@ impl CircuitState {
                             // Get all port values feeding into value
                             let feed_it = graph[node].links.iter()
                                 .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_output())
-                                .map(|&p| self.value(p));
+                                .map(|&p| self.get_port_value(p));
                             // Find value and short circuit status
                             let (result, occupied) = feed_it.fold(
                                 (bitarr![Z; s], Some(0)),
@@ -146,7 +132,7 @@ impl CircuitState {
                         }
                     };
 
-                    propagate_update = self.value(node) != result;
+                    propagate_update = self.get_node_value(node) != result;
                     self[node].value = result;
                 }
 
@@ -178,7 +164,13 @@ impl CircuitState {
                         .unwrap_or_else(|| bitarr![Z; props.bitsize]);
                 }
                 
-                for PortUpdate { index, value } in gate.func.run(&old_values, &state.ports) {
+                let ctx = RunContext {
+                    graphs,
+                    old_ports: &old_values,
+                    new_ports: &state.ports,
+                    inner_state: state.inner.as_mut()
+                };
+                for PortUpdate { index, value } in gate.func.run(ctx) {
                     // Push outputs:
                     debug_assert!(graph[gate_idx].port_props[index].ty.accepts_output(), "Input port cannot be updated");
                     debug_assert_eq!(graph[gate_idx].port_props[index].bitsize, value.len(), "Expected value to have matching bitsize");
@@ -249,7 +241,7 @@ impl ValueState {
     /// then this always succeeds and does not raise an error.
     /// 
     /// This also does **not** propagate the change through the circuit this ValueState is associated with.
-    pub fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+    pub(crate) fn replace_value(&mut self, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         match self.value.is_empty() {
             true => {
                 self.value = new_val;
@@ -274,22 +266,35 @@ impl ValueState {
     }
 }
 
+/// Internal state for a function node.
+/// 
+/// This isn't needed if all the information can be pulled from port data,
+/// but is useful for when larger state is needed (e.g., subcircuits, RAM).
+#[derive(Debug)]
+pub enum InnerFunctionState {
+    /// Subcircuit data.
+    Subcircuit(CircuitState),
+}
+
+
 /// The state of a [`FunctionNode`].
 /// 
 /// [`FunctionNode`]: crate::circuit::graph::FunctionNode
 #[derive(Debug)]
 pub struct FunctionState {
-    pub(crate) ports: Vec<BitArray>
+    pub(crate) ports: Vec<BitArray>,
+    pub(crate) inner: Option<InnerFunctionState>
 }
 impl FunctionState {
     /// Creates a new initial function state for the specified `func`.
-    pub fn new(func: &ComponentFn) -> Self {
-        let mut ports: Vec<_> = func.ports().into_iter()
+    pub fn new(func: &ComponentFn, graphs: &CircuitGraphMap) -> Self {
+        let mut ports: Vec<_> = func.ports(graphs).into_iter()
             .map(|props| bitarr![Z; props.bitsize])
             .collect();
-
-        func.initialize(&mut ports);
-        Self { ports }
+        
+        func.initialize_port_state(&mut ports);
+        let inner = func.initialize_inner_state(graphs);
+        Self { ports, inner }
     }
 
     /// Gets the bit value of a port.
@@ -305,7 +310,7 @@ impl FunctionState {
     /// then this always succeeds and does not raise an error.
     /// 
     /// This also does **not** propagate the change through the circuit this FunctionState is associated with.
-    pub fn set_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
+    pub(crate) fn replace_port(&mut self, index: usize, new_val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         self.ports[index].replace(new_val)
     }
 }
