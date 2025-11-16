@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown } from "lucide-vue-next";
 
-import MoveableCanvas from "./components/MoveableCanvas.vue";
+import CircuitCanvas from "./components/CircuitCanvas.vue";
 import Properties from "./components/Properties.vue";
 
 const categories = ["Wiring", "Gates", "Arithmetic", "Memory"];
@@ -43,7 +43,7 @@ const categories = ["Wiring", "Gates", "Arithmetic", "Memory"];
             </div>
         </div>
 
-        <MoveableCanvas />
+        <CircuitCanvas />
 
         <Properties />
     </div>

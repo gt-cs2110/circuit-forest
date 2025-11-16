@@ -52,15 +52,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div
-        class="absolute cursor-pointer bg-zinc-200 outline-offset-2 outline-blue-500"
-        :class="{ 'outline-2': selectedComponentId === props.component.id }"
-        :style="{
-            width: `${2 * GRID_SIZE}px`,
-            height: `${2 * GRID_SIZE}px`,
-            left: `${props.component.x * GRID_SIZE}px`,
-            top: `${props.component.y * GRID_SIZE}px`,
+    <rect
+        class="cursor-pointer text-zinc-200 outline-offset-2 outline-blue-500"
+        :class="{
+            'z-50 outline-2': selectedComponentId === props.component.id,
         }"
+        :width="2 * GRID_SIZE"
+        :height="2 * GRID_SIZE"
+        :x="props.component.x * GRID_SIZE"
+        :y="props.component.y * GRID_SIZE"
+        fill="currentColor"
         @mousedown="handleMouseDown"
-    ></div>
+    ></rect>
 </template>

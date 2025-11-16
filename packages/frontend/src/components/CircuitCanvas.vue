@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { GRID_SIZE } from "../lib/consts";
 import { components, scale, selectedComponentId, settings } from "../lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
+
+const ORIGIN_OFFSET = GRID_SIZE / 2;
 
 const _offset = ref({ x: 0, y: 0 });
 const offset = computed({
@@ -14,7 +16,7 @@ const offset = computed({
 });
 
 const isDragging = ref(false);
-const dragStart = ref({ x: 0, y: 0 });
+const dragStart = reactive({ x: 0, y: 0 });
 
 function handleMouseDown(e: MouseEvent) {
     if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
@@ -26,17 +28,15 @@ function handleMouseDown(e: MouseEvent) {
     }
 
     isDragging.value = true;
-    dragStart.value = {
-        x: e.clientX - offset.value.x,
-        y: e.clientY - offset.value.y,
-    };
+    dragStart.x = e.clientX - offset.value.x;
+    dragStart.y = e.clientY - offset.value.y;
 }
 
 function handleMouseMove(e: MouseEvent) {
     if (!isDragging.value) return;
     offset.value = {
-        x: e.clientX - dragStart.value.x,
-        y: e.clientY - dragStart.value.y,
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
     };
 }
 
@@ -97,8 +97,8 @@ function handleWheel(e: WheelEvent) {
             <defs>
                 <pattern
                     id="dotPattern"
-                    :x="(offset.x % (GRID_SIZE * scale)) + (GRID_SIZE * scale) / 2"
-                    :y="(offset.y % (GRID_SIZE * scale)) + (GRID_SIZE * scale) / 2"
+                    :x="offset.x % (GRID_SIZE * scale)"
+                    :y="offset.y % (GRID_SIZE * scale)"
                     :width="GRID_SIZE * scale"
                     :height="GRID_SIZE * scale"
                     patternUnits="userSpaceOnUse"
@@ -115,15 +115,16 @@ function handleWheel(e: WheelEvent) {
             <rect x="0" y="0" width="100%" height="100%" fill="url(#dotPattern)" />
         </svg>
 
-        <div
-            class="absolute inset-0 h-full w-full origin-top-left"
+        <svg
+            class="absolute origin-top-left overflow-visible"
+            xmlns="http://www.w3.org/2000/svg"
             :style="{
-                transform: `translate(${offset.x + 0.5 * scale}px, ${offset.y + 0.5 * scale}px) scale(${scale})`,
+                transform: `translate(${offset.x + 0.5 * scale + ORIGIN_OFFSET * scale}px, ${offset.y + 0.5 * scale + ORIGIN_OFFSET * scale}px) scale(${scale})`,
             }"
         >
-            <div v-for="[id, component] in components" :key="id">
+            <g v-for="[id, component] in components" :key="id">
                 <CircuitComponent :component="component" />
-            </div>
-        </div>
+            </g>
+        </svg>
     </div>
 </template>
