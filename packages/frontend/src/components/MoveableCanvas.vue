@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { settings } from "./store";
+import { GRID_SIZE } from "../lib/consts";
+import { components, scale, selectedComponentId, settings } from "../lib/store";
+import CircuitComponent from "./CircuitComponent.vue";
 
-const GRID_SIZE = 25;
-
-let _offset = ref({ x: 0, y: 0 });
-let offset = computed({
+const _offset = ref({ x: 0, y: 0 });
+const offset = computed({
     get: () => _offset.value,
     set: (val) => {
         _offset.value.x = Math.min(val.x, 0);
@@ -13,15 +13,17 @@ let offset = computed({
     },
 });
 
-let isDragging = ref(false);
-let dragStart = ref({ x: 0, y: 0 });
-
-const scale = computed(() => {
-    return Math.pow(1.2, settings.scaleLevel);
-});
+const isDragging = ref(false);
+const dragStart = ref({ x: 0, y: 0 });
 
 function handleMouseDown(e: MouseEvent) {
-    if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) return;
+    if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
+        if (e.button === 0) {
+            selectedComponentId.value = null;
+        }
+
+        return;
+    }
 
     isDragging.value = true;
     dragStart.value = {
@@ -95,15 +97,15 @@ function handleWheel(e: WheelEvent) {
             <defs>
                 <pattern
                     id="dotPattern"
-                    :x="offset.x % (GRID_SIZE * scale)"
-                    :y="offset.y % (GRID_SIZE * scale)"
+                    :x="(offset.x % (GRID_SIZE * scale)) + (GRID_SIZE * scale) / 2"
+                    :y="(offset.y % (GRID_SIZE * scale)) + (GRID_SIZE * scale) / 2"
                     :width="GRID_SIZE * scale"
                     :height="GRID_SIZE * scale"
                     patternUnits="userSpaceOnUse"
                 >
                     <circle
-                        :cx="(GRID_SIZE / 2) * scale"
-                        :cy="(GRID_SIZE / 2) * scale"
+                        :cx="(GRID_SIZE / 2) * scale + scale / 2"
+                        :cy="(GRID_SIZE / 2) * scale + scale / 2"
                         :r="1 * scale"
                         fill="var(--color-zinc-500)"
                     />
@@ -114,12 +116,14 @@ function handleWheel(e: WheelEvent) {
         </svg>
 
         <div
-            class="pointer-events-none absolute inset-0 h-full w-full origin-top-left"
+            class="absolute inset-0 h-full w-full origin-top-left"
             :style="{
-                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                transform: `translate(${offset.x + 0.5 * scale}px, ${offset.y + 0.5 * scale}px) scale(${scale})`,
             }"
         >
-            canvas-relative content?
+            <div v-for="[id, component] in components" :key="id">
+                <CircuitComponent :component="component" />
+            </div>
         </div>
     </div>
 </template>
