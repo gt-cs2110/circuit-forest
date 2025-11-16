@@ -23,3 +23,10 @@ export const components = reactive<Map<number, CircuitComponent>>(
         [2, { id: 2, x: 6, y: 7, name: "Component B", bitsize: 1 }],
     ]),
 );
+
+export const componentDrag = reactive({
+    componentId: -1,
+    isDragging: false,
+    initialMouse: { x: 0, y: 0 },
+    initialPosition: { x: 0, y: 0 },
+});

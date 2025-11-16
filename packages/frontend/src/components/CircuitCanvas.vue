@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { GRID_SIZE } from "../lib/consts";
-import { components, scale, selectedComponentId, settings } from "../lib/store";
+import { componentDrag, components, scale, selectedComponentId, settings } from "../lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
 
 const ORIGIN_OFFSET = GRID_SIZE / 2;
@@ -33,6 +33,11 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
+    handleCanvasMove(e);
+    handleComponentMove(e);
+}
+
+function handleCanvasMove(e: MouseEvent) {
     if (!isDragging.value) return;
     offset.value = {
         x: e.clientX - dragStart.x,
@@ -40,8 +45,21 @@ function handleMouseMove(e: MouseEvent) {
     };
 }
 
+function handleComponentMove(e: MouseEvent) {
+    if (!componentDrag.isDragging) return;
+
+    const deltaX = Math.round((e.clientX - componentDrag.initialMouse.x) / GRID_SIZE / scale.value);
+    const newX = Math.max(deltaX + componentDrag.initialPosition.x, 0);
+    const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
+    const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
+
+    components.get(componentDrag.componentId).x = newX;
+    components.get(componentDrag.componentId).y = newY;
+}
+
 function handleMouseUp() {
     isDragging.value = false;
+    componentDrag.isDragging = false;
 }
 
 function handleWheel(e: WheelEvent) {
