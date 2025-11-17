@@ -23,7 +23,7 @@ function handleMouseDown(e: MouseEvent) {
     <rect
         class="cursor-pointer text-zinc-200 outline-offset-2 outline-blue-500"
         :class="{
-            'z-50 outline-2': selectedComponentId === props.component.id,
+            'outline-2': selectedComponentId === props.component.id,
         }"
         :width="2 * GRID_SIZE"
         :height="2 * GRID_SIZE"
