@@ -82,6 +82,14 @@ pub struct Circuit<'a> {
     key: CircuitKey
 }
 
+/// Basic macro to pretend Circuit has the "graph" and "state" fields.
+/// 
+/// This cannot be done with a function
+/// because this is returning a place rather than a value.
+macro_rules! circ {
+    ($self:ident.$field:ident) => { $self.forest.$field[$self.key] }
+}
+
 impl Circuit<'_> {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
@@ -110,34 +118,34 @@ impl Circuit<'_> {
     
     /// Create a value node (essentially a wire) with the specified bitsize.
     pub fn add_value_node(&mut self) -> ValueKey {
-        let key = self.forest.graphs[self.key].add_value();
-        self.forest.states[self.key].init_value(key);
+        let key = circ!(self.graphs).add_value();
+        circ!(self.states).init_value(key);
         key
     }
 
     /// Create a function node with the passed component function.
     pub fn add_function_node<F: Into<ComponentFn>>(&mut self, f: F) -> FunctionKey {
         let node = FunctionNode::new(f.into(), &self.forest.graphs);
-        let key = self.forest.graphs[self.key].add_function(node);
-        self.forest.states[self.key].init_func(key, &self.forest.graphs[self.key].functions[key].func, &self.forest.graphs);
+        let key = circ!(self.graphs).add_function(node);
+        circ!(self.states).init_func(key, &circ!(self.graphs).functions[key].func, &self.forest.graphs);
         key
     }
 
     /// Connect a wire to a port in the Circuit's graph.
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
-        self.forest.graphs[self.key].connect(wire, port);
-        self.forest.states[self.key].transient.triggers.insert(wire, TriggerState { recalculate: true });
+        circ!(self.graphs).connect(wire, port);
+        circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
         self.propagate();
     }
 
     /// Clear the function node of connections and connect all of the passed ports to it.
     pub fn connect_all(&mut self, gate: FunctionKey, ports: &[ValueKey]) {
-        self.forest.graphs[self.key].clear_edges(gate);
+        circ!(self.graphs).clear_edges(gate);
         ports.iter().copied()
             .enumerate()
             .for_each(|(index, wire)| {
-                self.forest.graphs[self.key].connect(wire, FunctionPort { gate, index });
-                self.forest.states[self.key].transient.triggers.insert(wire, TriggerState { recalculate: true });
+                circ!(self.graphs).connect(wire, FunctionPort { gate, index });
+                circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
             });
         self.propagate();
     }
@@ -147,10 +155,10 @@ impl Circuit<'_> {
     /// 
     /// The provided `input` argument indicates which value nodes were updated.
     pub fn run(&mut self, inputs: &[ValueKey]) {
-        self.forest.states[self.key].transient.triggers = inputs.iter().copied()
+        circ!(self.states).transient.triggers = inputs.iter().copied()
             .map(|k| (k, TriggerState { recalculate: false }))
             .collect();
-        self.forest.states[self.key].transient.frontier.clear();
+        circ!(self.states).transient.frontier.clear();
 
         self.propagate();
     }
@@ -158,31 +166,31 @@ impl Circuit<'_> {
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).
     pub fn propagate(&mut self) {
-        self.forest.states[self.key].propagate(&self.forest.graphs, self.key);
+        circ!(self.states).propagate(&self.forest.graphs, self.key);
     }
 
     /// Gets current circuit state.
     pub fn state(&self) -> &CircuitState {
-        &self.forest.states[self.key]
+        &circ!(self.states)
     }
 
     /// Updates a [`ValueNode`] with the specified value, raising `Err` if bitsizes do not match.
     /// 
     /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
     pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
-        self.forest.states[self.key][key].replace_value(val)?;
+        circ!(self.states)[key].replace_value(val)?;
 
-        self.forest.states[self.key].transient.triggers.insert(key, TriggerState { recalculate: false });
+        circ!(self.states).transient.triggers.insert(key, TriggerState { recalculate: false });
         Ok(())
     }
     /// Updates the port of a [`FunctionNode`] with the specified value, raising `Err` if bitsizes do not match.
     /// 
     /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
     pub fn replace_port(&mut self, port: FunctionPort, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
-        self.forest.states[self.key][port.gate].replace_port(port.index, val)?;
+        circ!(self.states)[port.gate].replace_port(port.index, val)?;
 
-        if let Some(wire) = self.forest.graphs[self.key][port.gate].links[0] {
-            self.forest.states[self.key].transient.triggers.insert(wire, TriggerState { recalculate: true });
+        if let Some(wire) = circ!(self.graphs)[port.gate].links[0] {
+            circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
         }
         Ok(())
     }
@@ -190,7 +198,7 @@ impl Circuit<'_> {
     /// Sets the input state for the input.
     #[allow(dead_code)]
     pub(crate) fn set_input(&mut self, key: FunctionKey, value: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
-        assert!(matches!(self.forest.graphs[self.key].functions[key].func, ComponentFn::Input(_)), "Expected input function");
+        assert!(matches!(circ!(self.graphs).functions[key].func, ComponentFn::Input(_)), "Expected input function");
         
         self.replace_port(FunctionPort { gate: key, index: 0 }, value)?;
         // FIXME: Have alternative which doesn't propagate
@@ -202,8 +210,8 @@ impl Circuit<'_> {
     /// Sets the input state for the input.
     #[allow(dead_code)]
     pub(crate) fn get_output(&mut self, key: FunctionKey) -> BitArray {
-        assert!(matches!(self.forest.graphs[self.key].functions[key].func, ComponentFn::Output(_)), "Expected output function");
-        self.forest.states[self.key].get_port_value(FunctionPort { gate: key, index: 0 })
+        assert!(matches!(circ!(self.graphs).functions[key].func, ComponentFn::Output(_)), "Expected output function");
+        circ!(self.states).get_port_value(FunctionPort { gate: key, index: 0 })
     }
 }
 
