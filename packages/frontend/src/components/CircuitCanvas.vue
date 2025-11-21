@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import { GRID_SIZE } from "../lib/consts";
-import { componentDrag, components, scale, selectedComponentId, settings } from "../lib/store";
+import { GRID_SIZE } from "@/lib/consts";
+import { componentDrag, components, scale, selectedComponentId, settings } from "@/lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
 
 const ORIGIN_OFFSET = GRID_SIZE / 2;
@@ -122,9 +122,9 @@ function handleWheel(e: WheelEvent) {
                     patternUnits="userSpaceOnUse"
                 >
                     <circle
-                        :cx="(GRID_SIZE / 2) * scale + scale / 2"
-                        :cy="(GRID_SIZE / 2) * scale + scale / 2"
-                        :r="1 * scale"
+                        :cx="(GRID_SIZE / 2) * scale"
+                        :cy="(GRID_SIZE / 2) * scale"
+                        :r="0.5 * scale"
                         fill="var(--color-zinc-500)"
                     />
                 </pattern>
@@ -137,12 +137,14 @@ function handleWheel(e: WheelEvent) {
             class="absolute origin-top-left overflow-visible"
             xmlns="http://www.w3.org/2000/svg"
             :style="{
-                transform: `translate(${offset.x + 0.5 * scale + ORIGIN_OFFSET * scale}px, ${offset.y + 0.5 * scale + ORIGIN_OFFSET * scale}px) scale(${scale})`,
+                transform: `translate(${offset.x + ORIGIN_OFFSET * scale}px, ${offset.y + ORIGIN_OFFSET * scale}px) scale(${scale})`,
             }"
         >
-            <g v-for="[id, component] in components" :key="id">
-                <CircuitComponent :component="component" />
-            </g>
+            <CircuitComponent
+                v-for="[id, component] in components"
+                :key="id"
+                :component="component"
+            />
         </svg>
     </div>
 </template>

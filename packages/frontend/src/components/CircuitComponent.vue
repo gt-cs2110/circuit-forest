@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { GRID_SIZE } from "../lib/consts";
-import { componentDrag, selectedComponentId, type CircuitComponent } from "../lib/store";
+import { GRID_SIZE } from "@/lib/consts";
+import { componentDrag, selectedComponentId } from "@/lib/store";
+import { CircuitComponent } from "@/lib/types";
+
+import { componentMap } from "./circuitry";
+import { computed } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();
 
@@ -17,19 +21,25 @@ function handleMouseDown(e: MouseEvent) {
     componentDrag.initialPosition.x = props.component.x;
     componentDrag.initialPosition.y = props.component.y;
 }
+
+const metadata = computed(() => componentMap[props.component.type]);
+const dimensions = computed(() => metadata.value.getDimensions(props.component));
 </script>
 
 <template>
-    <rect
-        class="cursor-pointer text-zinc-200 outline-offset-2 outline-blue-500"
-        :class="{
-            'outline-2': selectedComponentId === props.component.id,
-        }"
-        :width="2 * GRID_SIZE"
-        :height="2 * GRID_SIZE"
-        :x="props.component.x * GRID_SIZE"
-        :y="props.component.y * GRID_SIZE"
-        fill="currentColor"
+    <g
+        class="cursor-pointer"
+        :transform="`translate(${props.component.x * GRID_SIZE}, ${props.component.y * GRID_SIZE})`"
         @mousedown="handleMouseDown"
-    ></rect>
+    >
+        <component :is="metadata.component" />
+
+        <rect
+            v-if="selectedComponentId === props.component.id"
+            class="pointer-events-none outline-2 outline-offset-2 outline-blue-500"
+            :width="dimensions.width * GRID_SIZE"
+            :height="dimensions.height * GRID_SIZE"
+            fill="transparent"
+        ></rect>
+    </g>
 </template>

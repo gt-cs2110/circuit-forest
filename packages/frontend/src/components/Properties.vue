@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { components, selectedComponentId, settings } from "../lib/store";
+import { components, selectedComponentId, settings } from "@/lib/store";
 
 const selectedComponent = computed(() => components.get(selectedComponentId.value));
 </script>
