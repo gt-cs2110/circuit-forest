@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
-import { componentDrag, components, scale, selectedComponentId, settings } from "@/lib/store";
+import { componentDrag, scale, selectedComponentId, settings, SubcircuitState } from "@/lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
+
+const props = defineProps<{
+    state: SubcircuitState;
+}>();
 
 const ORIGIN_OFFSET = GRID_SIZE / 2;
 
-const _offset = ref({ x: 0, y: 0 });
 const offset = computed({
-    get: () => _offset.value,
+    get: () => props.state.offset,
     set: (val) => {
-        _offset.value.x = Math.min(val.x, 0);
-        _offset.value.y = Math.min(val.y, 0);
+        props.state.offset.x = Math.min(val.x, 0);
+        props.state.offset.y = Math.min(val.y, 0);
     },
 });
 
@@ -69,8 +72,8 @@ function handleComponentMove(e: MouseEvent) {
     const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
     const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
 
-    components.get(componentDrag.componentId).location.x = newX;
-    components.get(componentDrag.componentId).location.y = newY;
+    props.state.subcircuit.components.get(componentDrag.componentId).x = newX;
+    props.state.subcircuit.components.get(componentDrag.componentId).y = newY;
 }
 
 function handleTooltip(target: EventTarget) {
@@ -199,7 +202,7 @@ function zoom(newScaleLevel: number) {
             }"
         >
             <CircuitComponent
-                v-for="[id, component] in components"
+                v-for="[id, component] in state.subcircuit.components"
                 :key="id"
                 :component="component"
             />

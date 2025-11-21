@@ -18,8 +18,8 @@ function handleMouseDown(e: MouseEvent) {
     componentDrag.isDragging = true;
     componentDrag.initialMouse.x = e.clientX;
     componentDrag.initialMouse.y = e.clientY;
-    componentDrag.initialPosition.x = props.component.location.x;
-    componentDrag.initialPosition.y = props.component.location.y;
+    componentDrag.initialPosition.x = props.component.x;
+    componentDrag.initialPosition.y = props.component.y;
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
@@ -30,7 +30,7 @@ const ports = computed(() => metadata.value.getPorts(props.component));
 <template>
     <g
         class="cursor-pointer"
-        :transform="`translate(${props.component.location.x * GRID_SIZE}, ${props.component.location.y * GRID_SIZE})`"
+        :transform="`translate(${props.component.x * GRID_SIZE}, ${props.component.y * GRID_SIZE})`"
         @mousedown="handleMouseDown"
     >
         <component :is="metadata.component" :component="props.component" />

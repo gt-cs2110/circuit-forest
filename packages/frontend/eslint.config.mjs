@@ -59,6 +59,8 @@ export default defineConfig(
             // that would be too annoying to type.
             // i'll trust that y'all know what y'all're doing if you do :any
             "@typescript-eslint/no-explicit-any": "off",
+            // we do this to edit a circuit more easily by modifying a prop in circuitcanvas
+            "vue/no-mutating-props": ["error", { shallowOnly: true }],
         },
     },
     eslintConfigPrettier,

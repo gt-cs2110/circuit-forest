@@ -3,6 +3,8 @@ import { ChevronDown } from "lucide-vue-next";
 
 import CircuitCanvas from "./components/CircuitCanvas.vue";
 import Properties from "./components/Properties.vue";
+import { currentCircuit } from "./lib/store";
+import CircuitTabs from "./components/CircuitTabs.vue";
 
 const categories = ["Wiring", "Gates", "Arithmetic", "Memory"];
 </script>
@@ -43,7 +45,10 @@ const categories = ["Wiring", "Gates", "Arithmetic", "Memory"];
             </div>
         </div>
 
-        <CircuitCanvas />
+        <div class="flex flex-1 flex-col">
+            <CircuitTabs />
+            <CircuitCanvas :state="currentCircuit" />
+        </div>
 
         <Properties />
     </div>

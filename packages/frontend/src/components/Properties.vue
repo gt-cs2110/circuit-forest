@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { components, selectedComponentId, settings } from "@/lib/store";
+import { currentCircuit, selectedComponentId, settings } from "@/lib/store";
 
-const selectedComponent = computed(() => components.get(selectedComponentId.value));
+const selectedComponent = computed(() =>
+    currentCircuit.value.subcircuit.components.get(selectedComponentId.value),
+);
 </script>
 
 <template>
     <div class="flex w-64 shrink-0 flex-col border-l-2 border-zinc-700 bg-zinc-900 text-zinc-200">
         <h2
-            class="border-b-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white placeholder:text-zinc-500 focus:outline-none"
+            class="border-b-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white"
         >
             Properties
         </h2>
@@ -47,7 +49,7 @@ const selectedComponent = computed(() => components.get(selectedComponentId.valu
 
         <template v-if="selectedComponentId !== null">
             <h3
-                class="border-y-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white placeholder:text-zinc-500 focus:outline-none"
+                class="border-y-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white"
             >
                 {{ selectedComponent.name }}
             </h3>

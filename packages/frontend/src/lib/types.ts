@@ -16,10 +16,21 @@ export type ComponentMetadata = {
 
 export type ComponentMap = Record<ComponentType, ComponentMetadata>;
 
-export type CircuitComponent = {
+export type CircuitComponent = Location & {
     id: number;
     type: ComponentType;
     name: string;
     bitsize: number;
-    location: Location;
+};
+
+export type WireDirection = "H" | "V";
+export type Wire = Location & {
+    direction: WireDirection;
+    length: number;
+};
+
+export type Subcircuit = {
+    name: string;
+    components: Map<number, CircuitComponent>;
+    wires: Wire[];
 };
