@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
 import { componentDrag, components, scale, selectedComponentId, settings } from "@/lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
@@ -18,6 +18,12 @@ const offset = computed({
 const isDragging = ref(false);
 const dragStart = reactive({ x: 0, y: 0 });
 
+const tooltip = reactive({
+    value: null as null | string,
+    x: 0,
+    y: 0,
+});
+
 function handleMouseDown(e: MouseEvent) {
     if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
         if (e.button === 0) {
@@ -35,6 +41,7 @@ function handleMouseDown(e: MouseEvent) {
 function handleMouseMove(e: MouseEvent) {
     handleCanvasMove(e);
     handleComponentMove(e);
+    handleTooltip(e.target);
 }
 
 function handleCanvasMove(e: MouseEvent) {
@@ -55,6 +62,23 @@ function handleComponentMove(e: MouseEvent) {
 
     components.get(componentDrag.componentId).location.x = newX;
     components.get(componentDrag.componentId).location.y = newY;
+}
+
+function handleTooltip(target: EventTarget) {
+    if (!("dataset" in target) || !target.dataset || typeof target.dataset !== "object") {
+        return;
+    }
+
+    const element = target as SVGCircleElement;
+
+    if (element.dataset.tooltip) {
+        const rect = element.getBoundingClientRect();
+        tooltip.x = rect.x + rect.width / 2;
+        tooltip.y = rect.y + rect.height / 2;
+        tooltip.value = element.dataset.tooltip;
+    } else {
+        tooltip.value = null;
+    }
 }
 
 function handleMouseUp() {
@@ -95,6 +119,10 @@ function handleWheel(e: WheelEvent) {
             y: offset.value.y - e.deltaY,
         };
     }
+
+    nextTick().then(() => {
+        handleTooltip(e.target);
+    });
 }
 </script>
 
@@ -146,5 +174,16 @@ function handleWheel(e: WheelEvent) {
                 :component="component"
             />
         </svg>
+
+        <div
+            v-if="tooltip.value"
+            class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border-2 border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
+            :style="{
+                left: tooltip.x + 'px',
+                top: tooltip.y + 'px',
+            }"
+        >
+            {{ tooltip.value }}
+        </div>
     </div>
 </template>

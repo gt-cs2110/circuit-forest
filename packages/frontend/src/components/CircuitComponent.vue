@@ -45,6 +45,7 @@ const ports = computed(() => metadata.value.getPorts(props.component));
                 stroke="transparent"
                 stroke-width="4"
                 class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+                :data-tooltip="port.label"
             />
         </g>
 
