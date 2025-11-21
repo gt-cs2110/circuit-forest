@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
 import { componentDrag, components, scale, selectedComponentId, settings } from "@/lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
@@ -17,6 +17,11 @@ const offset = computed({
 
 const isDragging = ref(false);
 const dragStart = reactive({ x: 0, y: 0 });
+
+const mousePosition = reactive({
+    x: 0,
+    y: 0,
+});
 
 const tooltip = reactive({
     value: null as null | string,
@@ -39,6 +44,10 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    mousePosition.x = e.clientX - rect.left;
+    mousePosition.y = e.clientY - rect.top;
+
     handleCanvasMove(e);
     handleComponentMove(e);
     handleTooltip(e.target);
@@ -91,29 +100,10 @@ function handleWheel(e: WheelEvent) {
     const isPinchZoom = e.ctrlKey || e.metaKey;
 
     if (isPinchZoom) {
-        e.preventDefault();
-
         // trackpad pinch sends larger deltaY values, normalize them
         const delta = isTrackpad ? e.deltaY * -0.03 : e.deltaY * -0.002;
-        const newScaleLevel = Math.min(Math.max(-5, settings.scaleLevel + delta), 10);
-
-        const oldScale = scale.value;
-        const newScale = Math.pow(1.2, newScaleLevel);
-
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = (mouseX - offset.value.x) / oldScale;
-        const worldY = (mouseY - offset.value.y) / oldScale;
-
-        settings.scaleLevel = newScaleLevel;
-        offset.value = {
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-        };
+        zoom(settings.scaleLevel + delta);
     } else {
-        e.preventDefault();
         offset.value = {
             x: offset.value.x - e.deltaX,
             y: offset.value.y - e.deltaY,
@@ -123,6 +113,46 @@ function handleWheel(e: WheelEvent) {
     nextTick().then(() => {
         handleTooltip(e.target);
     });
+}
+
+function handleKeyDown(e: KeyboardEvent) {
+    if (e.metaKey && (e.key === "-" || e.key === "=" || e.key === "+" || e.key === "0")) {
+        e.preventDefault();
+
+        const newScaleLevel = Math.round(
+            e.key === "=" || e.key === "+"
+                ? settings.scaleLevel + 1
+                : e.key === "-"
+                  ? settings.scaleLevel - 1
+                  : 0,
+        );
+
+        zoom(newScaleLevel);
+    }
+}
+
+onMounted(() => {
+    document.addEventListener("keydown", handleKeyDown);
+});
+
+onUnmounted(() => {
+    document.removeEventListener("keydown", handleKeyDown);
+});
+
+function zoom(newScaleLevel: number) {
+    newScaleLevel = Math.min(Math.max(-5, newScaleLevel), 10);
+
+    const oldScale = scale.value;
+    const newScale = Math.pow(1.2, newScaleLevel);
+
+    const worldX = (mousePosition.x - offset.value.x) / oldScale;
+    const worldY = (mousePosition.y - offset.value.y) / oldScale;
+
+    settings.scaleLevel = newScaleLevel;
+    offset.value = {
+        x: mousePosition.x - worldX * newScale,
+        y: mousePosition.y - worldY * newScale,
+    };
 }
 </script>
 
@@ -134,7 +164,7 @@ function handleWheel(e: WheelEvent) {
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
         @mouseleave="handleMouseUp"
-        @wheel="handleWheel"
+        @wheel.prevent="handleWheel"
     >
         <svg
             class="pointer-events-none absolute inset-0 h-full w-full"
