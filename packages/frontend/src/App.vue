@@ -20,23 +20,19 @@ const categories = ["Wiring", "Gates", "Arithmetic", "Memory"];
                 placeholder="Search..."
             />
 
-            <div class="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
-                <div
-                    v-for="(category, i) in categories"
-                    :key="category"
-                    class="h-max shrink-0 rounded-md bg-zinc-800"
-                >
+            <div class="overflow-y-auto">
+                <div v-for="(category, i) in categories" :key="category">
                     <button
-                        class="w-full cursor-pointer rounded-t-md bg-zinc-700 p-2 text-left text-sm font-semibold text-white"
+                        class="w-full cursor-pointer bg-zinc-800 p-2 text-left text-sm font-medium text-white"
                     >
                         <ChevronDown class="inline h-4 w-4 align-middle" />
                         {{ category }}
                     </button>
-                    <div class="grid grid-cols-3 gap-2 p-2">
+                    <div class="grid grid-cols-3 gap-2 border-y-2 border-zinc-700 p-2">
                         <button
                             v-for="n in (((i + 1) * 13) % 9) + 3"
                             :key="n"
-                            class="aspect-square cursor-pointer rounded-md border-2 border-zinc-500 bg-zinc-600 text-xs"
+                            class="aspect-square cursor-pointer border-2 border-zinc-600 bg-zinc-700 text-xs"
                         >
                             Item {{ n }}
                         </button>
