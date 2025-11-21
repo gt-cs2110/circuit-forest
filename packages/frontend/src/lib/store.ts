@@ -13,9 +13,9 @@ export const scale = computed(() => {
 export const selectedComponentId = ref<number | null>(null);
 export const components = reactive<Map<number, CircuitComponent>>(
     new Map([
-        [1, { id: 1, type: "and", x: 1, y: 1, name: "Component A", bitsize: 1 }],
-        [2, { id: 2, type: "constant", x: 6, y: 7, name: "Component B", bitsize: 1 }],
-        [3, { id: 3, type: "or", x: 17, y: 9, name: "Component C", bitsize: 1 }],
+        [1, { id: 1, type: "and", location: { x: 1, y: 1 }, name: "Component A", bitsize: 1 }],
+        [2, { id: 2, type: "constant", location: { x: 6, y: 7 }, name: "Component B", bitsize: 1 }],
+        [3, { id: 3, type: "or", location: { x: 17, y: 9 }, name: "Component C", bitsize: 1 }],
     ]),
 );
 

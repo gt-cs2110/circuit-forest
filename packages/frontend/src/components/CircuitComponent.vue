@@ -18,21 +18,35 @@ function handleMouseDown(e: MouseEvent) {
     componentDrag.isDragging = true;
     componentDrag.initialMouse.x = e.clientX;
     componentDrag.initialMouse.y = e.clientY;
-    componentDrag.initialPosition.x = props.component.x;
-    componentDrag.initialPosition.y = props.component.y;
+    componentDrag.initialPosition.x = props.component.location.x;
+    componentDrag.initialPosition.y = props.component.location.y;
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
 const dimensions = computed(() => metadata.value.getDimensions(props.component));
+const ports = computed(() => metadata.value.getPorts(props.component));
 </script>
 
 <template>
     <g
         class="cursor-pointer"
-        :transform="`translate(${props.component.x * GRID_SIZE}, ${props.component.y * GRID_SIZE})`"
+        :transform="`translate(${props.component.location.x * GRID_SIZE}, ${props.component.location.y * GRID_SIZE})`"
         @mousedown="handleMouseDown"
     >
-        <component :is="metadata.component" />
+        <component :is="metadata.component" :component="props.component" />
+
+        <g v-for="(port, i) in ports" :key="i">
+            <!-- transparent stroke enlarges hitbox -->
+            <circle
+                :cx="port.x * GRID_SIZE"
+                :cy="port.y * GRID_SIZE"
+                r="2"
+                fill="currentColor"
+                stroke="transparent"
+                stroke-width="4"
+                class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+            />
+        </g>
 
         <rect
             v-if="selectedComponentId === props.component.id"

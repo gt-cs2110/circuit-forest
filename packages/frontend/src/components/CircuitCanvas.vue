@@ -53,8 +53,8 @@ function handleComponentMove(e: MouseEvent) {
     const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
     const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
 
-    components.get(componentDrag.componentId).x = newX;
-    components.get(componentDrag.componentId).y = newY;
+    components.get(componentDrag.componentId).location.x = newX;
+    components.get(componentDrag.componentId).location.y = newY;
 }
 
 function handleMouseUp() {
