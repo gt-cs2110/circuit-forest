@@ -17,7 +17,7 @@ import { circuits, currentCircuitId } from "@/lib/store";
 
             <div
                 v-if="currentCircuitId === id"
-                class="absolute inset-x-0 top-full h-1 bg-zinc-800"
+                class="absolute inset-x-0 top-full h-0.5 bg-zinc-800"
             ></div>
         </button>
     </div>
