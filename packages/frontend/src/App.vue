@@ -59,7 +59,7 @@ onUnmounted(() => {
     />
 
     <div class="flex h-screen flex-col">
-        <SplitterGroup direction="horizontal">
+        <SplitterGroup direction="horizontal" :keyboard-resize-by="toPercentage(16)">
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
                 :min-size="toPercentage(48 * 4)"
@@ -70,7 +70,7 @@ onUnmounted(() => {
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-zinc-700 focus-visible:bg-zinc-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
+                class="w-px bg-zinc-700 outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
             />
 
             <SplitterPanel class="flex flex-1 flex-col">
@@ -79,7 +79,7 @@ onUnmounted(() => {
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-zinc-700 focus-visible:bg-zinc-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
+                class="w-px bg-zinc-700 outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
             />
 
             <SplitterPanel
