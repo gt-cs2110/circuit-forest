@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { currentCircuit, selectedComponentId, settings } from "@/lib/store";
+import { componentMap } from "./circuitry";
 
 const selectedComponent = computed(() =>
     currentCircuit.value.subcircuit.components.get(selectedComponentId.value),
@@ -51,7 +52,7 @@ const selectedComponent = computed(() =>
             <h3
                 class="border-y-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white"
             >
-                {{ selectedComponent.name }}
+                {{ componentMap[selectedComponent.type].displayName }}
             </h3>
 
             <label class="block px-4 py-3 text-xs">

@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-vue-next";
 import { componentMap } from "./circuitry";
 import CircuitComponentPreview from "./CircuitComponentPreview.vue";
 import { reactive } from "vue";
+import { placingComponent } from "@/lib/store";
 
 const shownCategories = reactive(
     Object.fromEntries(Object.keys(componentCategories).map((category) => [category, true])),
@@ -42,7 +43,9 @@ const shownCategories = reactive(
                         <button
                             v-for="component in components"
                             :key="component"
-                            class="flex aspect-square cursor-pointer flex-col justify-center gap-2 border-2 border-zinc-600 bg-zinc-700 py-1 text-xs"
+                            class="flex aspect-square cursor-pointer flex-col justify-center gap-2 border-2 border-zinc-600 py-1 text-xs"
+                            :class="placingComponent === component ? 'bg-zinc-800' : 'bg-zinc-700'"
+                            @click="placingComponent = component"
                         >
                             <div class="flex flex-1 flex-col justify-center">
                                 <CircuitComponentPreview :type="component" />

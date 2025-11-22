@@ -29,7 +29,7 @@ export type ComponentMap = Record<ComponentType, ComponentMetadata>;
 export type CircuitComponent = Location & {
     id: number;
     type: ComponentType;
-    name: string;
+    label: string;
     bitsize: number;
 };
 

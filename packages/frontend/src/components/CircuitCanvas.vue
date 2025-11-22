@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
-import { componentDrag, scale, selectedComponentId, settings, SubcircuitState } from "@/lib/store";
+import {
+    componentDrag,
+    placeComponent,
+    placingComponent,
+    scale,
+    selectedComponentId,
+    settings,
+    SubcircuitState,
+} from "@/lib/store";
 import CircuitComponent from "./CircuitComponent.vue";
+import CircuitComponentPreview from "./CircuitComponentPreview.vue";
+import { componentMap } from "./circuitry";
 
 const props = defineProps<{
     state: SubcircuitState;
@@ -24,6 +34,19 @@ const dragStart = reactive({ x: 0, y: 0 });
 const mousePosition = reactive({
     x: 0,
     y: 0,
+});
+const placingComponentPosition = computed(() => {
+    const metadata = componentMap[placingComponent.value];
+    const dimensions = metadata?.getDimensions() || { width: 1, height: 1 };
+
+    return {
+        x: Math.floor(
+            (mousePosition.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
+        ),
+        y: Math.floor(
+            (mousePosition.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2,
+        ),
+    };
 });
 
 const tooltip = reactive({
@@ -131,6 +154,9 @@ function handleKeyDown(e: KeyboardEvent) {
         );
 
         zoom(newScaleLevel);
+    } else if (e.key === "Escape") {
+        placingComponent.value = null;
+        selectedComponentId.value = null;
     }
 }
 
@@ -206,6 +232,21 @@ function zoom(newScaleLevel: number) {
                 :key="id"
                 :component="component"
             />
+
+            <g
+                v-if="placingComponent"
+                opacity="0.5"
+                :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
+                @click="
+                    placeComponent(
+                        placingComponent,
+                        placingComponentPosition.x,
+                        placingComponentPosition.y,
+                    )
+                "
+            >
+                <CircuitComponentPreview :type="placingComponent" />
+            </g>
         </svg>
 
         <div

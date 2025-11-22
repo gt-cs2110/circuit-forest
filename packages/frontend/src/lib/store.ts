@@ -1,6 +1,6 @@
 import { computed, reactive, ref, watch } from "vue";
 
-import { Location, Subcircuit } from "./types";
+import { ComponentType, Location, Subcircuit } from "./types";
 
 export const settings = reactive({
     scaleLevel: 0,
@@ -31,7 +31,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "nand",
                                 x: 1,
                                 y: 1,
-                                name: "Component A",
+                                label: "Component A",
                                 bitsize: 1,
                             },
                         ],
@@ -42,7 +42,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "constant",
                                 x: 6,
                                 y: 7,
-                                name: "Component B",
+                                label: "Component B",
                                 bitsize: 1,
                             },
                         ],
@@ -53,7 +53,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "or",
                                 x: 17,
                                 y: 9,
-                                name: "Component C",
+                                label: "Component C",
                                 bitsize: 1,
                             },
                         ],
@@ -77,7 +77,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "and",
                                 x: 1,
                                 y: 10,
-                                name: "Component A",
+                                label: "Component A",
                                 bitsize: 1,
                             },
                         ],
@@ -88,7 +88,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "or",
                                 x: 7,
                                 y: 6,
-                                name: "Component B",
+                                label: "Component B",
                                 bitsize: 1,
                             },
                         ],
@@ -99,7 +99,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                                 type: "constant",
                                 x: 9,
                                 y: 13,
-                                name: "Component C",
+                                label: "Component C",
                                 bitsize: 1,
                             },
                         ],
@@ -144,3 +144,29 @@ export const componentDrag = reactive({
     initialMouse: { x: 0, y: 0 },
     initialPosition: { x: 0, y: 0 },
 });
+
+export const placingComponent = ref<ComponentType | null>(null);
+
+function newComponentId() {
+    return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+}
+
+export function placeComponent(type: ComponentType, x: number, y: number) {
+    if (x < 0 || y < 0) {
+        placingComponent.value = null;
+        return;
+    }
+
+    const id = newComponentId();
+    currentCircuit.value.subcircuit.components.set(id, {
+        id,
+        bitsize: settings.globalBitsize,
+        label: "",
+        type,
+        x,
+        y,
+    });
+    selectedComponentId.value = id;
+
+    placingComponent.value = null;
+}
