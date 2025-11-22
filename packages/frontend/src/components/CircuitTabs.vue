@@ -7,9 +7,11 @@ import { circuits, currentCircuitId } from "@/lib/store";
         <button
             v-for="[id, circuit] in circuits"
             :key="id"
-            class="relative cursor-pointer border-r-2 border-zinc-700 px-4 py-3"
+            class="relative cursor-pointer border-r-2 border-zinc-700 px-4 py-3 font-medium"
             :class="[
-                currentCircuitId === id ? 'bg-zinc-800 text-white' : 'bg-zinc-900 text-zinc-400',
+                currentCircuitId === id
+                    ? 'bg-zinc-800 text-white'
+                    : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800',
             ]"
             @click="currentCircuitId = id"
         >

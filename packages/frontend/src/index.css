@@ -11,3 +11,23 @@
         scrollbar-width: none;
     }
 }
+
+@layer utilities {
+    .grow-enter-active,
+    .grow-leave-active {
+        transition-property: height, padding, border;
+        transition-duration: var(--default-transition-duration);
+        transition-timing-function: var(--default-transition-timing-function);
+        interpolate-size: allow-keywords;
+        overflow: hidden;
+    }
+
+    .grow-enter-from,
+    .grow-leave-to {
+        height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border-bottom-width: 0;
+        interpolate-size: allow-keywords;
+    }
+}

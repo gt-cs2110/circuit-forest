@@ -28,7 +28,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                             1,
                             {
                                 id: 1,
-                                type: "and",
+                                type: "nand",
                                 x: 1,
                                 y: 1,
                                 name: "Component A",

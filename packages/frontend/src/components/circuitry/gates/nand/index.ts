@@ -1,10 +1,10 @@
 import { ComponentMetadata } from "@/lib/types";
 
-import AndGate from "./AndGate.vue";
+import NandGate from "./NandGate.vue";
 
-export const and: ComponentMetadata = {
-    displayName: "AND",
-    component: AndGate,
+export const nand: ComponentMetadata = {
+    displayName: "NAND",
+    component: NandGate,
     getDimensions: () => ({ width: 4, height: 4 }),
     getPorts() {
         return [

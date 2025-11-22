@@ -1,6 +1,15 @@
 import { Component } from "vue";
 
-export type ComponentType = "and" | "or" | "constant";
+export const gateTypes = ["and", "nand", "or"] as const;
+export const wiringTypes = ["constant"] as const;
+
+export const componentCategories = {
+    gates: gateTypes,
+    wiring: wiringTypes,
+};
+
+export const componentTypes = [...gateTypes, ...wiringTypes];
+export type ComponentType = (typeof componentTypes)[number];
 
 export type Dimensions = { width: number; height: number };
 export type Location = { x: number; y: number };
@@ -9,9 +18,10 @@ export type Port = Location & {
 };
 
 export type ComponentMetadata = {
+    displayName: string;
     component: Component;
-    getDimensions: (component: CircuitComponent) => Dimensions;
-    getPorts: (component: CircuitComponent) => Port[];
+    getDimensions: (component?: CircuitComponent) => Dimensions;
+    getPorts: (component?: CircuitComponent) => Port[];
 };
 
 export type ComponentMap = Record<ComponentType, ComponentMetadata>;

@@ -29,25 +29,24 @@ const ports = computed(() => metadata.value.getPorts(props.component));
 
 <template>
     <g
-        class="cursor-pointer"
         :transform="`translate(${props.component.x * GRID_SIZE}, ${props.component.y * GRID_SIZE})`"
         @mousedown="handleMouseDown"
     >
         <component :is="metadata.component" :component="props.component" />
 
-        <g v-for="(port, i) in ports" :key="i">
-            <!-- transparent stroke enlarges hitbox -->
-            <circle
-                :cx="port.x * GRID_SIZE"
-                :cy="port.y * GRID_SIZE"
-                r="2"
-                fill="currentColor"
-                stroke="transparent"
-                stroke-width="4"
-                class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
-                :data-tooltip="port.label"
-            />
-        </g>
+        <!-- transparent stroke enlarges hitbox -->
+        <circle
+            v-for="(port, i) in ports"
+            :key="i"
+            :cx="port.x * GRID_SIZE"
+            :cy="port.y * GRID_SIZE"
+            r="2"
+            fill="currentColor"
+            stroke="transparent"
+            stroke-width="4"
+            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+            :data-tooltip="port.label"
+        />
 
         <rect
             v-if="selectedComponentId === props.component.id"

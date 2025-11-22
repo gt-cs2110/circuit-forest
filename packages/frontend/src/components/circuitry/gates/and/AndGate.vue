@@ -10,7 +10,6 @@ import { GRID_SIZE } from "@/lib/consts";
             L 0 ${4 * GRID_SIZE} Z`"
         fill="currentColor"
         stroke="gray"
-        stroke-width="1"
         class="text-zinc-200"
     />
 </template>
