@@ -1,5 +1,46 @@
 @import "tailwindcss";
 
+@theme {
+    --animate-grow-in: grow-in var(--default-transition-duration)
+        var(--default-transition-timing-function);
+    --animate-grow-out: grow-out var(--default-transition-duration)
+        var(--default-transition-timing-function);
+
+    @keyframes grow-in {
+        from {
+            height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-width: 0;
+            overflow: hidden;
+        }
+
+        to {
+            height: var(--reka-accordion-content-height);
+            overflow: hidden;
+        }
+    }
+
+    @keyframes grow-out {
+        from {
+            height: var(--reka-accordion-content-height);
+            overflow: hidden;
+        }
+
+        to {
+            height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-width: 0;
+            overflow: hidden;
+        }
+    }
+}
+
+@utility grid-cols-fill-* {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, --spacing(--value(integer))), 1fr));
+}
+
 @layer base {
     html {
         --scrollbar-bg: var(--color-zinc-900);
@@ -10,24 +51,8 @@
         scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
         scrollbar-width: none;
     }
-}
 
-@layer utilities {
-    .grow-enter-active,
-    .grow-leave-active {
-        transition-property: height, padding, border;
-        transition-duration: var(--default-transition-duration);
-        transition-timing-function: var(--default-transition-timing-function);
-        interpolate-size: allow-keywords;
-        overflow: hidden;
-    }
-
-    .grow-enter-from,
-    .grow-leave-to {
-        height: 0;
-        padding-top: 0;
-        padding-bottom: 0;
-        border-bottom-width: 0;
-        interpolate-size: allow-keywords;
+    :focus-visible {
+        @apply z-50 outline-2 outline-offset-2 outline-blue-500;
     }
 }

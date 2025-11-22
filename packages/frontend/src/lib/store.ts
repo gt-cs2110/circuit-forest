@@ -147,7 +147,7 @@ export const componentDrag = reactive({
 
 export const placingComponent = ref<ComponentType | null>(null);
 
-function newComponentId() {
+function randomId() {
     return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 }
 
@@ -157,7 +157,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         return;
     }
 
-    const id = newComponentId();
+    const id = randomId();
     currentCircuit.value.subcircuit.components.set(id, {
         id,
         bitsize: settings.globalBitsize,
@@ -169,4 +169,16 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     selectedComponentId.value = id;
 
     placingComponent.value = null;
+}
+
+export function newSubcircuit() {
+    circuits.set(randomId().toString(), {
+        subcircuit: {
+            name: "New subcircuit",
+            components: new Map(),
+            wires: [],
+        },
+        offset: { x: 0, y: 0 },
+        selectedComponentId: null,
+    });
 }

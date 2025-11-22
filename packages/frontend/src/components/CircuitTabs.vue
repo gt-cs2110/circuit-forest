@@ -1,26 +1,38 @@
 <script setup lang="ts">
-import { circuits, currentCircuitId } from "@/lib/store";
+import { circuits, currentCircuitId, newSubcircuit } from "@/lib/store";
+import { Plus } from "lucide-vue-next";
+import { TabsList, TabsRoot, TabsTrigger } from "reka-ui";
 </script>
 
 <template>
-    <div class="border-b-2 border-zinc-700 bg-zinc-900 text-sm focus:outline-none">
-        <button
-            v-for="[id, circuit] in circuits"
-            :key="id"
-            class="relative cursor-pointer border-r-2 border-zinc-700 px-4 py-3 font-medium"
-            :class="[
-                currentCircuitId === id
-                    ? 'bg-zinc-800 text-white'
-                    : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800',
-            ]"
-            @click="currentCircuitId = id"
-        >
-            {{ circuit.subcircuit.name }}
+    <TabsRoot v-model="currentCircuitId">
+        <TabsList class="flex border-b-2 border-zinc-700 bg-zinc-900 text-sm focus:outline-none">
+            <TabsTrigger
+                v-for="[id, circuit] in circuits"
+                :key="id"
+                :value="id"
+                class="relative cursor-pointer items-stretch border-r-2 border-zinc-700 px-4 py-3 font-medium"
+                :class="[
+                    currentCircuitId === id
+                        ? 'bg-zinc-800 text-white'
+                        : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800',
+                ]"
+                @click="currentCircuitId = id"
+            >
+                {{ circuit.subcircuit.name }}
 
-            <div
-                v-if="currentCircuitId === id"
-                class="absolute inset-x-0 top-full h-0.5 bg-zinc-800"
-            ></div>
-        </button>
-    </div>
+                <div
+                    v-if="currentCircuitId === id"
+                    class="absolute inset-x-0 top-full h-0.5 bg-zinc-800"
+                ></div>
+            </TabsTrigger>
+
+            <button
+                class="grid aspect-square cursor-pointer place-items-center p-3 text-zinc-600 hover:bg-zinc-800"
+                @click="newSubcircuit"
+            >
+                <Plus :size="16" absolute-stroke-width />
+            </button>
+        </TabsList>
+    </TabsRoot>
 </template>

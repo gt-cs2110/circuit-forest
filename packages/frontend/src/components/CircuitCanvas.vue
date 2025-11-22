@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
 import {
     componentDrag,
@@ -35,18 +35,24 @@ const mousePosition = reactive({
     x: 0,
     y: 0,
 });
-const placingComponentPosition = computed(() => {
+const placingComponentPosition = reactive({
+    x: 0,
+    y: 0,
+});
+watch(placingComponent, () => {
+    placingComponentPosition.x = null;
+    placingComponentPosition.y = null;
+});
+watch(mousePosition, (mouse) => {
     const metadata = componentMap[placingComponent.value];
     const dimensions = metadata?.getDimensions() || { width: 1, height: 1 };
 
-    return {
-        x: Math.floor(
-            (mousePosition.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
-        ),
-        y: Math.floor(
-            (mousePosition.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2,
-        ),
-    };
+    placingComponentPosition.x = Math.floor(
+        (mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
+    );
+    placingComponentPosition.y = Math.floor(
+        (mouse.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2,
+    );
 });
 
 const tooltip = reactive({
@@ -234,7 +240,7 @@ function zoom(newScaleLevel: number) {
             />
 
             <g
-                v-if="placingComponent"
+                v-if="placingComponent && placingComponentPosition.x !== null"
                 opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="
