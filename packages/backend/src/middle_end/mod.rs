@@ -36,6 +36,7 @@ pub struct ComponentPos {
 }
 
 pub enum ReprEditErr {
+    CannotRemoveWire,
     Todo
 }
 impl MiddleRepr {
@@ -46,14 +47,38 @@ impl MiddleRepr {
         }
     }
 
-    pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
+    pub fn add_wire(&mut self, ckey: CircuitKey, w: Wire) -> Result<(), ReprEditErr> {
         // Add to wire set if it doesn't overlap with anything.
         // Cases:
         // - If a wire endpoint connects to the middle of a wire, the wire needs to be split (ValueKey is same)
         // - If a wire connects two wire meshes (e.g., two ValueKey sets), the two ValueKeys must be merged
-        todo!()
+        
+        // TODO: Check for wire landing in the middle
+        let [p, q] = w.endpoints();
+
+        let result = self.physical[ckey].wires.add_wire(p, q, || self.forest.circuit(ckey).add_value_node())
+            .unwrap_or_else(|| unreachable!("p, q are 1d"));
+        match result {
+            wire::AddResult::NoJoin(_) => {},
+            wire::AddResult::Join(c, k1, k2) => {
+                self.forest.circuit(ckey).join(&[k1, k2]);
+                self.physical[ckey].wires.flood_fill(c, k1);
+            },
+        }
+
+        Ok(())
     }
-    pub fn remove_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
-        todo!()
-    }    
+    pub fn remove_wire(&mut self, ckey: CircuitKey, w: Wire) -> Result<(), ReprEditErr> {
+        let [p, q] = w.endpoints();
+
+        match self.physical[ckey].wires.remove_wire(p, q) {
+            Some(wire::RemoveResult::NoSplit(_)) => Ok(()),
+            Some(wire::RemoveResult::Split(k, coords)) => {
+                let nk = self.forest.circuit(ckey).split(k, &[ todo!("get ports connected to mesh") ]);
+                self.physical[ckey].wires.flood_fill(coords[0], nk);
+                Ok(())
+            },
+            None => Err(ReprEditErr::CannotRemoveWire),
+        }
+    }
 }
