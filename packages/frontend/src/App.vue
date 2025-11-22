@@ -15,7 +15,7 @@ import {
     SplitterResizeHandle,
 } from "reka-ui";
 import { Toaster } from "vue-sonner";
-import { computed } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const sliderValue = computed({
     get() {
@@ -24,6 +24,22 @@ const sliderValue = computed({
     set(value) {
         settings.scaleLevel = value[0];
     },
+});
+
+const windowWidth = ref(window.innerWidth);
+const defaultWidth = toPercentage(72 * 4);
+function toPercentage(px: number) {
+    return (100 / windowWidth.value) * px;
+}
+
+function updateWindowWidth() {
+    windowWidth.value = window.innerWidth;
+}
+onMounted(() => {
+    window.addEventListener("resize", updateWindowWidth);
+});
+onUnmounted(() => {
+    window.removeEventListener("resize", updateWindowWidth);
 });
 </script>
 
@@ -46,9 +62,9 @@ const sliderValue = computed({
         <SplitterGroup direction="horizontal">
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
-                :min-size="20"
-                :default-size="20"
-                :max-size="30"
+                :min-size="toPercentage(48 * 4)"
+                :default-size="defaultWidth"
+                :max-size="Math.min(toPercentage(96 * 4), 50)"
             >
                 <ComponentSelector />
             </SplitterPanel>
@@ -68,9 +84,9 @@ const sliderValue = computed({
 
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
-                :min-size="20"
-                :default-size="20"
-                :max-size="30"
+                :min-size="toPercentage(60 * 4)"
+                :default-size="defaultWidth"
+                :max-size="Math.min(toPercentage(96 * 4), 50)"
             >
                 <Properties />
             </SplitterPanel>
