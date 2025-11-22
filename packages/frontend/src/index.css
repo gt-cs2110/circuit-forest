@@ -53,6 +53,6 @@
     }
 
     :focus-visible {
-        @apply z-50 outline-2 outline-offset-2 outline-blue-500;
+        @apply z-50 outline -outline-offset-1 outline-blue-500;
     }
 }

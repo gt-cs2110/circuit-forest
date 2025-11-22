@@ -6,12 +6,12 @@ import { TabsList, TabsRoot, TabsTrigger } from "reka-ui";
 
 <template>
     <TabsRoot v-model="currentCircuitId">
-        <TabsList class="flex border-b-2 border-zinc-700 bg-zinc-900 text-sm focus:outline-none">
+        <TabsList class="flex border-b border-zinc-700 bg-zinc-900 text-sm">
             <TabsTrigger
                 v-for="[id, circuit] in circuits"
                 :key="id"
                 :value="id"
-                class="relative cursor-pointer items-stretch border-r-2 border-zinc-700 px-4 py-3 font-medium"
+                class="relative cursor-pointer items-stretch border-r border-zinc-700 px-4 py-3 font-medium"
                 :class="[
                     currentCircuitId === id
                         ? 'bg-zinc-800 text-white'

@@ -1,70 +1,103 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { currentCircuit, selectedComponentId, settings } from "@/lib/store";
+import { computed, ref } from "vue";
+import { circuits, currentCircuit, selectedComponentId, settings } from "@/lib/store";
 import { componentMap } from "./circuitry";
+import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
+import { toast } from "vue-sonner";
+
+const nameReset = ref(0);
+const subcircuitName = computed({
+    get() {
+        return currentCircuit.value.subcircuit.name;
+    },
+    set(name) {
+        if (name === "") {
+            toast.error("Subcircuit name is required!");
+            nameReset.value++;
+            return;
+        } else if ([...circuits.values()].some(({ subcircuit }) => subcircuit.name === name)) {
+            toast.error("A subcircuit with this name already exists!");
+            nameReset.value++;
+            return;
+        }
+        currentCircuit.value.subcircuit.name = name;
+    },
+});
 
 const selectedComponent = computed(() =>
     currentCircuit.value.subcircuit.components.get(selectedComponentId.value),
 );
+
+const sections = ["global", "circuit", "component"] as const;
 </script>
 
 <template>
-    <h2 class="border-b-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white">
+    <h2 class="border-b border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white">
         Properties
     </h2>
 
-    <label class="block px-4 py-3 text-xs">
-        <span class="flex justify-between">
-            <span class="font-semibold">Global Bitsize</span>
-            <span>{{ settings.globalBitsize }}</span>
-        </span>
-        <input
-            v-model="settings.globalBitsize"
-            type="range"
-            min="1"
-            step="1"
-            max="16"
-            class="my-3 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
-        />
-    </label>
+    <AccordionRoot :default-value="sections.slice()">
+        <AccordionItem value="global">
+            <AccordionHeader> Global </AccordionHeader>
 
-    <hr class="mx-4 border-zinc-700" />
+            <AccordionContent class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between">
+                        <span class="font-medium">Global Bitsize</span>
+                        <span>{{ settings.globalBitsize }}</span>
+                    </span>
+                    <input
+                        v-model="settings.globalBitsize"
+                        type="range"
+                        min="1"
+                        step="1"
+                        max="16"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
+                    />
+                </label>
+            </AccordionContent>
+        </AccordionItem>
 
-    <label class="block px-4 py-3 text-xs">
-        <span class="flex justify-between">
-            <span class="font-semibold">Zoom</span>
-            <span>{{ (Math.pow(1.2, settings.scaleLevel) * 100).toFixed(0) }}%</span>
-        </span>
-        <input
-            v-model="settings.scaleLevel"
-            type="range"
-            min="-5"
-            step="1"
-            max="10"
-            class="my-3 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
-        />
-    </label>
+        <AccordionItem value="circuit">
+            <AccordionHeader> {{ currentCircuit.subcircuit.name }} </AccordionHeader>
 
-    <template v-if="selectedComponentId !== null">
-        <h3
-            class="border-y-2 border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white"
-        >
-            {{ componentMap[selectedComponent.type].displayName }}
-        </h3>
+            <AccordionContent class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between font-medium"> Name </span>
+                    <input
+                        :key="nameReset"
+                        v-model.lazy.trim="subcircuitName"
+                        type="text"
+                        min="1"
+                        step="1"
+                        max="16"
+                        class="mt-1 block w-full appearance-none bg-zinc-800 px-1 py-1 accent-blue-500"
+                    />
+                </label>
+            </AccordionContent>
+        </AccordionItem>
 
-        <label class="block px-4 py-3 text-xs">
-            <span class="flex justify-between">
-                <span class="font-semibold"> Bitsize</span>
-                <span>{{ selectedComponent.bitsize }}</span>
-            </span>
-            <input
-                v-model="selectedComponent.bitsize"
-                type="range"
-                min="1"
-                step="1"
-                max="16"
-                class="my-3 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
-            />
-        </label>
-    </template>
+        <AccordionItem v-if="selectedComponentId !== null" value="component">
+            <AccordionHeader>
+                {{ componentMap[selectedComponent.type].displayName }}
+            </AccordionHeader>
+
+            <AccordionContent class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between">
+                        <span class="font-medium"> Bitsize</span>
+                        <span>{{ selectedComponent.bitsize }}</span>
+                    </span>
+                    <input
+                        v-model="selectedComponent.bitsize"
+                        type="range"
+                        min="1"
+                        step="1"
+                        max="16"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
+                    />
+                </label>
+            </AccordionContent>
+        </AccordionItem>
+    </AccordionRoot>
 </template>

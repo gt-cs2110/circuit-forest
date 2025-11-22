@@ -44,13 +44,13 @@ const ports = computed(() => metadata.value.getPorts(props.component));
             fill="currentColor"
             stroke="transparent"
             stroke-width="4"
-            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+            class="rounded-full text-orange-500 outline-orange-500 hover:outline"
             :data-tooltip="port.label"
         />
 
         <rect
             v-if="selectedComponentId === props.component.id"
-            class="pointer-events-none outline-2 outline-offset-2 outline-blue-500"
+            class="pointer-events-none outline outline-offset-2 outline-blue-500"
             :width="dimensions.width * GRID_SIZE"
             :height="dimensions.height * GRID_SIZE"
             fill="transparent"

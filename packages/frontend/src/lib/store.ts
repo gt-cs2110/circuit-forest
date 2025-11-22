@@ -172,7 +172,8 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 }
 
 export function newSubcircuit() {
-    circuits.set(randomId().toString(), {
+    const id = randomId().toString();
+    circuits.set(id, {
         subcircuit: {
             name: "New subcircuit",
             components: new Map(),
@@ -181,4 +182,5 @@ export function newSubcircuit() {
         offset: { x: 0, y: 0 },
         selectedComponentId: null,
     });
+    currentCircuitId.value = id;
 }
