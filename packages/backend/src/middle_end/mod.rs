@@ -2,7 +2,7 @@ use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::circuit::graph::FunctionKey;
 use crate::circuit::{CircuitForest, CircuitKey};
-use crate::middle_end::wire::{Wire, Wires};
+use crate::middle_end::wire::{Wire, WireSet};
 
 mod serialize;
 pub mod wire;
@@ -24,7 +24,7 @@ pub struct MiddleRepr {
 #[derive(Debug, Default)]
 pub struct CircuitArea {
     components: SecondaryMap<FunctionKey, ComponentPos>,
-    wires: Wires,
+    wires: WireSet,
     ui_components: SlotMap<UIKey, ComponentPos>
 }
 
