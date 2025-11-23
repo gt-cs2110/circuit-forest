@@ -84,6 +84,7 @@ impl WireSet {
         // Remove from wire graph:
         let e = self.wires.remove_edge(p.into(), q.into())?;
         // Remove from wire map:
+        // TOOD: Debug assert size is correct
         if is_horiz(p, q) {
             self.horiz_wires.entry(p.1).or_default().remove(&p.0);
         } else if is_vert(p, q) {
@@ -99,7 +100,13 @@ impl WireSet {
             })
             .collect();
         
-        // TODO: Remove extraneous, disconnected nodes
+        // Remove extraneous, disconnected nodes
+        if joints.is_empty() {
+            self.wires.remove_node(q.into());
+        }
+        if self.wires.neighbors(p.into()).next().is_some() {
+            self.wires.remove_node(p.into());
+        }
 
         let result = match joints.contains(&p) {
             true  => RemoveResult::NoSplit(e),
