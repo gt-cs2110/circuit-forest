@@ -104,6 +104,20 @@ impl WireSet {
             }
         }
     }
+
+    pub fn intersecting_wire(&self, c: Coord) -> Option<[Coord; 2]> {
+        // O(E)
+        self.wires.all_edges()
+            .filter_map(|(n1, n2, _)| match (n1, n2) {
+                (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some([p, q]),
+                _ => None
+            })
+            .find(|&[p, q]| {
+                Wire::from_endpoints(p, q)
+                    .unwrap_or_else(|| unreachable!("Points {p:?}, {q:?} should be a 1D line"))
+                    .contains(c)
+            })
+    }
 }
 
 fn is_1d(p: Coord, q: Coord) -> bool {
