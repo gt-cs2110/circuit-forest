@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use petgraph::Undirected;
 use petgraph::prelude::GraphMap;
@@ -28,7 +28,9 @@ pub enum RemoveResult {
 }
 #[derive(Debug, Default)]
 pub struct WireSet {
-    wires: GraphMap<MeshKey, ValueKey, Undirected>
+    wires: GraphMap<MeshKey, ValueKey, Undirected>,
+    horiz_wires: HashMap<Axis, BTreeMap<Axis, Axis>>,
+    vert_wires: HashMap<Axis, BTreeMap<Axis, Axis>>
 }
 impl WireSet {
     pub fn find_key(&self, p: Coord) -> Option<ValueKey> {
@@ -38,15 +40,23 @@ impl WireSet {
     }
 
     pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddResult> {
-        let result = is_1d(p, q);
+        let [p, q] = minmax(p, q);
+        let is_horiz = is_horiz(p, q);
+        let is_vert = is_vert(p, q);
 
-        result.then(|| {
-            // Connect edges.
+        (is_horiz || is_vert).then(|| {
+            // If horizontal or vertical, these two points can be connected.
+
             // TODO: Detect if intersecting another wire
-            let m_pk = self.find_key(p);
-            let m_qk = self.find_key(q);
 
-            match (m_pk, m_qk) {
+            // Add to wire maps:
+            match is_horiz {
+                true  => self.horiz_wires.entry(p.1).or_default().insert(p.0, q.0 - p.0),
+                false => self.vert_wires.entry(p.0).or_default().insert(p.1, q.1 - p.1)
+            };
+
+            // Add to wire graph:
+            match (self.find_key(p), self.find_key(q)) {
                 (None, None) => {
                     let new_key = new_vk();
                     self.wires.add_edge(p.into(), q.into(), new_key);
@@ -69,7 +79,16 @@ impl WireSet {
     }
     
     pub fn remove_wire(&mut self, p: Coord, q: Coord) -> Option<RemoveResult> {
+        let [p, q] = minmax(p, q);
+        
+        // Remove from wire graph:
         let e = self.wires.remove_edge(p.into(), q.into())?;
+        // Remove from wire map:
+        if is_horiz(p, q) {
+            self.horiz_wires.entry(p.1).or_default().remove(&p.0);
+        } else if is_vert(p, q) {
+            self.vert_wires.entry(p.0).or_default().remove(&p.1);
+        }
 
         // If removed, also check if a ValueKey needs to be split
         let joints: HashSet<_> = Bfs::new(&self.wires, q.into())
@@ -105,23 +124,38 @@ impl WireSet {
         }
     }
 
-    pub fn intersecting_wire(&self, c: Coord) -> Option<[Coord; 2]> {
-        // O(E)
-        self.wires.all_edges()
-            .filter_map(|(n1, n2, _)| match (n1, n2) {
-                (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some([p, q]),
-                _ => None
-            })
-            .find(|&[p, q]| {
-                Wire::from_endpoints(p, q)
-                    .unwrap_or_else(|| unreachable!("Points {p:?}, {q:?} should be a 1D line"))
-                    .contains(c)
-            })
+    pub fn wires_at_coord(&self, c: Coord) -> Vec<[Coord; 2]> {
+        let mut wires = vec![];
+
+        // Get all horizontal wires containing c
+        if let Some(m) = self.horiz_wires.get(&c.1) {
+            let it = m.range(..=c.0).rev()
+                .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
+                .take_while(|w| w.contains(c))
+                .map(|w| w.endpoints());
+            wires.extend(it);
+        }
+        // Get all vertical wires containing c
+        if let Some(m) = self.vert_wires.get(&c.0) {
+            let it = m.range(..=c.1).rev()
+                .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: true })
+                .take_while(|w| w.contains(c))
+                .map(|w| w.endpoints());
+            wires.extend(it);
+        }
+
+        wires
     }
 }
 
-fn is_1d(p: Coord, q: Coord) -> bool {
-    p.0 == q.0 || p.1 == q.1
+fn minmax(p: Coord, q: Coord) -> [Coord; 2] {
+    if q < p { [q, p] } else { [p, q] }
+}
+fn is_horiz(p: Coord, q: Coord) -> bool {
+    p.1 == q.1
+}
+fn is_vert(p: Coord, q: Coord) -> bool {
+    p.0 == q.0
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
