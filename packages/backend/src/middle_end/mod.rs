@@ -73,9 +73,9 @@ impl MiddleRepr {
 
         match self.physical[ckey].wires.remove_wire(p, q) {
             Some(wire::RemoveResult::NoSplit(_)) => Ok(()),
-            Some(wire::RemoveResult::Split(k, coords)) => {
+            Some(wire::RemoveResult::Split(c, k, coords)) => {
                 let nk = self.forest.circuit(ckey).split(k, &[ todo!("get ports connected to mesh") ]);
-                self.physical[ckey].wires.flood_fill(coords[0], nk);
+                self.physical[ckey].wires.flood_fill(c, nk);
                 Ok(())
             },
             None => Err(ReprEditErr::CannotRemoveWire),

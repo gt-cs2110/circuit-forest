@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use petgraph::Undirected;
 use petgraph::prelude::GraphMap;
 use petgraph::visit::{Bfs, Walker};
@@ -22,7 +24,7 @@ pub enum AddResult {
 }
 pub enum RemoveResult {
     NoSplit(ValueKey),
-    Split(ValueKey, Vec<Coord>)
+    Split(Coord, ValueKey, HashSet<Coord>)
 }
 #[derive(Debug, Default)]
 pub struct WireSet {
@@ -70,7 +72,7 @@ impl WireSet {
         let e = self.wires.remove_edge(p.into(), q.into())?;
 
         // If removed, also check if a ValueKey needs to be split
-        let joints: Vec<_> = Bfs::new(&self.wires, p.into())
+        let joints: HashSet<_> = Bfs::new(&self.wires, q.into())
             .iter(&self.wires)
             .filter_map(|m| match m {
                 MeshKey::WireJoint(c) => Some(c),
@@ -80,9 +82,9 @@ impl WireSet {
         
         // TODO: Remove extraneous, disconnected nodes
 
-        let result = match joints.contains(&q) {
+        let result = match joints.contains(&p) {
             true  => RemoveResult::NoSplit(e),
-            false => RemoveResult::Split(e, joints),
+            false => RemoveResult::Split(q, e, joints),
         };
         Some(result)
     }
