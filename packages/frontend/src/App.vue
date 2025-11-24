@@ -27,7 +27,6 @@ const sliderValue = computed({
 });
 
 const windowWidth = ref(window.innerWidth);
-const defaultWidth = toPercentage(72 * 4);
 function toPercentage(px: number) {
     return (100 / windowWidth.value) * px;
 }
@@ -63,7 +62,7 @@ onUnmounted(() => {
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
                 :min-size="toPercentage(48 * 4)"
-                :default-size="defaultWidth"
+                :default-size="toPercentage(72 * 4)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
             >
                 <ComponentSelector />
@@ -85,7 +84,7 @@ onUnmounted(() => {
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
                 :min-size="toPercentage(60 * 4)"
-                :default-size="defaultWidth"
+                :default-size="toPercentage(72 * 4)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
             >
                 <Properties />
