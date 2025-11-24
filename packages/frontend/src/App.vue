@@ -30,6 +30,9 @@ const windowWidth = ref(window.innerWidth);
 function toPercentage(px: number) {
     return (100 / windowWidth.value) * px;
 }
+function fromPercentage(percent: number) {
+    return (percent / 100) * windowWidth.value;
+}
 
 function updateWindowWidth() {
     windowWidth.value = window.innerWidth;
@@ -40,6 +43,9 @@ onMounted(() => {
 onUnmounted(() => {
     window.removeEventListener("resize", updateWindowWidth);
 });
+
+const leftWidth = ref(72 * 4);
+const rightWidth = ref(72 * 4);
 </script>
 
 <template>
@@ -62,8 +68,9 @@ onUnmounted(() => {
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
                 :min-size="toPercentage(48 * 4)"
-                :default-size="toPercentage(72 * 4)"
+                :default-size="toPercentage(leftWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
+                @resize="leftWidth = fromPercentage($event)"
             >
                 <ComponentSelector />
             </SplitterPanel>
@@ -84,8 +91,9 @@ onUnmounted(() => {
             <SplitterPanel
                 class="bg-zinc-900 text-zinc-200"
                 :min-size="toPercentage(60 * 4)"
-                :default-size="toPercentage(72 * 4)"
+                :default-size="toPercentage(rightWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
+                @resize="rightWidth = fromPercentage($event)"
             >
                 <Properties />
             </SplitterPanel>
