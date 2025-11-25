@@ -47,6 +47,10 @@
         --scrollbar-thumb: var(--color-zinc-700);
     }
 
+    body {
+        @apply bg-zinc-900;
+    }
+
     * {
         scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
         scrollbar-width: none;
