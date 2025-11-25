@@ -186,23 +186,21 @@ impl WireSet {
     /// 
     /// This returns all wire segments, including segments that this coord
     /// is in the middle of.
-    pub fn wires_at_coord(&self, c: Coord) -> Vec<[Coord; 2]> {
+    pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
         let mut wires = vec![];
 
         // Get all horizontal wires containing c
         if let Some(m) = self.horiz_wires.get(&c.1) {
             let it = m.range(..=c.0).rev()
                 .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
-                .take_while(|w| w.contains(c))
-                .map(|w| w.endpoints());
+                .take_while(|w| w.contains(c));
             wires.extend(it);
         }
         // Get all vertical wires containing c
         if let Some(m) = self.vert_wires.get(&c.0) {
             let it = m.range(..=c.1).rev()
                 .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: true })
-                .take_while(|w| w.contains(c))
-                .map(|w| w.endpoints());
+                .take_while(|w| w.contains(c));
             wires.extend(it);
         }
 
@@ -224,20 +222,30 @@ fn is_vert(p: Coord, q: Coord) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Wire {
     /// The lowermost X coordinate of the wire.
-    pub x: Axis,
+    x: Axis,
     /// The lowermost Y coordinate of the wire.
-    pub y: Axis,
+    y: Axis,
     /// The length of the wire.
-    pub length: Axis,
+    length: Axis,
     /// Whether the wire is horizontal or vertical.
     #[serde(rename = "isHorizontal")]
-    pub horizontal: bool
+    horizontal: bool
 }
 impl Wire {
+    /// Creates a new Wire, returning None if `length` would result in overflowing coordinates.
+    pub fn new(x: Axis, y: Axis, length: Axis, horizontal: bool) -> Option<Self> {
+        let acceptable = match horizontal {
+            true  => x.checked_add(length).is_some(),
+            false => y.checked_add(length).is_some()
+        };
+
+        acceptable.then_some(Self { x, y, length, horizontal })
+    }
+
     /// Constructs a wire out of endpoints, returning None if not 1D.
     pub fn from_endpoints(p: Coord, q: Coord) -> Option<Self> {
         // Let p = the left-/top-most coord, q = the other coord.
-        let [p, q] = if p <= q { [p, q] } else { [q, p] };
+        let [p, q] = minmax(p, q);
 
         match (q.0 - p.0, q.1 - p.1) {
             (0, length) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
@@ -248,7 +256,6 @@ impl Wire {
 
     /// The endpoints of the wire.
     pub fn endpoints(&self) -> [Coord; 2] {
-        // FIXME: Handle overflow
         match self.horizontal {
             true  => [(self.x, self.y), (self.x + self.length, self.y)],
             false => [(self.x, self.y), (self.x, self.y + self.length)],
