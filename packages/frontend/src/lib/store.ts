@@ -58,7 +58,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                             },
                         ],
                     ]),
-                    wires: [],
+                    wires: [{ x: 5, y: 3, direction: "H", length: 5 }],
                 },
                 selectedComponentId: null,
                 offset: { x: 0, y: 0 },

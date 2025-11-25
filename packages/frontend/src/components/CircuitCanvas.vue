@@ -13,6 +13,7 @@ import {
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { componentMap } from "./circuitry";
+import Wire from "./circuitry/Wire.vue";
 
 const props = defineProps<{
     state: SubcircuitState;
@@ -252,6 +253,10 @@ function zoom(newScaleLevel: number) {
                 "
             >
                 <CircuitComponentPreview :type="placingComponent" />
+            </g>
+
+            <g v-for="(wire, i) in state.subcircuit.wires" :key="i">
+                <Wire :wire />
             </g>
         </svg>
 
