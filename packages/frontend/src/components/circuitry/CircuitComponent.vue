@@ -3,7 +3,7 @@ import { GRID_SIZE } from "@/lib/consts";
 import { componentDrag, selectedComponentId } from "@/lib/store";
 import { CircuitComponent } from "@/lib/types";
 
-import { componentMap } from "./circuitry";
+import { componentMap } from ".";
 import { computed } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();

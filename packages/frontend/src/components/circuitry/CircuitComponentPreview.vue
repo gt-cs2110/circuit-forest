@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ComponentType } from "@/lib/types";
-import { componentMap } from "./circuitry";
+import { componentMap } from ".";
 import { GRID_SIZE } from "@/lib/consts";
 import { computed } from "vue";
 

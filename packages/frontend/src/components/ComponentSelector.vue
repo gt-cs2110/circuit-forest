@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { componentCategories } from "@/lib/types";
 import { componentMap } from "./circuitry";
-import CircuitComponentPreview from "./CircuitComponentPreview.vue";
+import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { placingComponent } from "@/lib/store";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 </script>

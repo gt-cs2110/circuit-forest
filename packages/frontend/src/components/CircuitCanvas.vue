@@ -10,8 +10,8 @@ import {
     settings,
     SubcircuitState,
 } from "@/lib/store";
-import CircuitComponent from "./CircuitComponent.vue";
-import CircuitComponentPreview from "./CircuitComponentPreview.vue";
+import CircuitComponent from "./circuitry/CircuitComponent.vue";
+import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { componentMap } from "./circuitry";
 
 const props = defineProps<{
