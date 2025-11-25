@@ -40,9 +40,13 @@ onUnmounted(() => {
 
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
+
+    clearTimeout(timeoutId);
 });
 
-function scroll(e: WheelEvent) {
+let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function handleWheel(e: WheelEvent) {
     if (!e.deltaY || !parent.value) {
         return;
     }
@@ -53,6 +57,12 @@ function scroll(e: WheelEvent) {
 function scrollChanged(e: Event) {
     const target = e.currentTarget as HTMLElement;
     scrollAmount.value = target.scrollLeft;
+    parent.value.parentElement.dataset.active = "true";
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+        parent.value.parentElement.dataset.active = "false";
+        timeoutId = null;
+    }, 700);
 }
 
 function handleMouseDown(e: MouseEvent) {
@@ -108,7 +118,7 @@ defineExpose({
         <div
             ref="parent"
             class="flex overflow-x-auto overflow-y-hidden"
-            @wheel="scroll"
+            @wheel="handleWheel"
             @scroll="scrollChanged"
         >
             <div ref="child" class="w-max shrink-0 grow">
@@ -122,7 +132,7 @@ defineExpose({
             @mousedown.self="handleTrackClick"
         >
             <div
-                class="absolute top-0 h-full bg-transparent opacity-25 transition-colors group-hover/scroll:bg-zinc-200 group-active/scrollbar:bg-zinc-200 group-active/scrollbar:opacity-50 hover:opacity-35 active:bg-zinc-200 active:opacity-50"
+                class="absolute top-0 h-full bg-transparent opacity-25 transition-colors group-hover/scroll:bg-zinc-200 group-active/scrollbar:bg-zinc-200 group-active/scrollbar:opacity-50 group-data-[active=true]/scroll:bg-zinc-200 hover:opacity-35 active:bg-zinc-200 active:opacity-50"
                 :style="{
                     width: `max(${(parentWidth / childWidth) * 100}%, 2rem)`,
                     left: `${(scrollAmount / parent.scrollWidth) * 100}%`,
