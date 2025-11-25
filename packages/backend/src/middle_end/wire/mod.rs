@@ -7,9 +7,12 @@ use petgraph::visit::{Bfs, Walker};
 use crate::circuit::graph::ValueKey;
 use crate::middle_end::{Axis, Coord, UIKey};
 
+/// A key to attach onto the wire set graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum MeshKey {
+    /// A joint (a wire point)
     WireJoint(Coord),
+    /// A tunnel.
     Tunnel(UIKey)
 }
 impl From<Coord> for MeshKey {
@@ -18,14 +21,39 @@ impl From<Coord> for MeshKey {
     }
 }
 
-pub enum AddResult {
+/// The result type for [`WireSet::add_wire`].
+/// 
+/// This enum indicates whether two [`ValueKey`]s need to be joined.
+pub enum AddWireResult {
+    /// No joining is necessary.
+    /// The [`ValueKey`] provided is the key of the added wire.
     NoJoin(ValueKey),
+
+    /// Joining is necessary.
+    /// The parameters are:
+    /// - The coordinate to start a flood fill from.
+    /// - The value key the new wire is set to.
+    /// - The value key which needs to be replaced with the new wire's key.
     Join(Coord, ValueKey, ValueKey)
 }
-pub enum RemoveResult {
+
+/// The result type for [`WireSet::remove_wire`].
+/// 
+/// This enum indicates whether a [`ValueKey`] must be split into two.
+pub enum RemoveWireResult {
+    /// No splitting is necessary.
+    /// The [`ValueKey`] provided is the key of the two endpoints.
     NoSplit(ValueKey),
+    /// Splitting is necessary.
+    /// The parameters are:
+    /// - The coordinate to start a flood fill from.
+    /// - The [`ValueKey`] which needs to be split.
+    /// - A list of coordinates which are on one half of the split ValueKey
+    ///   (the same half as the coordinate parameter).
     Split(Coord, ValueKey, HashSet<Coord>)
 }
+
+/// The connection of wires in a circuit.
 #[derive(Debug, Default)]
 pub struct WireSet {
     wires: GraphMap<MeshKey, ValueKey, Undirected>,
@@ -33,13 +61,24 @@ pub struct WireSet {
     vert_wires: HashMap<Axis, BTreeMap<Axis, Axis>>
 }
 impl WireSet {
+    /// Find the ValueKey corresponding to a coordinate (if it exists).
     pub fn find_key(&self, p: Coord) -> Option<ValueKey> {
         self.wires.edges(p.into())
             .next()
             .map(|(_, _, &k)| k)
     }
 
-    pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddResult> {
+    /// Add a wire to the graph, connecting points p and q.
+    /// A `new_vk` callback needs to be provided in case edge pq is disconnected 
+    /// from the rest of the graph and needs a new key.
+    /// 
+    /// This function may add additional wires (e.g., if a connection would result in an intersection)
+    /// or subsume wires which already exist (e.g., to extend a wire).
+    /// 
+    /// If this function returns None, the wire could not be added.
+    /// Otherwise, this function returns data needed to merge two groups of wires
+    /// with different [`ValueKey`]s (if applicable).
+    pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         let [p, q] = minmax(p, q);
         let is_horiz = is_horiz(p, q);
         let is_vert = is_vert(p, q);
@@ -60,31 +99,38 @@ impl WireSet {
                 (None, None) => {
                     let new_key = new_vk();
                     self.wires.add_edge(p.into(), q.into(), new_key);
-                    AddResult::NoJoin(new_key)
+                    AddWireResult::NoJoin(new_key)
                 },
                 (Some(key), None) | (None, Some(key)) => {
                     self.wires.add_edge(p.into(), q.into(), key);
-                    AddResult::NoJoin(key)
+                    AddWireResult::NoJoin(key)
                 },
                 (Some(pk), Some(qk)) if pk == qk => {
                     self.wires.add_edge(p.into(), q.into(), pk);
-                    AddResult::NoJoin(pk)
+                    AddWireResult::NoJoin(pk)
                 },
                 (Some(pk), Some(qk)) => {
                     self.wires.add_edge(p.into(), q.into(), pk);
-                    AddResult::Join(q, pk, qk)
+                    AddWireResult::Join(q, pk, qk)
                 }
             }
         })
     }
     
-    pub fn remove_wire(&mut self, p: Coord, q: Coord) -> Option<RemoveResult> {
+    /// Removes the wire from the graph between p and q.
+    /// 
+    /// Note that this function only removes wires that are directly connected by joints
+    /// in the circuit.
+    /// 
+    /// If this function returns None, the wire does not exist & could not be removed.
+    /// Otherwise, this function returns data needed to split a [`ValueKey`] (if applicable).
+    pub fn remove_wire(&mut self, p: Coord, q: Coord) -> Option<RemoveWireResult> {
         let [p, q] = minmax(p, q);
         
         // Remove from wire graph:
         let e = self.wires.remove_edge(p.into(), q.into())?;
         // Remove from wire map:
-        // TOOD: Debug assert size is correct
+        // TODO: Debug assert size is correct
         if is_horiz(p, q) {
             self.horiz_wires.entry(p.1).or_default().remove(&p.0);
         } else if is_vert(p, q) {
@@ -109,13 +155,18 @@ impl WireSet {
         }
 
         let result = match joints.contains(&p) {
-            true  => RemoveResult::NoSplit(e),
-            false => RemoveResult::Split(q, e, joints),
+            true  => RemoveWireResult::NoSplit(e),
+            false => RemoveWireResult::Split(q, e, joints),
         };
         Some(result)
     }
 
-    pub fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
+    /// Replaces the [`ValueKey`] of all the wires connecting to the specified Coord
+    /// with the specified [`ValueKey`].
+    /// 
+    /// This works as long as Coord only has 1 [`ValueKey`] 
+    /// or is connected to 2 [`ValueKey`]s (one of which is the flood key).
+    pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
         let mut frontier = vec![MeshKey::WireJoint(p)];
 
         while let Some(k) = frontier.pop() {
@@ -131,6 +182,10 @@ impl WireSet {
         }
     }
 
+    /// Gets all wire segments coinciding at the specified coords.
+    /// 
+    /// This returns all wire segments, including segments that this coord
+    /// is in the middle of.
     pub fn wires_at_coord(&self, c: Coord) -> Vec<[Coord; 2]> {
         let mut wires = vec![];
 
@@ -165,15 +220,21 @@ fn is_vert(p: Coord, q: Coord) -> bool {
     p.0 == q.0
 }
 
+/// A wire.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Wire {
+    /// The lowermost X coordinate of the wire.
     pub x: Axis,
+    /// The lowermost Y coordinate of the wire.
     pub y: Axis,
+    /// The length of the wire.
     pub length: Axis,
+    /// Whether the wire is horizontal or vertical.
     #[serde(rename = "isHorizontal")]
     pub horizontal: bool
 }
 impl Wire {
+    /// Constructs a wire out of endpoints, returning None if not 1D.
     pub fn from_endpoints(p: Coord, q: Coord) -> Option<Self> {
         // Let p = the left-/top-most coord, q = the other coord.
         let [p, q] = if p <= q { [p, q] } else { [q, p] };
@@ -202,6 +263,7 @@ impl Wire {
         }
     }
 
+    /// Splits a wire into two, returning None if the specified coordinate does not intersect the wire.
     pub fn split(&self, c: Coord) -> Option<[Wire; 2]> {
         match self.contains(c) {
             true => {
@@ -214,6 +276,7 @@ impl Wire {
         }
     }
 
+    /// Joins two wires, returning None if the two wires would not join into a 1D wire.
     pub fn join(&self, w: Wire) -> Option<Wire> {
         // if both are same orientation & align on endpoint then join
         let [l1, r1] = self.endpoints();

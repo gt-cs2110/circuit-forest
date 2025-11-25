@@ -59,8 +59,8 @@ impl MiddleRepr {
         let result = self.physical[ckey].wires.add_wire(p, q, || self.forest.circuit(ckey).add_value_node())
             .unwrap_or_else(|| unreachable!("p, q are 1d"));
         match result {
-            wire::AddResult::NoJoin(_) => {},
-            wire::AddResult::Join(c, k1, k2) => {
+            wire::AddWireResult::NoJoin(_) => {},
+            wire::AddWireResult::Join(c, k1, k2) => {
                 self.forest.circuit(ckey).join(&[k1, k2]);
                 self.physical[ckey].wires.flood_fill(c, k1);
             },
@@ -72,8 +72,8 @@ impl MiddleRepr {
         let [p, q] = w.endpoints();
 
         match self.physical[ckey].wires.remove_wire(p, q) {
-            Some(wire::RemoveResult::NoSplit(_)) => Ok(()),
-            Some(wire::RemoveResult::Split(c, k, coords)) => {
+            Some(wire::RemoveWireResult::NoSplit(_)) => Ok(()),
+            Some(wire::RemoveWireResult::Split(c, k, coords)) => {
                 let nk = self.forest.circuit(ckey).split(k, &[ todo!("get ports connected to mesh") ]);
                 self.physical[ckey].wires.flood_fill(c, nk);
                 Ok(())
