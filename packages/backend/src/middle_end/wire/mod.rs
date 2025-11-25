@@ -258,8 +258,8 @@ impl Wire {
     /// Detect whether this wire includes the specified coordinate.
     pub fn contains(&self, c: Coord) -> bool {
         match self.horizontal {
-            true  => self.y == c.1 && self.x <= c.0 && c.0 <= self.x.saturating_add(self.length),
-            false => self.x == c.0 && self.y <= c.1 && c.1 <= self.y.saturating_add(self.length),
+            true  => self.y == c.1 && (self.x <= c.0) && (c.0 - self.x <= self.length),
+            false => self.x == c.0 && (self.y <= c.1) && (c.1 - self.y <= self.length),
         }
     }
 
