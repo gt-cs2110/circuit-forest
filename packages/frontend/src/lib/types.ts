@@ -1,6 +1,6 @@
 import { Component } from "vue";
 
-export const gateTypes = ["and", "nand", "or"] as const;
+export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
 export const wiringTypes = ["constant"] as const;
 
 export const componentCategories = {
