@@ -6,8 +6,8 @@ import { GRID_SIZE } from "@/lib/consts";
     <rect
         :width="2 * GRID_SIZE"
         :height="2 * GRID_SIZE"
-        fill="currentColor"
-        stroke="gray"
-        class="text-zinc-200"
+        fill="var(--color-component-fill)"
+        stroke="var(--color-component-stroke)"
+        stroke-linecap="round"
     />
 </template>

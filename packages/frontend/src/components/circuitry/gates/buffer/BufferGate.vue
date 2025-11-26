@@ -7,8 +7,8 @@ import { GRID_SIZE } from "@/lib/consts";
         :d="`M 0 0
             L ${2 * GRID_SIZE} ${GRID_SIZE}
             L 0 ${2 * GRID_SIZE} Z`"
-        fill="currentColor"
-        stroke="gray"
-        class="text-zinc-200"
+        fill="var(--color-component-fill)"
+        stroke="var(--color-component-stroke)"
+        stroke-linecap="round"
     />
 </template>

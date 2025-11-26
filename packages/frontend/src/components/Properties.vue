@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { circuits, currentCircuit, selectedComponentId, settings } from "@/lib/store";
+import { circuits, currentCircuit, selectedComponentId } from "@/lib/store/circuit";
 import { componentMap } from "./circuitry";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
+import { settings } from "@/lib/store/settings";
 
 const nameReset = ref(0);
 const subcircuitName = computed({
@@ -32,7 +33,7 @@ const sections = ["global", "circuit", "component"] as const;
 </script>
 
 <template>
-    <h2 class="border-b border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-semibold text-white">
+    <h2 class="border-b bg-panel-light px-4 py-3 text-sm font-semibold text-foreground-highlight">
         Properties
     </h2>
 
@@ -52,7 +53,7 @@ const sections = ["global", "circuit", "component"] as const;
                         min="1"
                         step="1"
                         max="16"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>
             </AccordionContent>
@@ -71,7 +72,7 @@ const sections = ["global", "circuit", "component"] as const;
                         min="1"
                         step="1"
                         max="16"
-                        class="mt-1 block w-full appearance-none bg-zinc-800 px-1 py-1 accent-blue-500"
+                        class="mt-1 block w-full appearance-none border bg-panel-light px-1 py-1 accent-blue-500"
                     />
                 </label>
             </AccordionContent>
@@ -94,7 +95,7 @@ const sections = ["global", "circuit", "component"] as const;
                         min="1"
                         step="1"
                         max="16"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded bg-zinc-700 accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>
             </AccordionContent>

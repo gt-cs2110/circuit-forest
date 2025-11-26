@@ -132,7 +132,7 @@ defineExpose({
             @mousedown.self="handleTrackClick"
         >
             <div
-                class="absolute top-0 h-full bg-transparent opacity-25 transition-colors group-hover/scroll:bg-zinc-200 group-active/scrollbar:bg-zinc-200 group-active/scrollbar:opacity-50 group-data-[active=true]/scroll:bg-zinc-200 hover:opacity-35 active:bg-zinc-200 active:opacity-50"
+                class="absolute top-0 h-full bg-transparent opacity-25 transition-colors group-hover/scroll:bg-foreground group-active/scrollbar:bg-foreground group-active/scrollbar:opacity-50 group-data-[active=true]/scroll:bg-foreground hover:opacity-35 active:bg-foreground active:opacity-50"
                 :style="{
                     width: `max(${(parentWidth / childWidth) * 100}%, 2rem)`,
                     left: `${(scrollAmount / parent.scrollWidth) * 100}%`,

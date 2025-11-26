@@ -5,15 +5,14 @@ import {
     componentDrag,
     placeComponent,
     placingComponent,
-    scale,
     selectedComponentId,
-    settings,
     SubcircuitState,
-} from "@/lib/store";
+} from "@/lib/store/circuit";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { componentMap } from "./circuitry";
 import Wire from "./circuitry/Wire.vue";
+import { scale, settings } from "@/lib/store/settings";
 
 const props = defineProps<{
     state: SubcircuitState;
@@ -194,7 +193,7 @@ function zoom(newScaleLevel: number) {
 
 <template>
     <div
-        class="relative flex-1 overflow-hidden bg-zinc-950 text-zinc-200"
+        class="relative flex-1 overflow-hidden bg-canvas-background"
         :style="{ cursor: isDragging ? 'grabbing' : 'default' }"
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
@@ -219,7 +218,7 @@ function zoom(newScaleLevel: number) {
                         :cx="(GRID_SIZE / 2) * scale"
                         :cy="(GRID_SIZE / 2) * scale"
                         :r="0.5 * scale"
-                        fill="var(--color-zinc-500)"
+                        fill="var(--color-canvas-dots)"
                     />
                 </pattern>
             </defs>
@@ -262,7 +261,7 @@ function zoom(newScaleLevel: number) {
 
         <div
             v-if="tooltip.value"
-            class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border-2 border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
+            class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
             :style="{
                 left: tooltip.x + 'px',
                 top: tooltip.y + 'px',

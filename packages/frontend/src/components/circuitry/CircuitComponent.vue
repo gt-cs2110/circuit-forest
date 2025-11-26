@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { componentDrag, selectedComponentId } from "@/lib/store";
+import { componentDrag, selectedComponentId } from "@/lib/store/circuit";
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
@@ -50,7 +50,7 @@ const ports = computed(() => metadata.value.getPorts(props.component));
 
         <rect
             v-if="selectedComponentId === props.component.id"
-            class="pointer-events-none outline outline-offset-2 outline-blue-500"
+            class="pointer-events-none outline outline-offset-1 outline-blue-500"
             :width="dimensions.width * GRID_SIZE"
             :height="dimensions.height * GRID_SIZE"
             fill="transparent"

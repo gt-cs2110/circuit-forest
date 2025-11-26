@@ -6,7 +6,7 @@ import { AccordionHeader, AccordionTrigger } from "reka-ui";
 <template>
     <AccordionHeader>
         <AccordionTrigger
-            class="group flex w-full cursor-pointer items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-4 py-2 text-left text-sm font-medium text-zinc-200"
+            class="group flex w-full cursor-pointer items-center gap-2 border-b bg-panel-light px-4 py-2 text-left text-sm font-medium"
         >
             <slot />
             <ChevronDown

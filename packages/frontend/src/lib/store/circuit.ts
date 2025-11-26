@@ -1,14 +1,7 @@
 import { computed, reactive, ref, watch } from "vue";
 
-import { ComponentType, Location, Subcircuit } from "./types";
-
-export const settings = reactive({
-    scaleLevel: 0,
-    globalBitsize: 1,
-});
-export const scale = computed(() => {
-    return Math.pow(1.2, settings.scaleLevel);
-});
+import { ComponentType, Location, Subcircuit } from "../types";
+import { settings } from "./settings";
 
 export type SubcircuitState = {
     subcircuit: Subcircuit;

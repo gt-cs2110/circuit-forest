@@ -3,7 +3,7 @@ import "vue-sonner/style.css";
 
 import CircuitCanvas from "./components/CircuitCanvas.vue";
 import Properties from "./components/Properties.vue";
-import { currentCircuit, scale, settings } from "./lib/store";
+import { currentCircuit } from "./lib/store/circuit";
 import CircuitTabs from "./components/CircuitTabs.vue";
 import ComponentSelector from "./components/ComponentSelector.vue";
 import {
@@ -15,7 +15,15 @@ import {
     SplitterResizeHandle,
 } from "reka-ui";
 import { Toaster } from "vue-sonner";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onBeforeMount, onMounted, onUnmounted, ref } from "vue";
+import { scale, settings, theme } from "./lib/store/settings";
+import { Moon, Sun } from "lucide-vue-next";
+
+onBeforeMount(() => {
+    if (theme.value == "dark") {
+        document.documentElement.classList.toggle("dark", true);
+    }
+});
 
 const sliderValue = computed({
     get() {
@@ -53,10 +61,10 @@ const rightWidth = ref(72 * 4);
         theme="dark"
         :toast-options="{
             style: {
-                background: 'var(--color-zinc-900)',
+                background: 'var(--color-panel-dark)',
                 borderRadius: '0',
-                color: 'var(--color-zinc-200)',
-                borderColor: 'var(--color-zinc-700)',
+                color: 'var(--color-foreground)',
+                borderColor: 'var(--color-border)',
             },
         }"
         :gap="6"
@@ -66,7 +74,7 @@ const rightWidth = ref(72 * 4);
     <div class="flex h-screen flex-col">
         <SplitterGroup direction="horizontal" :keyboard-resize-by="toPercentage(16)">
             <SplitterPanel
-                class="bg-zinc-900 text-zinc-200"
+                class="bg-panel-dark"
                 :min-size="toPercentage(48 * 4)"
                 :default-size="toPercentage(leftWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
@@ -76,7 +84,7 @@ const rightWidth = ref(72 * 4);
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-zinc-700 outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
+                class="w-px bg-border outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
             />
 
             <SplitterPanel class="flex flex-1 flex-col">
@@ -85,11 +93,11 @@ const rightWidth = ref(72 * 4);
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-zinc-700 outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-zinc-500 data-[state=hover]:bg-zinc-500"
+                class="w-px bg-border outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
             />
 
             <SplitterPanel
-                class="bg-zinc-900 text-zinc-200"
+                class="bg-panel-dark"
                 :min-size="toPercentage(60 * 4)"
                 :default-size="toPercentage(rightWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
@@ -99,9 +107,24 @@ const rightWidth = ref(72 * 4);
             </SplitterPanel>
         </SplitterGroup>
 
-        <div
-            class="flex h-6 items-center border-t border-zinc-700 bg-zinc-800 px-4 text-xs text-zinc-200"
-        >
+        <div class="flex h-6 items-center border-t bg-panel-light px-4 text-xs">
+            <button
+                @click="
+                    if (theme == 'dark') {
+                        theme = 'light';
+                    } else {
+                        theme = 'dark';
+                    }
+                "
+            >
+                <component
+                    :is="theme === 'light' ? Moon : Sun"
+                    :size="12"
+                    absolute-stroke-width
+                    class="text-foreground-muted"
+                />
+            </button>
+
             <SliderRoot
                 v-model="sliderValue"
                 :min="-5"
@@ -109,17 +132,19 @@ const rightWidth = ref(72 * 4);
                 :max="10"
                 class="relative ml-auto flex w-52 touch-none items-center select-none"
             >
-                <SliderTrack class="relative h-0.5 flex-1 bg-zinc-500">
+                <SliderTrack class="relative h-0.5 flex-1 bg-foreground-muted">
                     <div
-                        class="absolute top-1/2 left-1/3 h-2 w-0.5 -translate-y-1/2 bg-zinc-500"
+                        class="absolute top-1/2 left-1/3 h-2 w-0.5 -translate-y-1/2 bg-foreground-muted"
                     ></div>
                 </SliderTrack>
                 <SliderThumb
-                    class="block h-2 w-3 bg-zinc-400 hover:bg-zinc-300"
+                    class="block h-2 w-3 bg-foreground-muted hover:bg-foreground"
                     aria-label="Zoom level"
                 />
             </SliderRoot>
-            <span class="w-12 text-right text-zinc-300"> {{ (scale * 100).toFixed(0) }}% </span>
+            <span class="w-12 text-right text-foreground-muted">
+                {{ (scale * 100).toFixed(0) }}%
+            </span>
         </div>
     </div>
 </template>

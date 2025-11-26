@@ -1,6 +1,20 @@
 @import "tailwindcss";
 
 @theme {
+    --color-foreground: var(--foreground);
+    --color-foreground-highlight: var(--foreground-highlight);
+    --color-foreground-muted: var(--foreground-muted);
+
+    --color-border: var(--border);
+
+    --color-panel-dark: var(--panel-dark);
+    --color-panel-light: var(--panel-light);
+
+    --color-canvas-background: var(--canvas-background);
+    --color-canvas-dots: var(--canvas-dots);
+    --color-component-fill: var(--component-fill);
+    --color-component-stroke: var(--component-stroke);
+
     --animate-grow-in: grow-in var(--default-transition-duration)
         var(--default-transition-timing-function);
     --animate-grow-out: grow-out var(--default-transition-duration)
@@ -43,16 +57,60 @@
 
 @layer base {
     html {
-        --scrollbar-bg: var(--color-zinc-900);
-        --scrollbar-thumb: var(--color-zinc-700);
+        --foreground: var(--color-zinc-800);
+        --foreground-highlight: var(--color-zinc-950);
+        --foreground-muted: var(--color-zinc-500);
+
+        --border: var(--color-zinc-300);
+
+        --panel-dark: var(--color-zinc-100);
+        --panel-light: var(--color-zinc-50);
+
+        --canvas-background: var(--color-zinc-200);
+        --canvas-dots: var(--color-zinc-800);
+        --component-fill: var(--color-white);
+        --component-stroke: var(--color-zinc-600);
+    }
+
+    html.dark {
+        --foreground: var(--color-zinc-200);
+        --foreground-highlight: var(--color-white);
+        --foreground-muted: var(--color-zinc-400);
+
+        --border: var(--color-zinc-700);
+
+        --panel-dark: var(--color-zinc-900);
+        --panel-light: var(--color-zinc-800);
+
+        --canvas-background: var(--color-zinc-950);
+        --canvas-dots: var(--color-zinc-500);
+        --component-fill: var(--color-zinc-200);
+        --component-stroke: var(--color-zinc-500);
+    }
+
+    ::view-transition-old(root) {
+        animation-delay: 500ms;
+    }
+    ::view-transition-new(root) {
+        animation: 500ms circle-in;
+    }
+
+    @keyframes circle-in {
+        from {
+            clip-path: circle(0% at 0% 100%);
+        }
+
+        to {
+            clip-path: circle(hypot(100vw, 100lvh) at 0% 100%);
+        }
     }
 
     body {
-        @apply bg-zinc-900;
+        @apply bg-canvas-background text-foreground;
     }
 
     * {
-        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+        @apply border-border;
         scrollbar-width: none;
     }
 

@@ -4,7 +4,7 @@ import { AccordionContent } from "reka-ui";
 
 <template>
     <AccordionContent
-        class="border-b border-zinc-700 data-[state=closed]:animate-grow-out data-[state=open]:animate-grow-in"
+        class="border-b data-[state=closed]:animate-grow-out data-[state=open]:animate-grow-in"
     >
         <slot />
     </AccordionContent>
