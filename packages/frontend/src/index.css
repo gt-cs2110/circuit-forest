@@ -92,7 +92,7 @@
         animation-delay: 500ms;
     }
     ::view-transition-new(root) {
-        animation: 500ms circle-in;
+        animation: 500ms circle-in cubic-bezier(0.33, 1, 0.68, 1);
     }
 
     @keyframes circle-in {
