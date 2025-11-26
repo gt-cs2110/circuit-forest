@@ -4,8 +4,8 @@ export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buf
 export const wiringTypes = ["constant"] as const;
 
 export const componentCategories = {
-    gates: gateTypes,
     wiring: wiringTypes,
+    gates: gateTypes,
 };
 
 export const componentTypes = [...gateTypes, ...wiringTypes];
