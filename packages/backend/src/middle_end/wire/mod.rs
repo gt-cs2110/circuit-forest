@@ -68,6 +68,70 @@ impl WireSet {
             .map(|(_, _, &k)| k)
     }
 
+    /// Finds the farthest coordinate from `c`
+    /// which can be used to create a 1D wire of the specified orientation.
+    /// 
+    /// This assumes coordinate `c` is a wire with one neighbor.
+    fn max_wire_endpoint(&self, c: Coord, horizontal: bool) -> Coord {
+        let mut parent = c;
+        let mut child = c;
+        loop {
+            let mut it = self.wires.edges(child.into())
+                // Get all physical wires
+                .filter_map(|(m1, m2, _)| match (m1, m2) {
+                    (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some((q, Wire::from_endpoints(p, q)?)),
+                    _ => None
+                })
+                // Find any wires which match the same orientation and would not create the same wire as (parent-child)
+                .filter(|(q, w)| w.horizontal == horizontal && q != &parent);
+
+            match (it.next(), it.next()) {
+                (Some((next_pt, _)), None) => (parent, child) = (child, next_pt),
+                _ => break
+            };
+        }
+
+        child
+    }
+
+    /// Checks if there's a wire at the coordinate and splitting it into two if needed.
+    /// 
+    /// Returns whether a split was successful.
+    fn split_joint(&mut self, c: Coord, horizontal: bool) -> bool {
+        let splittable_wires = match horizontal {
+            true  => self.vert_wires_at_coord(c),
+            false => self.horiz_wires_at_coord(c),
+        };
+        
+        let mut it = splittable_wires
+            .into_iter()
+            .filter_map(|w| Some((w, w.split(c)?)));
+        
+        let Some((w, [w1, w2])) = it.next() else {
+            return false;
+        };
+        debug_assert!(it.next().is_none(), "Expected only one splittable wire");
+
+        // Split wires in graph:
+        let [p, q] = w.endpoints();
+        let Some(k) = self.wires.remove_edge(p.into(), q.into()) else {
+            unreachable!("Expected wire to split to exist");
+        };
+        self.wires.add_edge(p.into(), c.into(), k);
+        self.wires.add_edge(c.into(), q.into(), k);
+        // Split wires in map:
+        match w1.horizontal {
+            true  => self.horiz_wires.entry(w1.y).or_default().insert(w1.x, w1.length),
+            false => self.vert_wires.entry(w1.x).or_default().insert(w1.y, w1.length)
+        };
+        match w2.horizontal {
+            true  => self.horiz_wires.entry(w2.y).or_default().insert(w2.x, w2.length),
+            false => self.vert_wires.entry(w2.x).or_default().insert(w2.y, w2.length)
+        };
+
+        true
+    }
+
     /// Add a wire to the graph, connecting points p and q.
     /// A `new_vk` callback needs to be provided in case edge pq is disconnected 
     /// from the rest of the graph and needs a new key.
@@ -182,28 +246,28 @@ impl WireSet {
         }
     }
 
+    fn vert_wires_at_coord(&self, c: Coord) -> Vec<Wire> {
+        let Some(m) = self.vert_wires.get(&c.0) else { return vec![] };
+        m.range(..=c.1).rev()
+            .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: false })
+            .take_while(|w| w.contains(c))
+            .collect()
+    }
+    fn horiz_wires_at_coord(&self, c: Coord) -> Vec<Wire> {
+        let Some(m) = self.horiz_wires.get(&c.1) else { return vec![] };
+        m.range(..=c.0).rev()
+            .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
+            .take_while(|w| w.contains(c))
+            .collect()
+    }
+
     /// Gets all wire segments coinciding at the specified coords.
     /// 
     /// This returns all wire segments, including segments that this coord
     /// is in the middle of.
     pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
-        let mut wires = vec![];
-
-        // Get all horizontal wires containing c
-        if let Some(m) = self.horiz_wires.get(&c.1) {
-            let it = m.range(..=c.0).rev()
-                .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
-                .take_while(|w| w.contains(c));
-            wires.extend(it);
-        }
-        // Get all vertical wires containing c
-        if let Some(m) = self.vert_wires.get(&c.0) {
-            let it = m.range(..=c.1).rev()
-                .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: true })
-                .take_while(|w| w.contains(c));
-            wires.extend(it);
-        }
-
+        let mut wires = self.horiz_wires_at_coord(c);
+        wires.extend(self.vert_wires_at_coord(c));
         wires
     }
 }
@@ -242,6 +306,7 @@ impl Wire {
         let [p, q] = minmax(p, q);
 
         match (q.0 - p.0, q.1 - p.1) {
+            (0, 0) => None,
             (0, length) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
             (length, 0) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
             _ => None
