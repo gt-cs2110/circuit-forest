@@ -79,22 +79,19 @@ impl WireSet {
     /// Otherwise, this function returns data needed to merge two groups of wires
     /// with different [`ValueKey`]s (if applicable).
     pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
-        let [p, q] = minmax(p, q);
-        let is_horiz = is_horiz(p, q);
-        let is_vert = is_vert(p, q);
-
-        (is_horiz || is_vert).then(|| {
+        Wire::from_endpoints(p, q).map(|w| {
             // If horizontal or vertical, these two points can be connected.
-
+    
             // TODO: Detect if intersecting another wire
-
+    
             // Add to wire maps:
-            match is_horiz {
-                true  => self.horiz_wires.entry(p.1).or_default().insert(p.0, q.0 - p.0),
-                false => self.vert_wires.entry(p.0).or_default().insert(p.1, q.1 - p.1)
+            match w.horizontal {
+                true  => self.horiz_wires.entry(w.y).or_default().insert(w.x, w.length),
+                false => self.vert_wires.entry(w.x).or_default().insert(w.y, w.length)
             };
-
+    
             // Add to wire graph:
+            let [p, q] = w.endpoints();
             match (self.find_key(p), self.find_key(q)) {
                 (None, None) => {
                     let new_key = new_vk();
@@ -129,13 +126,16 @@ impl WireSet {
         
         // Remove from wire graph:
         let e = self.wires.remove_edge(p.into(), q.into())?;
+
         // Remove from wire map:
-        // TODO: Debug assert size is correct
-        if is_horiz(p, q) {
-            self.horiz_wires.entry(p.1).or_default().remove(&p.0);
-        } else if is_vert(p, q) {
-            self.vert_wires.entry(p.0).or_default().remove(&p.1);
-        }
+        let Some(w) = Wire::from_endpoints(p, q) else {
+            unreachable!("({p:?}, {q:?}) must constitute a valid wire due to being successfully removed from the graph");
+        };
+        let m_len = match w.horizontal {
+            true  => self.horiz_wires.entry(w.y).or_default().remove(&w.x),
+            false => self.vert_wires.entry(w.x).or_default().remove(&w.y)
+        };
+        debug_assert_eq!(m_len, Some(w.length), "Expected wire to be removed from map with correct length");
 
         // If removed, also check if a ValueKey needs to be split
         let joints: HashSet<_> = Bfs::new(&self.wires, q.into())
@@ -210,12 +210,6 @@ impl WireSet {
 
 fn minmax(p: Coord, q: Coord) -> [Coord; 2] {
     if q < p { [q, p] } else { [p, q] }
-}
-fn is_horiz(p: Coord, q: Coord) -> bool {
-    p.1 == q.1
-}
-fn is_vert(p: Coord, q: Coord) -> bool {
-    p.0 == q.0
 }
 
 /// A wire.
