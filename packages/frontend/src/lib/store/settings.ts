@@ -8,12 +8,12 @@ export const scale = computed(() => {
     return Math.pow(1.2, settings.scaleLevel);
 });
 
-export const themes = ["light", "dark"] as const;
+export const themes = ["light", "light-contrast", "dark", "dark-contrast"] as const;
 export type Theme = (typeof themes)[number];
 export const theme = ref<Theme>("light");
 
 watch(theme, (newTheme) => {
     document.startViewTransition(() => {
-        document.documentElement.classList.toggle("dark", newTheme === "dark");
+        document.documentElement.dataset.theme = newTheme;
     });
 });

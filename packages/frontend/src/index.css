@@ -49,6 +49,39 @@
             overflow: hidden;
         }
     }
+
+    --animate-fade-in: fade-in var(--default-transition-duration)
+        var(--default-transition-timing-function);
+    --animate-fade-out: fade-out var(--default-transition-duration)
+        var(--default-transition-timing-function);
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+            transform-origin: bottom left;
+            transform: scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform-origin: bottom left;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes fade-out {
+        from {
+            opacity: 1;
+            transform-origin: bottom left;
+            transform: scale(1);
+        }
+
+        to {
+            opacity: 0;
+            transform-origin: bottom left;
+            transform: scale(0.95);
+        }
+    }
 }
 
 @utility grid-cols-fill-* {
@@ -56,7 +89,7 @@
 }
 
 @layer base {
-    html {
+    html[data-theme="light"] {
         --foreground: var(--color-zinc-800);
         --foreground-highlight: var(--color-zinc-950);
         --foreground-muted: var(--color-zinc-500);
@@ -72,7 +105,23 @@
         --component-stroke: var(--color-zinc-600);
     }
 
-    html.dark {
+    html[data-theme="light-contrast"] {
+        --foreground: var(--color-black);
+        --foreground-highlight: var(--color-black);
+        --foreground-muted: var(--color-zinc-800);
+
+        --border: var(--color-zinc-700);
+
+        --panel-dark: var(--color-zinc-200);
+        --panel-light: var(--color-white);
+
+        --canvas-background: var(--color-white);
+        --canvas-dots: var(--color-black);
+        --component-fill: var(--color-white);
+        --component-stroke: var(--color-black);
+    }
+
+    html[data-theme="dark"] {
         --foreground: var(--color-zinc-200);
         --foreground-highlight: var(--color-white);
         --foreground-muted: var(--color-zinc-400);
@@ -85,6 +134,22 @@
         --canvas-background: var(--color-zinc-950);
         --canvas-dots: var(--color-zinc-500);
         --component-fill: var(--color-zinc-200);
+        --component-stroke: var(--color-zinc-500);
+    }
+
+    html[data-theme="dark-contrast"] {
+        --foreground: var(--color-white);
+        --foreground-highlight: var(--color-white);
+        --foreground-muted: var(--color-white);
+
+        --border: var(--color-zinc-400);
+
+        --panel-dark: var(--color-zinc-950);
+        --panel-light: var(--color-zinc-800);
+
+        --canvas-background: var(--color-black);
+        --canvas-dots: var(--color-zinc-200);
+        --component-fill: var(--color-white);
         --component-stroke: var(--color-zinc-500);
     }
 
@@ -110,11 +175,11 @@
     }
 
     * {
-        @apply border-border;
+        @apply border-border -outline-offset-1 outline-blue-500;
         scrollbar-width: none;
     }
 
     :focus-visible {
-        @apply z-50 outline -outline-offset-1 outline-blue-500;
+        @apply z-50 outline;
     }
 }

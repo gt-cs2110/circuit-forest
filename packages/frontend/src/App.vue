@@ -17,12 +17,10 @@ import {
 import { Toaster } from "vue-sonner";
 import { computed, onBeforeMount, onMounted, onUnmounted, ref } from "vue";
 import { scale, settings, theme } from "./lib/store/settings";
-import { Moon, Sun } from "lucide-vue-next";
+import AppSettings from "./components/AppSettings.vue";
 
 onBeforeMount(() => {
-    if (theme.value == "dark") {
-        document.documentElement.classList.toggle("dark", true);
-    }
+    document.documentElement.dataset.theme = theme.value;
 });
 
 const sliderValue = computed({
@@ -108,22 +106,7 @@ const rightWidth = ref(72 * 4);
         </SplitterGroup>
 
         <div class="flex h-6 items-center border-t bg-panel-light px-4 text-xs">
-            <button
-                @click="
-                    if (theme == 'dark') {
-                        theme = 'light';
-                    } else {
-                        theme = 'dark';
-                    }
-                "
-            >
-                <component
-                    :is="theme === 'light' ? Moon : Sun"
-                    :size="12"
-                    absolute-stroke-width
-                    class="text-foreground-muted"
-                />
-            </button>
+            <AppSettings />
 
             <SliderRoot
                 v-model="sliderValue"
