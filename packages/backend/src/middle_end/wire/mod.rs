@@ -53,12 +53,110 @@ pub enum RemoveWireResult {
     Split(Coord, ValueKey, HashSet<Coord>)
 }
 
+type WireRangeMap1D = HashMap<Axis, BTreeMap<Axis, Axis>>;
+/// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
+#[derive(Debug, Default)]
+struct WireRangeMap {
+    /// All horizontal wires. This is Map<y, Map<start x, length>>.
+    horiz_wires: WireRangeMap1D,
+
+    /// All vertical wires. This is Map<x, Map<start y, length>>.
+    vert_wires: WireRangeMap1D
+}
+impl WireRangeMap {
+    /// Adds a wire to the range map.
+    pub fn add_wire(&mut self, w: Wire) -> bool {
+        let entry = match w.horizontal {
+            true  => self.horiz_wires.entry(w.y).or_default().entry(w.x),
+            false => self.vert_wires.entry(w.x).or_default().entry(w.y)
+        };
+        
+        match entry {
+            std::collections::btree_map::Entry::Vacant(e) => {
+                e.insert(w.length);
+                true
+            },
+            std::collections::btree_map::Entry::Occupied(_) => false,
+        }
+    }
+
+    /// Removes a wire from the range map (returning if it was successful).
+    pub fn remove_wire(&mut self, w: Wire) -> bool {
+        let (w0, w1, map) = match w.horizontal {
+            true  => (w.y, w.x, &mut self.horiz_wires),
+            false => (w.x, w.y, &mut self.vert_wires),
+        };
+        // If an entry exists for a specific wire and it has a matching length,
+        // remove entry
+        if let Some(map1d) = map.get_mut(&w0)
+          && let std::collections::btree_map::Entry::Occupied(e) = map1d.entry(w1)
+          && *e.get() == w.length
+        {
+            e.remove();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Gets all of the vertical wires at the coord
+    /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
+    /// 
+    /// This avoids allocation by borrowing a buffer.
+    fn vert_wires_at_coord<'a>(&self, c: Coord, buf: &'a mut [Wire; 2]) -> &'a mut [Wire] {
+        let mut len = 0;
+        if let Some(m) = self.vert_wires.get(&c.0) {
+            let it = m.range(..=c.1).rev()
+                .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: false })
+                .take_while(|w| w.contains(c));
+            // Write elements of iterator to buffer
+            for w in it {
+                buf[len] = w;
+                len += 1;
+            }
+        }
+        
+        // Get slice which actually holds the correct data
+        &mut buf[..len]
+    }
+    /// Gets all of the horizontal wires at the coord
+    /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
+    /// 
+    /// This avoids allocation by borrowing a buffer.
+    fn horiz_wires_at_coord<'a>(&self, c: Coord, buf: &'a mut [Wire; 2]) -> &'a mut [Wire] {
+        let mut len = 0;
+        if let Some(m) = self.horiz_wires.get(&c.1) {
+            let it = m.range(..=c.0).rev()
+                .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
+                .take_while(|w| w.contains(c));
+            // Write elements of iterator to buffer
+            for w in it {
+                buf[len] = w;
+                len += 1;
+            }
+        }
+        
+        // Get slice which actually holds the correct data
+        &mut buf[..len]
+    }
+
+    /// Gets all of the horizontal wires at the coord
+    /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
+    pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
+        let mut v_wires = Default::default();
+        let mut h_wires = Default::default();
+
+        let mut wires = vec![];
+        wires.extend_from_slice(self.vert_wires_at_coord(c, &mut v_wires));
+        wires.extend_from_slice(self.horiz_wires_at_coord(c, &mut h_wires));
+        wires
+    }
+}
 /// The connection of wires in a circuit.
 #[derive(Debug, Default)]
 pub struct WireSet {
     wires: GraphMap<MeshKey, ValueKey, Undirected>,
-    horiz_wires: HashMap<Axis, BTreeMap<Axis, Axis>>,
-    vert_wires: HashMap<Axis, BTreeMap<Axis, Axis>>
+    ranges: WireRangeMap,
 }
 impl WireSet {
     /// Find the ValueKey corresponding to a coordinate (if it exists).
@@ -98,14 +196,15 @@ impl WireSet {
     /// 
     /// Returns whether a split was successful.
     fn split_joint(&mut self, c: Coord, horizontal: bool) -> bool {
+        let mut buf = Default::default();
         let splittable_wires = match horizontal {
-            true  => self.vert_wires_at_coord(c),
-            false => self.horiz_wires_at_coord(c),
+            true  => self.ranges.vert_wires_at_coord(c, &mut buf),
+            false => self.ranges.horiz_wires_at_coord(c, &mut buf),
         };
         
         let mut it = splittable_wires
-            .into_iter()
-            .filter_map(|w| Some((w, w.split(c)?)));
+            .iter_mut()
+            .filter_map(|&mut w| Some((w, w.split(c)?)));
         
         let Some((w, [w1, w2])) = it.next() else {
             return false;
@@ -120,14 +219,9 @@ impl WireSet {
         self.wires.add_edge(p.into(), c.into(), k);
         self.wires.add_edge(c.into(), q.into(), k);
         // Split wires in map:
-        match w1.horizontal {
-            true  => self.horiz_wires.entry(w1.y).or_default().insert(w1.x, w1.length),
-            false => self.vert_wires.entry(w1.x).or_default().insert(w1.y, w1.length)
-        };
-        match w2.horizontal {
-            true  => self.horiz_wires.entry(w2.y).or_default().insert(w2.x, w2.length),
-            false => self.vert_wires.entry(w2.x).or_default().insert(w2.y, w2.length)
-        };
+        debug_assert!(self.ranges.remove_wire(w));
+        debug_assert!(self.ranges.add_wire(w1));
+        debug_assert!(self.ranges.add_wire(w2));
 
         true
     }
@@ -149,10 +243,7 @@ impl WireSet {
             // TODO: Detect if intersecting another wire
     
             // Add to wire maps:
-            match w.horizontal {
-                true  => self.horiz_wires.entry(w.y).or_default().insert(w.x, w.length),
-                false => self.vert_wires.entry(w.x).or_default().insert(w.y, w.length)
-            };
+            debug_assert!(self.ranges.add_wire(w), "Wire should have been added successfully");
     
             // Add to wire graph:
             let [p, q] = w.endpoints();
@@ -195,11 +286,7 @@ impl WireSet {
         let Some(w) = Wire::from_endpoints(p, q) else {
             unreachable!("({p:?}, {q:?}) must constitute a valid wire due to being successfully removed from the graph");
         };
-        let m_len = match w.horizontal {
-            true  => self.horiz_wires.entry(w.y).or_default().remove(&w.x),
-            false => self.vert_wires.entry(w.x).or_default().remove(&w.y)
-        };
-        debug_assert_eq!(m_len, Some(w.length), "Expected wire to be removed from map with correct length");
+        debug_assert!(self.ranges.remove_wire(w), "Wire should have been removed successfully");
 
         // If removed, also check if a ValueKey needs to be split
         let joints: HashSet<_> = Bfs::new(&self.wires, q.into())
@@ -246,29 +333,12 @@ impl WireSet {
         }
     }
 
-    fn vert_wires_at_coord(&self, c: Coord) -> Vec<Wire> {
-        let Some(m) = self.vert_wires.get(&c.0) else { return vec![] };
-        m.range(..=c.1).rev()
-            .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: false })
-            .take_while(|w| w.contains(c))
-            .collect()
-    }
-    fn horiz_wires_at_coord(&self, c: Coord) -> Vec<Wire> {
-        let Some(m) = self.horiz_wires.get(&c.1) else { return vec![] };
-        m.range(..=c.0).rev()
-            .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
-            .take_while(|w| w.contains(c))
-            .collect()
-    }
-
     /// Gets all wire segments coinciding at the specified coords.
     /// 
     /// This returns all wire segments, including segments that this coord
     /// is in the middle of.
     pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
-        let mut wires = self.horiz_wires_at_coord(c);
-        wires.extend(self.vert_wires_at_coord(c));
-        wires
+        self.ranges.wires_at_coord(c)
     }
 }
 
