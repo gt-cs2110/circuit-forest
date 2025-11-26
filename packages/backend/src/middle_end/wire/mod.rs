@@ -175,16 +175,17 @@ impl WireSet {
         let mut child = c;
         loop {
             let mut it = self.wires.edges(child.into())
-                // Get all physical wires
+                // Get all physical wires which aren't (parent, child) edges
                 .filter_map(|(m1, m2, _)| match (m1, m2) {
-                    (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some((q, Wire::from_endpoints(p, q)?)),
+                    (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) if q != parent => Some((q, Wire::from_endpoints(p, q)?)),
                     _ => None
                 })
-                // Find any wires which match the same orientation and would not create the same wire as (parent-child)
-                .filter(|(q, w)| w.horizontal == horizontal && q != &parent);
+                // Find any wires which match the same orientation
+                .filter(|(_, w)| w.horizontal == horizontal)
+                .map(|(q, _)| q);
 
             match (it.next(), it.next()) {
-                (Some((next_pt, _)), None) => (parent, child) = (child, next_pt),
+                (Some(next_pt), None) => (parent, child) = (child, next_pt),
                 _ => break
             };
         }
