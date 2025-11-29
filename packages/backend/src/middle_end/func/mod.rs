@@ -22,27 +22,26 @@ pub struct ComponentBounds<C = CoordDelta> {
 }
 
 impl ComponentBounds {
-    fn single_port(width: i32, height: i32) -> Self {
-        let half_height = height / 2;
-        Self {
-            bounds: [(-width, -half_height), (0, height - half_height)],
-            ports: vec![(0, 0)],
-        }
+    fn single_port(width: u32, height: u32) -> Self {
+        let origin = (width, height / 2);
+        ComponentBounds::new_absolute((width, height), vec![origin])
+            .into_relative(origin)
     }
 
     fn single_port_from_bitsize(bitsize: u8) -> Self {
-        const MAX_COLS: u8 = 8;
+        const MAX_COLS: u32 = 8;
         
-        let n_rows = i32::from(bitsize.div_ceil(MAX_COLS));
+        let bitsize = u32::from(bitsize);
+        let n_rows = bitsize.div_ceil(MAX_COLS);
         let height = 2 * n_rows;
         
         match bitsize {
             // If two bits, use a 2 x 2 tile
             ..=2 => Self::single_port(2, height),
             // If 2-8 bits, use a 2n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port(2 * i32::from(w), height),
+            w @ ..=MAX_COLS => Self::single_port(2 * w, height),
             // If 9+ bits, use a 16 x h tile
-            _ => Self::single_port(2 * i32::from(MAX_COLS), height)
+            _ => Self::single_port(2 * MAX_COLS, height)
         }
     }
 
@@ -61,6 +60,12 @@ impl ComponentBounds {
     }
 }
 impl ComponentBounds<Coord> {
+    fn new_absolute(dims: Coord, ports: impl IntoIterator<Item=Coord>) -> Self {
+        Self {
+            bounds: [(0, 0), dims],
+            ports: Vec::from_iter(ports)
+        }
+    }
     pub(crate) fn into_relative(self, origin: Coord) -> ComponentBounds {
         fn sub(p: Coord, q: Coord) -> CoordDelta {
             (p.0.wrapping_sub(q.0) as AxisDelta, p.1.wrapping_sub(q.1) as AxisDelta)
@@ -84,7 +89,7 @@ impl ComponentBounds<Coord> {
 #[allow(missing_docs)]
 pub enum PhysicalComponentEnum {
     // Wiring
-    Input, Output, Constant, Splitter, Power, Ground,
+    Input, Output, Constant, Splitter, Power, Ground, Tunnel,
     // Muxes
     Mux, Demux, Decoder
 }

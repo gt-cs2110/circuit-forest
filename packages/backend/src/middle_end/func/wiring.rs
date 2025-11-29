@@ -73,10 +73,9 @@ impl PhysicalComponent for Power {
     }
 
     fn bounds(&self) -> ComponentBounds {
-        ComponentBounds {
-            bounds: [(-3, -1), (0, 1)],
-            ports: vec![(0, 0)]
-        }
+        let origin = (1, 3);
+        ComponentBounds::new_absolute((2, 3), vec![origin])
+            .into_relative(origin)
     }
 }
 
@@ -93,10 +92,27 @@ impl PhysicalComponent for Ground {
     }
 
     fn bounds(&self) -> ComponentBounds {
-        ComponentBounds {
-            bounds: [(0, -1), (3, 1)],
-            ports: vec![(0, 0)]
-        }
+        let origin = (1, 0);
+        ComponentBounds::new_absolute((2, 3), vec![origin])
+            .into_relative(origin)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Tunnel;
+impl PhysicalComponent for Tunnel {
+    fn engine_component(&self) -> Option<func::ComponentFn> {
+        None
+    }
+
+    fn component_name(&self) ->  &'static str {
+        "Tunnel"
+    }
+
+    fn bounds(&self) -> ComponentBounds {
+        let origin = (3, 1);
+        ComponentBounds::new_absolute((3, 2), vec![origin])
+            .into_relative(origin)
     }
 }
 
@@ -116,8 +132,9 @@ impl PhysicalComponent for Splitter {
 
     fn bounds(&self) -> ComponentBounds {
         let bitsize = i32::from(self.sim.get_bitsize());
-        let mut ports = vec![(0, 0)];
-        ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
+        let ports = [(0, 0)].into_iter()
+            .chain((1..=bitsize).map(|i| (2 * i, 2)))
+            .collect();
 
         ComponentBounds {
             bounds: [(0, 0), (bitsize * 2, 2)],
