@@ -59,7 +59,8 @@ impl MiddleRepr {
         }
     }
 
-    pub fn add_component(&mut self, ckey: CircuitKey, physical: PhysicalComponentEnum, pos: Coord) -> Result<(), ReprEditErr> {
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, ckey: CircuitKey, physical: C, pos: Coord) -> Result<(), ReprEditErr> {
+        let physical = physical.into();
         let Some(ComponentBounds { bounds, ports }) = physical.bounds().into_absolute(pos) else {
             return Err(ReprEditErr::CannotAddComponent);
         };
