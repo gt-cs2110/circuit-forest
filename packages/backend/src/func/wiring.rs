@@ -120,7 +120,7 @@ impl Component for Splitter {
             // joined
             (PortProperties { ty: PortType::Inout, bitsize: self.bitsize }, 1),
             // split
-            (PortProperties { ty: PortType::Inout, bitsize: 1 }, self.bitsize),
+            (PortProperties { ty: PortType::Inout, bitsize: 1 }, usize::from(self.bitsize)),
         ])
     }
 

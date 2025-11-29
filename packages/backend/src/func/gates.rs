@@ -29,7 +29,7 @@ macro_rules! gates {
                 fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
                     port_list(&[
                         // inputs
-                        (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, self.n_inputs),
+                        (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, usize::from(self.n_inputs)),
                         // outputs
                         (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
                     ])

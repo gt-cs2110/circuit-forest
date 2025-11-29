@@ -223,9 +223,9 @@ fn validate_ports(props: &[PortProperties], ports: &[BitArray]) {
     }
 }
 /// Helper function to more easily define port lists (for [`Component::ports`]).
-fn port_list(config: &[(PortProperties, u8)]) -> Vec<PortProperties> {
+fn port_list(config: &[(PortProperties, usize)]) -> Vec<PortProperties> {
     config.iter()
-        .flat_map(|&(props, ct)| std::iter::repeat_n(props, usize::from(ct)))
+        .flat_map(|&(props, ct)| std::iter::repeat_n(props, ct))
         .collect()
 }
 
