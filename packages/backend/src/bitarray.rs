@@ -54,7 +54,7 @@ impl std::fmt::Display for BitState {
 }
 
 /// An error which occurs when converting a non-low/-high [`BitState`] to [`bool`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct NotTwoValuedErr(BitState);
 impl NotTwoValuedErr {
     /// If the value was high-impedance
@@ -175,6 +175,10 @@ impl std::ops::Not for BitState {
 /// An array of bitstates.
 #[derive(Default, Clone, Copy)]
 pub struct BitArray {
+    // Each BitArray can represent 64 bits of 0, 1, Z, X.
+    // For each index i, data[i] and spec[i] encode the type of bit (see [`BitState::split`]).
+    //
+    // Note that while this is implemented internally as LSB = index 0.
     data: u64,
     spec: u64,
     len: u8
@@ -193,10 +197,28 @@ macro_rules! bitstate {
 /// Creates a [`BitArray`] containing the literal arguments.
 /// 
 /// Each element can be one of 0, 1, Z, X.
+/// 
+/// For this macro, the last (rightmost) bit is the 0th index.
+/// 
+/// ## Example
+/// 
+/// ```
+/// use circuitsim_engine::bitarray::{BitState, bitarr};
+/// 
+/// let arr = bitarr![0, 1, Z, X];
+/// assert_eq!(arr.get(3), Some(BitState::Low));
+/// assert_eq!(arr.get(2), Some(BitState::High));
+/// assert_eq!(arr.get(1), Some(BitState::Imped));
+/// assert_eq!(arr.get(0), Some(BitState::Unk));
+/// ```
 #[macro_export]
 macro_rules! bitarr {
     [$b:tt; $e:expr] => { $crate::bitarray::BitArray::repeat($crate::bitarray::bitstate!($b), $e) };
-    [$($b:tt),*$(,)?] => { $crate::bitarray::BitArray::from_iter([$($crate::bitarray::bitstate!($b)),*]) };
+    [$($b:tt),*$(,)?] => { $crate::bitarray::BitArray::from_iter(const {
+        let mut a = [$($crate::bitarray::bitstate!($b)),*];
+        a.reverse();
+        a
+    }) };
 }
 pub use bitstate;
 pub use bitarr;
@@ -218,6 +240,7 @@ impl BitArray {
     /// - `len` represents the length of the bitarray
     /// 
     /// Any bits after index `(len - 1)` in `data` are ignored.
+    /// The least-significant bit of `data` acts as index 0.
     pub fn from_bits(data: u64, len: u8) -> Self {
         Self { data, spec: 0, len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE) }
     }
@@ -327,6 +350,27 @@ impl BitArray {
     }
 }
 impl FromIterator<BitState> for BitArray {
+    /// Creates a bit array from an iterator.
+    /// 
+    /// The bit array is constructed in array order
+    /// (e.g., the first bit obtained in the iterator is index 0).
+    /// 
+    /// ## Example
+    /// 
+    /// ```
+    /// use circuitsim_engine::bitarray::{BitArray, BitState, bitarr};
+    /// 
+    /// let arr = BitArray::from_iter([
+    ///     BitState::Low,
+    ///     BitState::High,
+    ///     BitState::Imped,
+    ///     BitState::Unk,
+    /// ]);
+    /// assert_eq!(arr.get(0), Some(BitState::Low));
+    /// assert_eq!(arr.get(1), Some(BitState::High));
+    /// assert_eq!(arr.get(2), Some(BitState::Imped));
+    /// assert_eq!(arr.get(3), Some(BitState::Unk));
+    /// ```
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
         iter.into_iter()
             .zip(0..64)
@@ -338,6 +382,7 @@ impl FromIterator<BitState> for BitArray {
     }
 }
 impl From<u64> for BitArray {
+    /// Converts a 64-bit integer to a bit array (via [`BitArray::from_bits`]).
     fn from(data: u64) -> Self {
         Self::from_bits(data, 64)
     }
@@ -345,6 +390,9 @@ impl From<u64> for BitArray {
 impl TryFrom<BitArray> for u64 {
     type Error = NotTwoValuedErr;
 
+    /// Tries to convert a bit array to a 64-bit integer.
+    /// 
+    /// Note that index 0 of the bit array becomes the least-significant bit of the integer.
     fn try_from(value: BitArray) -> Result<Self, Self::Error> {
         let (data, spec) = value.normalize();
         match spec == 0 {
@@ -398,6 +446,10 @@ impl IntoIterator for BitArray {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = BitArrayIntoIter;
 
+    /// Creates an iterator from the bit array.
+    /// 
+    /// This iterates through the bits from right to left
+    /// (e.g., the index 0 is first, then index 1, then index 2).
     fn into_iter(self) -> Self::IntoIter {
         BitArrayIntoIter(self)
     }
@@ -406,6 +458,10 @@ impl IntoIterator for &BitArray {
     type Item = <Self::IntoIter as Iterator>::Item;
     type IntoIter = BitArrayIntoIter;
 
+    /// Creates an iterator from the bit array.
+    /// 
+    /// This iterates through the bits from right to left
+    /// (e.g., index 0 is first, then index 1, then index 2).
     fn into_iter(self) -> Self::IntoIter {
         (*self).into_iter()
     }
@@ -424,6 +480,9 @@ impl std::hash::Hash for BitArray {
     }
 }
 impl std::fmt::Debug for BitArray {
+    /// Displays the [`BitState`]s of the given bit array.
+    /// 
+    /// This shows in array order (e.g., the 0th element is the leftmost displayed element).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
             .entries(*self)
@@ -431,8 +490,11 @@ impl std::fmt::Debug for BitArray {
     }
 }
 impl std::fmt::Display for BitArray {
+    /// Displays the [`BitState`]s of the given bit array.
+    /// 
+    /// This shows in bit value order (e.g., the 0th element is the rightmost displayed element).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for bit in *self {
+        for bit in self.into_iter().rev() {
             write!(f, "{bit}")?;
         }
         Ok(())
@@ -479,8 +541,25 @@ impl From<BitState> for BitArray {
 impl std::str::FromStr for BitArray {
     type Err = InvalidStateErr;
 
+    /// Converts a string of `0, 1, X, Z` to a [`BitArray`].
+    /// 
+    /// The string should be in bit value order
+    /// (e.g., the 0th bit is the last char of the string).
+    /// 
+    /// ## Example
+    /// 
+    /// ```
+    /// use circuitsim_engine::bitarray::{BitArray, BitState};
+    /// 
+    /// let arr: BitArray = "01ZX".parse().unwrap();
+    /// assert_eq!(arr.get(3), Some(BitState::Low));
+    /// assert_eq!(arr.get(2), Some(BitState::High));
+    /// assert_eq!(arr.get(1), Some(BitState::Imped));
+    /// assert_eq!(arr.get(0), Some(BitState::Unk));
+    /// ```
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         s.bytes()
+            .rev()
             .map(char::from)
             .map(BitState::try_from)
             .collect()
@@ -559,7 +638,7 @@ impl std::ops::Not for BitArray {
 
 #[cfg(test)]
 mod tests {
-    use crate::bitarray::BitState;
+    use crate::bitarray::{BitState, NotTwoValuedErr};
 
     use super::BitArray;
 
@@ -595,23 +674,121 @@ mod tests {
     }
 
     #[test]
-    fn parse() {
-        let str_ba = "0Z1X10XZ".parse::<BitArray>().unwrap();
-        let iter_ba = BitArray::from_iter([
-            BitState::Low,
-            BitState::Imped,
-            BitState::High,
-            BitState::Unk,
-            BitState::High,
-            BitState::Low,
-            BitState::Unk,
-            BitState::Imped,
-        ]);
-
-        assert_eq!(str_ba, iter_ba);
+    fn bitarray_macro() {
+        let arr = bitarr![0, 1, Z, X];
+        assert_eq!(arr.get(0), Some(BitState::Unk));
+        assert_eq!(arr.get(1), Some(BitState::Imped));
+        assert_eq!(arr.get(2), Some(BitState::High));
+        assert_eq!(arr.get(3), Some(BitState::Low));
+        assert_eq!(arr.get(4), None);
     }
+
     #[test]
-    fn collect_roundtrip() {
+    fn parse_str() {
+        let arr = "0Z1X10XZ".parse::<BitArray>().unwrap();
+        assert_eq!(arr.get(0), Some(BitState::Imped));
+        assert_eq!(arr.get(1), Some(BitState::Unk));
+        assert_eq!(arr.get(2), Some(BitState::Low));
+        assert_eq!(arr.get(3), Some(BitState::High));
+        assert_eq!(arr.get(4), Some(BitState::Unk));
+        assert_eq!(arr.get(5), Some(BitState::High));
+        assert_eq!(arr.get(6), Some(BitState::Imped));
+        assert_eq!(arr.get(7), Some(BitState::Low));
+        assert_eq!(arr.get(8), None);
+    }
+
+    #[test]
+    fn display() {
+        let mut arr = bitarr![0; 8];
+        arr.set(0, BitState::Low);
+        arr.set(1, BitState::Imped);
+        arr.set(2, BitState::High);
+        arr.set(3, BitState::Unk);
+        arr.set(4, BitState::High);
+        arr.set(5, BitState::Low);
+        arr.set(6, BitState::Unk);
+        arr.set(7, BitState::Imped);
+
+        assert_eq!(arr.to_string(), "ZX01X1Z0");
+    }
+
+    #[test]
+    fn test_from_iter() {
+        let bits = vec![
+            BitState::Low,
+            BitState::High,
+            BitState::Imped,
+            BitState::Unk
+        ];
+        let arr = BitArray::from_iter(bits);
+        assert_eq!(arr.get(0), Some(BitState::Low));
+        assert_eq!(arr.get(1), Some(BitState::High));
+        assert_eq!(arr.get(2), Some(BitState::Imped));
+        assert_eq!(arr.get(3), Some(BitState::Unk));
+        assert_eq!(arr.get(4), None);
+    }
+
+    #[test]
+    fn test_into_iter() {
+        let mut arr = bitarr![0; 8];
+        arr.set(0, BitState::Low);
+        arr.set(1, BitState::Imped);
+        arr.set(2, BitState::High);
+        arr.set(3, BitState::Unk);
+        arr.set(4, BitState::High);
+        arr.set(5, BitState::Low);
+        arr.set(6, BitState::Unk);
+        arr.set(7, BitState::Imped);
+
+        let mut it = arr.into_iter();
+        assert_eq!(it.next(), Some(BitState::Low));
+        assert_eq!(it.next(), Some(BitState::Imped));
+        assert_eq!(it.next(), Some(BitState::High));
+        assert_eq!(it.next(), Some(BitState::Unk));
+        assert_eq!(it.next(), Some(BitState::High));
+        assert_eq!(it.next(), Some(BitState::Low));
+        assert_eq!(it.next(), Some(BitState::Unk));
+        assert_eq!(it.next(), Some(BitState::Imped));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn from_bits() {
+        let arr = BitArray::from_bits(0b00011011, 8);
+        assert_eq!(arr.get(0), Some(BitState::High));
+        assert_eq!(arr.get(1), Some(BitState::High));
+        assert_eq!(arr.get(2), Some(BitState::Low));
+        assert_eq!(arr.get(3), Some(BitState::High));
+        assert_eq!(arr.get(4), Some(BitState::High));
+        assert_eq!(arr.get(5), Some(BitState::Low));
+        assert_eq!(arr.get(6), Some(BitState::Low));
+        assert_eq!(arr.get(7), Some(BitState::Low));
+        assert_eq!(arr.get(8), None);
+    }
+
+    #[test]
+    fn try_into_bits() {
+        let mut arr = bitarr![0; 8];
+        arr.set(0, BitState::High);
+        arr.set(1, BitState::High);
+        arr.set(2, BitState::Low);
+        arr.set(3, BitState::High);
+        arr.set(4, BitState::High);
+        arr.set(5, BitState::Low);
+        arr.set(6, BitState::Low);
+        arr.set(7, BitState::Imped);
+
+        assert_eq!(u64::try_from(arr), Err(NotTwoValuedErr(BitState::Imped)));
+
+        arr.set(7, BitState::Unk);
+        assert_eq!(u64::try_from(arr), Err(NotTwoValuedErr(BitState::Unk)));
+
+        arr.set(7, BitState::Low);
+        assert_eq!(u64::try_from(arr), Ok(0b00011011));
+    }
+
+    #[test]
+    fn iter_roundtrip() {
         let bits = [
             BitState::Low,
             BitState::Imped,
@@ -624,22 +801,7 @@ mod tests {
         ];
 
         let bitarray = BitArray::from_iter(bits);
-        assert_eq!(bitarray.into_iter().collect::<Vec<_>>(), bits);
-    }
-
-    #[test]
-    fn display() {
-        let ba = BitArray::from_iter([
-            BitState::Low,
-            BitState::Imped,
-            BitState::High,
-            BitState::Unk,
-            BitState::High,
-            BitState::Low,
-            BitState::Unk,
-            BitState::Imped,
-        ]);
-
-        assert_eq!(format!("{ba}"), "0Z1X10XZ");
+        let bitvec: Vec<_> = bitarray.into_iter().collect();
+        assert_eq!(bitvec, bits);
     }
 }
