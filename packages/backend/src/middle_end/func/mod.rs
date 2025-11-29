@@ -5,7 +5,7 @@ pub use wiring::*;
 pub use muxes::*;
 
 use crate::func::ComponentFn;
-use crate::middle_end::CoordDelta;
+use crate::middle_end::{AxisDelta, Coord, CoordDelta};
 use enum_dispatch::enum_dispatch;
 
 #[enum_dispatch]
@@ -15,10 +15,10 @@ pub trait PhysicalComponent {
     fn bounds(&self) -> ComponentBounds;
 }
 
-#[derive(Debug)]
-pub struct ComponentBounds {
-    pub bounds: [CoordDelta; 2],
-    pub ports: Vec<CoordDelta>
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComponentBounds<C = CoordDelta> {
+    pub bounds: [C; 2],
+    pub ports: Vec<C>
 }
 
 impl ComponentBounds {
@@ -45,10 +45,46 @@ impl ComponentBounds {
             _ => Self::single_port(2 * i32::from(MAX_COLS), height)
         }
     }
+
+    pub(crate) fn into_absolute(self, origin: Coord) -> Option<ComponentBounds<Coord>> {
+        fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
+            p.0.checked_add_signed(delta.0)
+                .zip(p.1.checked_add_signed(delta.1))
+        }
+
+        let ComponentBounds { bounds: [b0, b1], ports } = self;
+        let bounds = [add(origin, b0)?, add(origin, b1)?];
+        let ports = ports.into_iter()
+            .map(|delta| add(origin, delta))
+            .collect::<Option<_>>()?;
+        Some(ComponentBounds { bounds, ports })
+    }
+}
+impl ComponentBounds<Coord> {
+    pub(crate) fn into_relative(self, origin: Coord) -> ComponentBounds {
+        fn sub(p: Coord, q: Coord) -> CoordDelta {
+            (p.0.wrapping_sub(q.0) as AxisDelta, p.1.wrapping_sub(q.1) as AxisDelta)
+        }
+
+        let ComponentBounds { bounds: [b0, b1], ports } = self;
+        let bounds = [
+            sub(b0, origin),
+            sub(b1, origin)
+        ];
+        let ports = ports.into_iter()
+            .map(|p| sub(p, origin))
+            .collect();
+        
+        ComponentBounds { bounds, ports }
+    }
 }
 
 #[enum_dispatch(PhysicalComponent)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[allow(missing_docs)]
 pub enum PhysicalComponentEnum {
     // Wiring
-    Input, Output, Constant, Splitter
+    Input, Output, Constant, Splitter, Power, Ground,
+    // Muxes
+    Mux, Demux, Decoder
 }

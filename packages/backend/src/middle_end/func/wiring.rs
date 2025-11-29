@@ -1,4 +1,4 @@
-use crate::func;
+use crate::{bitarr, func};
 use crate::middle_end::func::PhysicalComponent;
 
 use super::ComponentBounds;
@@ -13,7 +13,7 @@ impl PhysicalComponent for Input {
         Some(self.sim.into())
     }
 
-    fn component_name(&self) ->  &'static str {
+    fn component_name(&self) -> &'static str {
         "Input"
     }
 
@@ -32,7 +32,7 @@ impl PhysicalComponent for Output {
         Some(self.sim.into())
     }
 
-    fn component_name(&self) ->  &'static str {
+    fn component_name(&self) -> &'static str {
         "Output"
     }
 
@@ -51,12 +51,52 @@ impl PhysicalComponent for Constant {
         Some(self.sim.into())
     }
 
-    fn component_name(&self) ->  &'static str {
+    fn component_name(&self) -> &'static str {
         "Constant"
     }
 
     fn bounds(&self) -> ComponentBounds {
         ComponentBounds::single_port_from_bitsize(self.sim.get_value().len())
+    }
+}
+
+/// Power (essentially a constant 1).
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Power;
+impl PhysicalComponent for Power {
+    fn engine_component(&self) -> Option<func::ComponentFn> {
+        Some(func::Constant::new(bitarr![1]).into())
+    }
+
+    fn component_name(&self) -> &'static str {
+        "Power"
+    }
+
+    fn bounds(&self) -> ComponentBounds {
+        ComponentBounds {
+            bounds: [(-3, -1), (0, 1)],
+            ports: vec![(0, 0)]
+        }
+    }
+}
+
+/// Ground (essentially a constant 0).
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Ground;
+impl PhysicalComponent for Ground {
+    fn engine_component(&self) -> Option<func::ComponentFn> {
+        Some(func::Constant::new(bitarr![0]).into())
+    }
+
+    fn component_name(&self) -> &'static str {
+        "Ground"
+    }
+
+    fn bounds(&self) -> ComponentBounds {
+        ComponentBounds {
+            bounds: [(0, -1), (3, 1)],
+            ports: vec![(0, 0)]
+        }
     }
 }
 
@@ -70,7 +110,7 @@ impl PhysicalComponent for Splitter {
         Some(self.sim.into())
     }
 
-    fn component_name(&self) ->  &'static str {
+    fn component_name(&self) -> &'static str {
         "Splitter"
     }
 

@@ -33,33 +33,17 @@ pub struct CircuitArea {
     ui_components: SlotMap<UIKey, ComponentProps>
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ComponentProps {
     label: String,
+
+    // Position
     origin: Coord,
     bounds: [Coord; 2],
     ports: Vec<Coord>,
-}
-impl ComponentProps {
-    pub fn new(label: &str, origin: Coord, bounds: ComponentBounds) -> Option<Self> {
-        fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
-            p.0.checked_add_signed(delta.0)
-                .zip(p.1.checked_add_signed(delta.1))
-        }
 
-        let ComponentBounds { bounds: [b0, b1], ports } = bounds;
-        let bounds = [add(origin, b0)?, add(origin, b1)?];
-        let ports = ports.into_iter()
-            .map(|delta| add(origin, delta))
-            .collect::<Option<_>>()?;
-
-        Some(Self {
-            label: label.to_string(),
-            origin,
-            bounds,
-            ports
-        })
-    }
+    // Extra props
+    extra: PhysicalComponentEnum
 }
 
 pub enum ReprEditErr {
@@ -76,8 +60,16 @@ impl MiddleRepr {
     }
 
     pub fn add_component(&mut self, ckey: CircuitKey, physical: PhysicalComponentEnum, pos: Coord) -> Result<(), ReprEditErr> {
-        let props = ComponentProps::new("", pos, physical.bounds())
-            .ok_or(ReprEditErr::CannotAddComponent)?;
+        let Some(ComponentBounds { bounds, ports }) = physical.bounds().into_absolute(pos) else {
+            return Err(ReprEditErr::CannotAddComponent);
+        };
+        let props = ComponentProps {
+            label: String::new(),
+            origin: pos,
+            bounds,
+            ports,
+            extra: physical,
+        };
 
         if let Some(component) = physical.engine_component() {
             // Is engine component:
