@@ -19,12 +19,14 @@ pub use memory::*;
 pub use muxes::*;
 pub use wiring::*;
 pub use misc::*;
+pub use arithmetic::*;
 
 mod gates;
 mod memory;
 mod muxes;
 mod wiring;
 mod misc;
+mod arithmetic;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
 
@@ -135,7 +137,9 @@ pub enum ComponentFn {
     // Memory
     Register,
     // Misc
-    Subcircuit
+    Subcircuit,
+    // Arithmetic
+
 }
 
 /// The triggering conditions for components based on a signal change.
