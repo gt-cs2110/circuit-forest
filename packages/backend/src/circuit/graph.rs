@@ -148,7 +148,40 @@ impl CircuitGraph {
             self.recalculate_bitsize(node);
         }
     }
+
+    /// Joins a set of keys, merging all the ports into the specified `main` node.
+    pub fn join(&mut self, main: ValueKey, to_merge: &[ValueKey]) {
+        // Connect all to one value key:
+        for &k in to_merge {
+            // Take out the links from this node:
+            let links = std::mem::take(&mut self.values[k].links);
+
+            // Update all function ports to connect to the new node:
+            for &p in &links {
+                self.functions[p.gate].links[p.index].replace(main);
+            }
+            // Add these links to the new combined link:
+            self.values[main].links.extend(links);
+
+            // Remove key from graph
+            self.values.remove(k);
+        }
+        self.recalculate_bitsize(main);
+    }
+
+    /// Removes all ports in `off_ports` from `main`, attaching it into a new node.
+    pub fn split_off(&mut self, main: ValueKey, off_ports: &[FunctionPort]) -> ValueKey {
+        let new_value = self.add_value();
+        for &port in off_ports {
+            if self.values[main].links.contains(&port) {
+                self.connect(new_value, port);
+            }
+        }
+
+        new_value
+    }
 }
+
 impl Index<ValueKey> for CircuitGraph {
     type Output = ValueNode;
 
@@ -171,5 +204,81 @@ impl Index<FunctionKey> for CircuitGraph {
 impl IndexMut<FunctionKey> for CircuitGraph {
     fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
         &mut self.functions[index]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CircuitGraph, CircuitGraphMap, FunctionNode, FunctionPort};
+    use crate::func::{And, Not, ComponentFn};
+    #[test]
+    fn test_join() {
+        let mut graph = CircuitGraph::default();
+        let graphs = CircuitGraphMap::default();
+
+        // Create value nodes
+        let value1 = graph.add_value();
+        let value2 = graph.add_value();
+
+        // Create function nodes (and gate, not gate)
+        let and =  ComponentFn::And(And::new(8, 2));
+        let not= ComponentFn::Not(Not::new(8));
+
+        let func1 = graph.add_function(FunctionNode::new(and, &graphs));
+        let func2 = graph.add_function(FunctionNode::new(not, &graphs));
+
+        // Connect value1 to func1 and value2 to func2
+        graph.connect(value1, FunctionPort { gate: func1, index: 0 });
+        graph.connect(value2, FunctionPort { gate: func2, index: 0 });
+
+        // Join value2 to value1
+        graph.join(value1, &[value2]);
+
+        // Verify value1
+        assert_eq!(graph.values[value1].links.len(), 2);
+        assert!(graph.values[value1].links.contains(&FunctionPort { gate: func1, index: 0 }));
+        assert!(graph.values[value1].links.contains(&FunctionPort { gate: func2, index: 0 }));
+
+        // Verify function nodes
+        assert_eq!(graph.functions[func1].links[0], Some(value1));
+        assert_eq!(graph.functions[func2].links[0], Some(value1));
+
+        // Verify value2 was removed
+        assert!(!graph.values.contains_key(value2));
+    }
+
+    #[test]
+    fn test_split_off() {
+        let mut graph = CircuitGraph::default();
+        let graphs = CircuitGraphMap::default();
+
+        // Create value node
+        let value1 = graph.add_value();
+
+        // Create function nodes (and gate, not gate)
+        let and = ComponentFn::And(And::new(8, 2));
+        let not = ComponentFn::Not(Not::new(8));
+
+        let func1 = graph.add_function(FunctionNode::new(and, &graphs));
+        let func2 = graph.add_function(FunctionNode::new(not, &graphs));
+
+        // Connect value1 to both functions
+        graph.connect(value1, FunctionPort { gate: func1, index: 0 });
+        graph.connect(value1, FunctionPort { gate: func2, index: 0 });
+
+        // Split off func2 port
+        let value2 = graph.split_off(value1, &[FunctionPort { gate: func2, index: 0 }]);
+
+        // Verify value1 links
+        assert_eq!(graph.values[value1].links.len(), 1);
+        assert!(graph.values[value1].links.contains(&FunctionPort { gate: func1, index: 0 }));
+
+        // Verify value2 linkss
+        assert_eq!(graph.values[value2].links.len(), 1);
+        assert!(graph.values[value2].links.contains(&FunctionPort { gate: func2, index: 0 }));
+
+        // Verify function nodes
+        assert_eq!(graph.functions[func1].links[0], Some(value1));
+        assert_eq!(graph.functions[func2].links[0], Some(value2));
     }
 }

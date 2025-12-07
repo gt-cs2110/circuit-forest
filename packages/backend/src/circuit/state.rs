@@ -77,6 +77,22 @@ impl CircuitState {
     pub fn get_issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
         &self[k].issues
     }
+    /// Removes a value node from CircuitState.
+    /// 
+    /// If this function is called, then `CircuitState::get_node_value`
+    /// should NOT be called on this ValueKey.
+    pub fn remove_node_value(&mut self, k: ValueKey) {
+        self.values.remove(k);
+        self.transient.triggers.remove(k);
+    }
+    /// Signals that an update should be propagated from a value node.
+    /// 
+    /// If `recalculate` is true, this also recomputes the node's bit value
+    /// before propagating.
+    /// 
+    pub(crate) fn add_transient(&mut self, k: ValueKey, recalculate: bool) {
+        self.transient.triggers.insert(k, TriggerState { recalculate });
+    }
 
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).

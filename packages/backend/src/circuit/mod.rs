@@ -134,7 +134,7 @@ impl Circuit<'_> {
     /// Connect a wire to a port in the Circuit's graph.
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         circ!(self.graphs).connect(wire, port);
-        circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
+        circ!(self.states).add_transient(wire, true);
         self.propagate();
     }
 
@@ -145,7 +145,7 @@ impl Circuit<'_> {
             .enumerate()
             .for_each(|(index, wire)| {
                 circ!(self.graphs).connect(wire, FunctionPort { gate, index });
-                circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
+                circ!(self.states).add_transient(wire, true);
             });
         self.propagate();
     }
@@ -180,7 +180,7 @@ impl Circuit<'_> {
     pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         circ!(self.states)[key].replace_value(val)?;
 
-        circ!(self.states).transient.triggers.insert(key, TriggerState { recalculate: false });
+        circ!(self.states).add_transient(key, false);
         Ok(())
     }
     /// Updates the port of a [`FunctionNode`] with the specified value, raising `Err` if bitsizes do not match.
@@ -190,9 +190,32 @@ impl Circuit<'_> {
         circ!(self.states)[port.gate].replace_port(port.index, val)?;
 
         if let Some(wire) = circ!(self.graphs)[port.gate].links[0] {
-            circ!(self.states).transient.triggers.insert(wire, TriggerState { recalculate: true });
+            circ!(self.states).add_transient(wire, true);
         }
         Ok(())
+    }
+
+    /// Joins a set of value nodes into one.
+    pub fn join(&mut self, keys: &[ValueKey]) {
+        if let Some((&main, to_merge)) = keys.split_first() {
+            circ!(self.graphs).join(main, to_merge);
+            // Remove all invalidated nodes
+            for &k in to_merge {
+                circ!(self.states).remove_node_value(k);
+            }
+
+            circ!(self.states).add_transient(main, true);
+        }
+    }
+    /// Splits a node into two and returns the newly created node.
+    pub fn split(&mut self, key: ValueKey, off_ports: &[FunctionPort]) -> ValueKey {
+        let new_value = circ!(self.graphs).split_off(key, off_ports);
+
+        circ!(self.states).init_value(new_value);
+        circ!(self.states).add_transient(key, true);
+        circ!(self.states).add_transient(new_value, true);
+
+        new_value
     }
 
     /// Sets the input state for the input.
@@ -219,6 +242,8 @@ impl Circuit<'_> {
 mod tests {
     use crate::bitarr;
     use crate::circuit::CircuitForest;
+    use crate::circuit::graph::FunctionPort;
+    use crate::func::{And, Not, ComponentFn};
 
     #[test]
     fn test_replace() {
@@ -234,5 +259,63 @@ mod tests {
         // intentionally wrong bitsize should fail
         let wrong_value = bitarr![0; 16]; // 16 bits instead of 8
         assert!(circuit.replace_value(key, wrong_value).is_err());
+    }
+    #[test]
+    fn test_join() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        let value1 = circuit.add_value_node();
+        let value2 = circuit.add_value_node();
+
+        let and =  ComponentFn::And(And::new(8, 2));
+        let not= ComponentFn::Not(Not::new(8));
+
+        let func1 = circuit.add_function_node(and);
+        let func2 = circuit.add_function_node(not);
+
+        // Connect value1 to func1, value2 to func2
+        circuit.connect_one(value1, FunctionPort { gate: func1, index: 0 });
+        circuit.connect_one(value2, FunctionPort { gate: func2, index: 0 });
+
+        // Join value2 into value1
+        circuit.join(&[value1, value2]);
+
+        assert_eq!(circuit.forest.graphs[circuit.key].values[value1].links.len(), 2);
+        assert!(!circuit.state().values.contains_key(value2));
+        assert!(circuit.state().values.contains_key(value1));
+
+        // Verify transients
+        assert!(circuit.state().transient.triggers.contains_key(value1));
+    }
+    #[test]
+    fn test_split_off() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        let value1 = circuit.add_value_node();
+
+        let and =  ComponentFn::And(And::new(8, 2));
+        let not= ComponentFn::Not(Not::new(8));
+
+        let func1 = circuit.add_function_node(and);
+        let func2 = circuit.add_function_node(not);
+
+        circuit.connect_one(value1, FunctionPort { gate: func1, index: 0 });
+        circuit.connect_one(value1, FunctionPort { gate: func2, index: 0 });
+
+        // Split off func2 from value1
+        let value2 = circuit.split(value1, &[FunctionPort { gate: func2, index: 0 }]);
+
+        // Verify graphs and state
+        assert_eq!(circuit.forest.graphs[circuit.key].values[value1].links.len(), 1);
+        assert_eq!(circuit.forest.graphs[circuit.key].values[value2].links.len(), 1);
+
+        assert!(circuit.state().values.contains_key(value1));
+        assert!(circuit.state().values.contains_key(value2));
+
+        // Verify transients
+        assert!(circuit.state().transient.triggers.contains_key(value1));
+        assert!(circuit.state().transient.triggers.contains_key(value2));
     }
 }
