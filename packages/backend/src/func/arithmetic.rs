@@ -143,16 +143,16 @@ impl Component for Subtractor {
         };
         let bin = bin.unwrap_or(0);
 
-        let (diff, bout) = a.overflowing_sub(b.wrapping_add(bin & 1));
+        let (diff, bout) = a.borrowing_sub(b, bin & 1 != 0);
         match self.bitsize {
             64.. => vec![
-                PortUpdate { index: 3, value: BitArray::from(BitState::from(bout)) },
+                PortUpdate { index: 3, value: BitArray::from(bout) },
                 PortUpdate { index: 4, value: BitArray::from(diff) }
             ],
             _ => {
                 let bout = diff & (1 << self.bitsize) != 0;
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from(BitState::from(bout)) },
+                    PortUpdate { index: 3, value: BitArray::from(bout) },
                     PortUpdate { index: 4, value: BitArray::from_bits(diff, self.bitsize) }
                 ]
             }
