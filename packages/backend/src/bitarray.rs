@@ -1,10 +1,71 @@
 //! Bit manipulation used for wires and bit values.
 
+/// A `u64` bit mask of `len` 1s,
+/// useful for masking against values which
+/// should not affect [`BitArray`] comparisons.
+const fn norm_mask(len: u8) -> u64 {
+    match len {
+        l @ 0..64 => (1 << l) - 1,
+        _ => u64::MAX
+    }
+}
+
 /// Creates a u64 which has this bit repeating the entire bitspace.
 const fn stretch(v: bool) -> u64 {
     if v { u64::MAX } else { 0 }
 }
 
+/// Shift type for [`BitArray::shift`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ShiftType {
+    /// Shift all bits left
+    LogicalLeft,
+    /// Shift all bits right
+    LogicalRight,
+    /// Shift all bits right and sign extend
+    ArithmeticRight,
+    /// Shift all bits left, using wraparound logic
+    RotateLeft,
+    /// Shift all bits right, using wraparound logic
+    RotateRight,
+}
+impl ShiftType {
+    /// Applies this shift type on `data` (of bitsize `bitsize`), creating a shift by `shift`.
+    /// 
+    /// Any bits not within the `bitsize` should be ignored.
+    pub fn apply(self, data: u64, bitsize: u8, shift: u32) -> u64 {
+        let mask = norm_mask(bitsize);
+        match self {
+            ShiftType::LogicalLeft => data.wrapping_shl(shift),
+            ShiftType::LogicalRight => (data & mask).wrapping_shr(shift),
+            ShiftType::ArithmeticRight => {
+                (data as i64)
+                    // Get sign
+                    .wrapping_shl(u64::BITS - u32::from(bitsize))
+                    .wrapping_shr(u64::BITS - u32::from(bitsize))
+                    // Perform actual shift
+                    .wrapping_shr(shift) as u64
+            },
+            // Minor optimization
+            ShiftType::RotateLeft if bitsize >= 64 => data.rotate_left(shift),
+            ShiftType::RotateLeft => {
+                let shift = shift % u32::from(bitsize);
+                let left = data.wrapping_shl(shift);
+                let right = (data & mask).wrapping_shr(u32::from(bitsize) - shift);
+
+                left | right
+            },
+            // Minor optimization
+            ShiftType::RotateRight if bitsize >= 64 => data.rotate_right(shift),
+            ShiftType::RotateRight => {
+                let shift = shift % u32::from(bitsize);
+                let right = (data & mask).wrapping_shr(shift);
+                let left = data.wrapping_shl(u32::from(bitsize) - shift);
+                left | right
+            },
+        }
+    }
+}
 /// The state of a single bit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BitState {
@@ -256,10 +317,7 @@ impl BitArray {
     /// useful for masking against values which
     /// should not affect [`BitArray`] comparisons.
     const fn norm_mask(self) -> u64 {
-        match self.len() {
-            l @ 0..64 => (1 << l) - 1,
-            _ => u64::MAX
-        }
+        norm_mask(self.len())
     }
     /// Applies the mask on the `BitArray`,
     /// returning the resulting data and spec bits.
@@ -352,6 +410,14 @@ impl BitArray {
                 len: new_len
             }
         }
+    }
+
+    /// Shifts the bitarray by the specified `shift`, using the applied `shift_type`.
+    pub fn shift(self, shift: u32, shift_type: ShiftType) -> Self {
+        let data = shift_type.apply(self.data, self.len, shift);
+        let spec = shift_type.apply(self.spec, self.len, shift);
+
+        Self { data, spec, len: self.len }
     }
 }
 impl FromIterator<BitState> for BitArray {
@@ -592,7 +658,7 @@ impl std::ops::Not for BitArray {
 
 #[cfg(test)]
 mod tests {
-    use crate::bitarray::BitState;
+    use crate::bitarray::{BitState, ShiftType, norm_mask};
 
     use super::BitArray;
 
@@ -685,5 +751,225 @@ mod tests {
         assert_eq!(ba.resize(4, BitState::Low),   bitarr![Z, 0, 1, 0]);
 
         assert_eq!(ba.resize(1, BitState::High), bitarr![Z]);
+    }
+
+    #[test]
+    fn shift_log_left() {
+        const SHIFT: ShiftType = ShiftType::LogicalLeft;
+        let data = 0b101101;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b101101);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b011010);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b110100);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b101000);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b010000);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b100000);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b000000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b000000);
+
+        let data = 0b01011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b10110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b01100);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b11000);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b10000);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b00000);
+
+        let data = 0b10110;
+        assert_eq!(SHIFT.apply(data, 64, 0), 0b10110);
+        assert_eq!(SHIFT.apply(data, 64, 1), 0b101100);
+        assert_eq!(SHIFT.apply(data, 64, 2), 0b1011000);
+        assert_eq!(SHIFT.apply(data, 64, 3), 0b10110000);
+        assert_eq!(SHIFT.apply(data, 64, 4), 0b101100000);
+        assert_eq!(SHIFT.apply(data, 64, 5), 0b1011000000);
+        assert_eq!(SHIFT.apply(data, 64, 6), 0b10110000000);
+        assert_eq!(SHIFT.apply(data, 64, 7), 0b101100000000);
+    }
+
+    #[test]
+    fn shift_log_right() {
+        const SHIFT: ShiftType = ShiftType::LogicalRight;
+        let data = 0b101101;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b101101);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b010110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b001011);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b000101);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b000010);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b000001);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b000000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b000000);
+
+        let data = 0b101011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b00101);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b00010);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b00001);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b00000);
+
+        let data = 0b10110;
+        assert_eq!(SHIFT.apply(data, 64, 0), 0b10110);
+        assert_eq!(SHIFT.apply(data, 64, 1), 0b1011);
+        assert_eq!(SHIFT.apply(data, 64, 2), 0b101);
+        assert_eq!(SHIFT.apply(data, 64, 3), 0b10);
+        assert_eq!(SHIFT.apply(data, 64, 4), 0b1);
+        assert_eq!(SHIFT.apply(data, 64, 5), 0b0);
+        assert_eq!(SHIFT.apply(data, 64, 6), 0b0);
+        assert_eq!(SHIFT.apply(data, 64, 7), 0b0);
+    }
+
+    #[test]
+    fn shift_art_right() {
+        const SHIFT: ShiftType = ShiftType::ArithmeticRight;
+        
+        let data = 0b001101;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b001101);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b000110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b000011);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b000001);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b000000);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b000000);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b000000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b000000);
+        
+        let data = 0b101101;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b101101);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b110110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b111011);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b111101);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b111110);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b111111);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b111111);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b111111);
+
+        let data = 0b11101011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b00101);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b00010);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b00001);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b00000);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b00000);
+
+        let data = 0b1111011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b11011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b11101);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b11110);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b11111);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b11111);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b11111);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b11111);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b11111);
+
+        let data = 0xF000_0000_0000_000A; // 1111 ... 1010
+        assert_eq!(SHIFT.apply(data, 64, 0), 0xF000_0000_0000_000A);
+        assert_eq!(SHIFT.apply(data, 64, 1), 0xF800_0000_0000_0005);
+        assert_eq!(SHIFT.apply(data, 64, 2), 0xFC00_0000_0000_0002);
+        assert_eq!(SHIFT.apply(data, 64, 3), 0xFE00_0000_0000_0001);
+        assert_eq!(SHIFT.apply(data, 64, 4), 0xFF00_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 5), 0xFF80_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 6), 0xFFC0_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 7), 0xFFE0_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 8), 0xFFF0_0000_0000_0000);
+    }
+
+    #[test]
+    fn shift_rot_left() {
+        const SHIFT: ShiftType = ShiftType::RotateLeft;
+        
+        let data = 0b101100;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b101100);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b011001);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b110010);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b100101);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b001011);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b010110);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b101100);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b011001);
+
+        let data = 0b11101011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b10110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b01101);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b11010);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b10101);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b10110);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b01101);
+
+        let data = 0xF000_0000_0000_000A; // 1111 ... 1010
+        assert_eq!(SHIFT.apply(data, 64, 0), 0xF000_0000_0000_000A);
+        assert_eq!(SHIFT.apply(data, 64, 1), 0xE000_0000_0000_0015);
+        assert_eq!(SHIFT.apply(data, 64, 2), 0xC000_0000_0000_002B);
+        assert_eq!(SHIFT.apply(data, 64, 3), 0x8000_0000_0000_0057);
+        assert_eq!(SHIFT.apply(data, 64, 4), 0x0000_0000_0000_00AF);
+        assert_eq!(SHIFT.apply(data, 64, 5), 0x0000_0000_0000_015E);
+        assert_eq!(SHIFT.apply(data, 64, 6), 0x0000_0000_0000_02BC);
+        assert_eq!(SHIFT.apply(data, 64, 7), 0x0000_0000_0000_0578);
+        assert_eq!(SHIFT.apply(data, 64, 8), 0x0000_0000_0000_0AF0);
+    }
+
+    #[test]
+    fn shift_rot_right() {
+        const SHIFT: ShiftType = ShiftType::RotateRight;
+        
+        let data = 0b101100;
+        let size = 6;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b101100);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b010110);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b001011);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b100101);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b110010);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b011001);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b101100);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b010110);
+
+        let data = 0b11101011;
+        let size = 5;
+        let mask = norm_mask(size);
+        assert_eq!(SHIFT.apply(data, size, 0) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 1) & mask, 0b10101);
+        assert_eq!(SHIFT.apply(data, size, 2) & mask, 0b11010);
+        assert_eq!(SHIFT.apply(data, size, 3) & mask, 0b01101);
+        assert_eq!(SHIFT.apply(data, size, 4) & mask, 0b10110);
+        assert_eq!(SHIFT.apply(data, size, 5) & mask, 0b01011);
+        assert_eq!(SHIFT.apply(data, size, 6) & mask, 0b10101);
+        assert_eq!(SHIFT.apply(data, size, 7) & mask, 0b11010);
+
+        let data = 0xF000_0000_0000_000A; // 1111 ... 1010
+        assert_eq!(SHIFT.apply(data, 64, 0), 0xF000_0000_0000_000A);
+        assert_eq!(SHIFT.apply(data, 64, 1), 0x7800_0000_0000_0005);
+        assert_eq!(SHIFT.apply(data, 64, 2), 0xBC00_0000_0000_0002);
+        assert_eq!(SHIFT.apply(data, 64, 3), 0x5E00_0000_0000_0001);
+        assert_eq!(SHIFT.apply(data, 64, 4), 0xAF00_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 5), 0x5780_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 6), 0x2BC0_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 7), 0x15E0_0000_0000_0000);
+        assert_eq!(SHIFT.apply(data, 64, 8), 0x0AF0_0000_0000_0000);
     }
 }

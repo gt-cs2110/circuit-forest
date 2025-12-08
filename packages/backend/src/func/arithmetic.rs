@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::bitarr;
-use crate::bitarray::NotTwoValuedErr;
+use crate::bitarray::{NotTwoValuedErr, ShiftType};
 use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarray::BitArray, bitarray::BitState};
@@ -469,36 +469,33 @@ impl Component for BitExtender {
     }
 }
 
-/// Shift type for bit shifter
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ShiftType {
-    /// Shift all bits left
-    LogicalLeft,
-    /// Shift all bits right
-    LogicalRight,
-    /// Shift all bits right and sign extend
-    ArithmeticRight,
-    /// Shift all bits left, using wraparound logic
-    RotateLeft,
-    /// Shift all bits right, using wraparound logic
-    RotateRight,
-}
-
 /// A Shifter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Shifter {
     bitsize: u8,
-    shift: u8,
     shift_type: ShiftType
 }
 impl Shifter {
     /// Creates a new instance of the Shifter with specified bitsize.
     pub fn new(bitsize: u8, shift_type: ShiftType) -> Self {
-        let bit = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        let bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
         Self {
-            bitsize: bit,
-            shift: (bit as f64).log2().ceil() as u8,
+            bitsize,
             shift_type
+        }
+    }
+
+    /// Gets the bitsize of the shift parameter.
+    pub fn shift_bitsize(self) -> u8 {
+        // ilog2 ceil
+        // doesn't exist in stdlib so we're just gonna hardcode it lol
+        match self.bitsize {
+            0..=2   => 1,
+            3..=4   => 2,
+            5..=8   => 3,
+            9..=16  => 4,
+            17..=32 => 5,
+            _ => 6,
         }
     }
 }
@@ -507,64 +504,20 @@ impl Component for Shifter {
         port_list(&[
             // Input
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
-            (PortProperties { ty: PortType::Input, bitsize: self.shift }, 1),
+            // Shift
+            (PortProperties { ty: PortType::Input, bitsize: self.shift_bitsize() }, 1),
             // Output
             (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
         ])
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                ]
-            }
-        }; 
-
-        let b_val = match b {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                ]
-            }
-        }; 
-        let mask = if self.bitsize == 64 {
-            u64::MAX
-        } else {
-            (1u64 << self.bitsize) - 1
+        let a = ctx.new_ports[0];
+        let Ok(b) = u64::try_from(ctx.new_ports[1]) else {
+            return vec![PortUpdate { index: 2, value: bitarr![X; self.bitsize] }]
         };
-        let out_val = match self.shift_type {
-            ShiftType::LogicalLeft => (a_val << b_val) & mask,
-            ShiftType::LogicalRight => a_val >> b_val,
-            ShiftType::ArithmeticRight => {
-                let signed_val = if (a_val >> (self.bitsize - 1)) != 0 {
-                    (a_val | (!0u64 << self.bitsize)) as i64
-                } else {
-                    a_val as i64
-                };
-
-                (signed_val >> b_val) as u64 & mask
-            },
-            ShiftType::RotateLeft => {
-                ((a_val << b_val) | (a_val >> (self.bitsize - (b_val as u8)))) & mask
-            },
-            ShiftType::RotateRight => {
-                ((a_val >> b_val) | (a_val << (self.bitsize - (b_val as u8)))) & mask
-            },
-        };
-
-        vec![
-            PortUpdate { index: 2, value: BitArray::from_bits(out_val, self.bitsize) }
-        ]
-
+        
+        vec![PortUpdate { index: 2, value: a.shift(b as u32, self.shift_type) }]
     }
 }
 
