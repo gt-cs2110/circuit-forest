@@ -548,7 +548,7 @@ mod tests {
         // Iterate over all 4-bit values for A and B
         for a in 0..16 {
             for b in 0..16 {
-                for cin in 0..2 {
+                for cin in 0..=1 {
                     // Convert to little-endian
                     let in_a = BitArray::from_bits(a, 4);
                     let in_b = BitArray::from_bits(b, 4);
@@ -586,7 +586,7 @@ mod tests {
                             PortUpdate { index: 3, value: expected_cout },
                             PortUpdate { index: 4, value: expected_sum }
                         ],
-                        "Adder failed for A={a}, B={b}, Cin={cin}"
+                        "Adder failed for A=0x{a:04X}, B=0x{b:04X}, Cin={cin}"
                     );
                 }
             }
@@ -600,7 +600,7 @@ mod tests {
         // Iterate over all 4-bit values for A and B
         for a in 0..16 {
             for b in 0..16 {
-                for cin in 0..2 {
+                for cin in 0..=1 {
                     // Convert to little-endian
                     let in_a = BitArray::from_bits(a, 4);
                     let in_b = BitArray::from_bits(b, 4);
@@ -642,7 +642,7 @@ mod tests {
                             PortUpdate { index: 3, value: expected_cout },
                             PortUpdate { index: 4, value: expected_sum }
                         ],
-                        "Subtractor failed for A={a}, B={b}, Cin={cin}"
+                        "Subtractor failed for A=0x{a:04X}, B=0x{b:04X}, Cin={cin}"
                     );
                 }
             }
@@ -651,10 +651,10 @@ mod tests {
     }
 
     #[test]
-    fn test_multiplier_unsigned_exhaustive() {
+    fn test_multiplier_exhaustive() {
         let multiplier = Multiplier::new(4, SignType::Unsigned); // 4-bit multiplier
 
-        // Iterate over all 4-bit values for A and B
+        // Iterate over all 4-bit values for A, B, cin
         for a in 0..16 {
             for b in 0..16 {
                 for cin in 0..16 {
@@ -689,68 +689,63 @@ mod tests {
                             PortUpdate { index: 3, value: lower_bits },
                             PortUpdate { index: 4, value: upper_bits }
                         ],
-                        "Multiplier failed for A={a}, B={b}, Cin={cin}"
+                        "Multiplier failed for A=0x{a:04X}, B=0x{b:04X}, Cin=0x{cin:04X}"
                     );
                 }
             }
-        }     
-            
+        }
     }
 
     #[test]
     fn test_divider_unsigned_exhaustive() {
         let divider = Divider::new(4, SignType::Unsigned); // 4-bit Divider
 
-        // Iterate over all 4-bit values for A and B
-        for a in 0..16 {
+        // Iterate over all 8-bit values of A and 4-bit values of B
+        for a in 0..256 {
             for b in 0..16 {
-                for c in 0..16 {
-                    // Convert to little-endian
-                    let in_a = BitArray::from_bits(a, 4);
-                    let in_b = BitArray::from_bits(b, 4);
-                    let in_c = BitArray::from_bits(c, 4);
+                let a_hi = (a >> 4) & 0xF;
+                let a_lo = a & 0xF;
+                // Convert to little-endian
+                let in_a_hi = BitArray::from_bits(a_hi, 4);
+                let in_a_lo = BitArray::from_bits(a_lo, 4);
+                let in_b = BitArray::from_bits(b, 4);
 
-                    let old_ports = &[bitarr![Z; 4]; 5];
-    
-                    let updates = divider.run(RunContext {
-                        graphs: &Default::default(),
-                        old_ports,
-                        new_ports: &[
-                            in_a,
-                            in_b,
-                            in_c,
-                            bitarr![Z; 4], // Quotient placeholder
-                            bitarr![Z; 4], // Remainder placeholder
-                        ],
-                        inner_state: None,
-                    });
-    
-                    // Compute expected quotient and remainder
-                    let quotient = if b == 0 {
-                        in_a
-                    } else {
-                        BitArray::from_bits((((c << 4) | a) / b) & 0b1111, 4)
-                    };
-    
-    
-                    let remainder = if b == 0 {
-                        bitarr![0; 4]
-                    } else {
-                        BitArray::from_bits( (((c << 4) | a) % b) & 0b1111, 4)
-                    };
-    
-                    assert_eq!(
-                        updates,
-                        vec![
-                            PortUpdate { index: 3, value: quotient },
-                            PortUpdate { index: 4, value: remainder }
-                        ],
-                        "Divider failed for A={a}, B={b}, C={c}"
-                    );
-                }
+                let old_ports = &[bitarr![Z; 4]; 5];
+
+                let updates = divider.run(RunContext {
+                    graphs: &Default::default(),
+                    old_ports,
+                    new_ports: &[
+                        in_a_lo,
+                        in_b,
+                        in_a_hi,
+                        bitarr![Z; 4], // Quotient placeholder
+                        bitarr![Z; 4], // Remainder placeholder
+                    ],
+                    inner_state: None,
+                });
+
+                // Compute expected quotient and remainder
+                let quotient = match b {
+                    0 => in_a_lo,
+                    _ => BitArray::from_bits((a / b) & 0b1111, 4)
+                };
+
+                let remainder = match b {
+                    0 => bitarr![0; 4],
+                    _ => BitArray::from_bits((a % b) & 0b1111, 4)
+                };
+
+                assert_eq!(
+                    updates,
+                    vec![
+                        PortUpdate { index: 3, value: quotient },
+                        PortUpdate { index: 4, value: remainder }
+                    ],
+                    "Divider failed for A=0x{a:08X}, B=0x{b:04X}"
+                );
             }
-        }     
-            
+        }
     }
 
     #[test]
@@ -778,21 +773,21 @@ mod tests {
 
 
 
-            let out = BitArray::from_bits((-(a as i64) & 0b1111) as u64, 4);
+            let out = BitArray::from_bits(a.wrapping_neg() & 0b1111, 4);
 
             assert_eq!(
                 updates,
                 vec![
                     PortUpdate { index: 1, value: out },
                 ],
-                "Negator failed for A={a}"
+                "Negator failed for A=0x{a:04X}"
             );
         }     
             
     }
 
     #[test]
-    fn test_comparator_unsigned_exhaustive() {
+    fn test_comparator_exhaustive() {
         let cmp = Comparator::new(4, SignType::Unsigned); // 4-bit comparator
 
         // Iterate over all 4-bit pairs A and B
@@ -836,7 +831,7 @@ mod tests {
                         PortUpdate { index: 3, value: eq },
                         PortUpdate { index: 4, value: gt },
                     ],
-                    "Comparator failed for A={a}, B={b}"
+                    "Comparator failed for A=0x{a:04X}, B=0x{b:04X}"
                 );
             }
         }
@@ -868,7 +863,7 @@ mod tests {
         assert_eq!(
             updates,
             vec![PortUpdate { index: 1, value: expected_bits }],
-            "BitExtender failed for input 0b1010 with Sign extension"
+            "BitExtender failed for input 0b{input_val:04b} with Sign extension"
         );
     }
 
@@ -910,10 +905,7 @@ mod tests {
             assert_eq!(
                 updates,
                 vec![PortUpdate { index: 2, value: expected_bits }],
-                "Shifter failed for input 0b{:04b}, shift {} with {:?}",
-                a_val,
-                shift_val,
-                stype
+                "Shifter failed for input 0b{a_val:04b}, shift {shift_val} with {stype:?}"
             );
         }
     }
