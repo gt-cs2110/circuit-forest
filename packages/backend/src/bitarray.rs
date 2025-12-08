@@ -1,5 +1,10 @@
 //! Bit manipulation used for wires and bit values.
 
+/// Creates a u64 which has this bit repeating the entire bitspace.
+const fn stretch(v: bool) -> u64 {
+    if v { u64::MAX } else { 0 }
+}
+
 /// The state of a single bit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BitState {
@@ -226,8 +231,8 @@ impl BitArray {
     pub fn repeat(st: BitState, len: u8) -> Self {
         let (data, spec) = st.split();
         Self {
-            data: if data { u64::MAX } else { 0 },
-            spec: if spec { u64::MAX } else { 0 },
+            data: stretch(data),
+            spec: stretch(spec),
             len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
         }
     }
@@ -252,7 +257,7 @@ impl BitArray {
     /// should not affect [`BitArray`] comparisons.
     const fn norm_mask(self) -> u64 {
         match self.len() {
-            len @ 0..64 => (1 << len) - 1,
+            l @ 0..64 => (1 << l) - 1,
             _ => u64::MAX
         }
     }
@@ -325,6 +330,29 @@ impl BitArray {
     pub fn index(self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
     }
+
+    /// Creates a new bit array with the same bits but new bitsize.
+    /// 
+    /// If the new bitsize is larger than the current bitsize,
+    /// it is extended with the specified array.
+    pub fn resize(self, new_len: u8, fill: BitState) -> Self {
+        let new_len = new_len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        if new_len <= self.len() {
+            // Truncation
+            Self { data: self.data, spec: self.spec, len: new_len }
+        } else {
+            // Extension
+            let (data, spec) = fill.split();
+            let data = stretch(data);
+            let spec = stretch(spec);
+            let mask = self.norm_mask();
+            Self {
+                data: (data & !mask) | (self.data & mask),
+                spec: (spec & !mask) | (self.spec & mask),
+                len: new_len
+            }
+        }
+    }
 }
 impl FromIterator<BitState> for BitArray {
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
@@ -340,6 +368,11 @@ impl FromIterator<BitState> for BitArray {
 impl From<u64> for BitArray {
     fn from(data: u64) -> Self {
         Self::from_bits(data, 64)
+    }
+}
+impl From<bool> for BitArray {
+    fn from(value: bool) -> Self {
+        Self::from_bits(u64::from(value), 1)
     }
 }
 impl TryFrom<BitArray> for u64 {
@@ -641,5 +674,16 @@ mod tests {
         ]);
 
         assert_eq!(format!("{ba}"), "0Z1X10XZ");
+    }
+
+    #[test]
+    fn resized() {
+        let ba = bitarr![Z, 0, 1];
+        assert_eq!(ba.resize(4, BitState::Imped), bitarr![Z, 0, 1, Z]);
+        assert_eq!(ba.resize(4, BitState::Unk),   bitarr![Z, 0, 1, X]);
+        assert_eq!(ba.resize(4, BitState::High),  bitarr![Z, 0, 1, 1]);
+        assert_eq!(ba.resize(4, BitState::Low),   bitarr![Z, 0, 1, 0]);
+
+        assert_eq!(ba.resize(1, BitState::High), bitarr![Z]);
     }
 }

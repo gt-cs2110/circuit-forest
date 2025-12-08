@@ -458,41 +458,14 @@ impl Component for BitExtender {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.out_bitsize);
-                return vec![
-                    PortUpdate { index: 1, value: error_bits },
-                ]
-            }
-        }; 
-        
-        if self.in_bitsize < self.out_bitsize {
-            let ext_bits = match self.ext_type {
-                ExtensionType::Zero => 0u128,
-                ExtensionType::One => u128::MAX,
-                ExtensionType::Sign => {
-                    let msb = (a_val >> (self.in_bitsize - 1)) & 1;
-                    if msb == 1 {
-                        u128::MAX
-                    } else {
-                        0u128
-                    }
-                }
-            };
-            let clear_mask = (!0u128) << (self.in_bitsize);
-            let bit_ext = (ext_bits & clear_mask) | (a_val as u128);
-            vec![
-                PortUpdate { index: 1, value: BitArray::from_bits(bit_ext as u64, self.out_bitsize) }
-            ]
-        } else {
-            vec![
-                PortUpdate { index: 1, value: BitArray::from_bits(a_val, self.out_bitsize) }
-            ]
-        }
+        let fill = match self.ext_type {
+            ExtensionType::Zero => BitState::Low,
+            ExtensionType::One => BitState::High,
+            ExtensionType::Sign => ctx.new_ports[0].get(ctx.new_ports[0].len() - 1).unwrap(),
+        };
+        let value = ctx.new_ports[0].resize(self.out_bitsize, fill);
+        dbg!(fill, value);
+        vec![PortUpdate { index: 1, value }]
     }
 }
 
@@ -917,13 +890,13 @@ mod tests {
             inner_state: None,
         });
 
-        // Expected output: 6-bit zero-extended
+        // Expected output: 6-bit sign-extended
         let expected_bits = bitarr![0,1,0,1,1,1];
 
         assert_eq!(
             updates,
             vec![PortUpdate { index: 1, value: expected_bits }],
-            "BitExtender failed for input 0b1010 with Zero extension"
+            "BitExtender failed for input 0b1010 with Sign extension"
         );
     }
 
