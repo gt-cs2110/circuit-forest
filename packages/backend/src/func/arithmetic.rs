@@ -164,13 +164,15 @@ impl Component for Subtractor {
 /// A multiplier component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Multiplier {
-    bitsize: u8
+    bitsize: u8,
+    signedness: SignType
 }
 impl Multiplier {
     /// Creates a new instance of the Multiplier with specified bitsize.
-    pub fn new(bitsize: u8) -> Self {
+    pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
             bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            signedness
         }
     }
 }
@@ -182,7 +184,7 @@ impl Component for Multiplier {
                 [1] = B,
                 [2] = Carry In
                 [3] = Out
-                [4] = Upper Bits
+                [4] = Carry Out / Upper Bits
              */
             // Inputs
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 3),
@@ -192,66 +194,76 @@ impl Component for Multiplier {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
-        let cin = u64::try_from(ctx.new_ports[2]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: error_bits },
-                    PortUpdate { index: 4, value: error_bits }
-                ]
-            }
+        // inputs: A[n], B[n], Cin[n]
+        // - Cin represents the carry in from the right
+        // outputs: Prod[n], Cout[n]
+        // - Cout represents the carry out to the left
+        //
+        // If any of A, B, cin are X, then all outputs are X
+        // If any of A, B are Z, then it is all Z
+        // If cin is Z, treat as 0
+        let (a, b, cin) = match parse_args(ctx.new_ports) {
+            Ok([Some(a), Some(b), cin]) => (a, b, cin),
+            Ok(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+            ],
+            Err(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+            ]
         };
+        let cin = cin.unwrap_or(0);
 
-        let b_val = match b {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: error_bits },
-                    PortUpdate { index: 4, value: error_bits }
+        match (self.bitsize, self.signedness) {
+            (64.., SignType::Unsigned) => {
+                let (prod, cout) = a.carrying_mul(b, cin);
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from(prod) },
+                    PortUpdate { index: 4, value: BitArray::from(cout) },
+                ]
+            },
+            (..64, SignType::Unsigned) => {
+                let (prod_lo, prod_hi) = a.carrying_mul(b, cin);
+                let full_prod = (u128::from(prod_hi) << 64) | u128::from(prod_lo);
+                let mask = (1u128 << self.bitsize) - 1;
+
+                let prod = (full_prod & mask) as u64;
+                let cout = ((full_prod >> self.bitsize) & mask) as u64;
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize) },
+                ]
+            },
+            (_, SignType::TwosComplement) => {
+                let full_prod = i128::from(a)
+                    .wrapping_mul(i128::from(b))
+                    .wrapping_add(i128::from(cin));
+                let mask = (1i128 << self.bitsize) - 1;
+
+                let prod = (full_prod & mask) as u64;
+                let cout = ((full_prod >> self.bitsize) & mask) as u64;
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize) },
                 ]
             }
-        };    
-
-        let cin_val = match cin {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: error_bits },
-                    PortUpdate { index: 4, value: error_bits }
-                ]
-            }
-        };  
-
-        let bit_mask = (1u128 << self.bitsize) - 1;
-        let mult_val = (a_val as u128) * (b_val as u128) + (cin_val as u128);
-        let lower_bits = BitArray::from_bits((mult_val & bit_mask) as u64, self.bitsize);
-        let upper_bits = BitArray::from_bits(((mult_val >> self.bitsize) & bit_mask) as u64, self.bitsize);
-
-
-        vec![
-            PortUpdate { index: 3, value: lower_bits },
-            PortUpdate { index: 4, value: upper_bits }
-        ]
+        }
     }
 }
 
 /// A Divider component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Divider {
-    bitsize: u8
+    bitsize: u8,
+    signedness: SignType
 }
 impl Divider {
     /// Creates a new instance of the Divider with specified bitsize.
-    pub fn new(bitsize: u8) -> Self {
+    pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
             bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            signedness
         }
     }
 }
@@ -259,60 +271,63 @@ impl Component for Divider {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             /*
-                [0] = A,
+                [0] = A (lo),
                 [1] = B,
-                [2] = Quotient
-                [3] = Remainder
+                [2] = A (hi),
+                [3] = Quotient
+                [4] = Remainder
              */
             // Inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 3),
             // Outputs
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
         ])
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                    PortUpdate { index: 3, value: error_bits }
-                ]
-            }
+        // inputs: A_lo[n], B[n], A_hi[n]
+        // outputs: Q[n], R[n]
+        //
+        // If any of A, B, cin are X, then all outputs are X
+        // If any of A, B are Z, then it is all Z
+        // If cin is Z, treat as 0
+        // If B is 0, return A
+        let (a_lo, b, a_hi) = match parse_args(ctx.new_ports) {
+            Ok([Some(a), Some(b), cin]) => (a, b, cin),
+            Ok(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+            ],
+            Err(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+            ]
         };
+        let a_hi = a_hi.unwrap_or(0);
+        let a = (u128::from(a_hi) << self.bitsize) | u128::from(a_lo);
+        let b = u128::from(b);
 
-        let b_val = match b {
-            Ok(val) => {if val == 0 {
-                    let error_bits = BitArray::repeat(BitState::Unk, self.bitsize);
-                    return vec![
-                        PortUpdate { index: 2, value: error_bits },
-                        PortUpdate { index: 3, value: error_bits }
-                    ]
-                }
-                val
-            }
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                    PortUpdate { index: 3, value: error_bits }
+        match (b, self.signedness) {
+            // Div by zero, just let it be div by 1
+            (0, _) => {
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from_bits(a_lo, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(0, self.bitsize) },
                 ]
             }
-        };    
-
-        let remainder = BitArray::from_bits(a_val % b_val, self.bitsize);
-        let quotient = BitArray::from_bits(a_val / b_val, self.bitsize);
-
-
-        vec![
-            PortUpdate { index: 2, value: quotient },
-            PortUpdate { index: 3, value: remainder }
-        ]
+            (_, SignType::Unsigned) => {
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from_bits((a / b) as u64, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits((a % b) as u64, self.bitsize) },
+                ]
+            }
+            (_, SignType::TwosComplement) => {
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from_bits(((a as i128) / (b as i128)) as u64, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(((a as i128) % (b as i128)) as u64, self.bitsize) },
+                ]
+            }
+        }
     }
 }
 
@@ -636,8 +651,8 @@ mod tests {
     }
 
     #[test]
-    fn test_multiplier_exhaustive() {
-        let multiplier = Multiplier::new(4); // 4-bit multiplier
+    fn test_multiplier_unsigned_exhaustive() {
+        let multiplier = Multiplier::new(4, SignType::Unsigned); // 4-bit multiplier
 
         // Iterate over all 4-bit values for A and B
         for a in 0..16 {
@@ -683,52 +698,56 @@ mod tests {
     }
 
     #[test]
-    fn test_divider_exhaustive() {
-        let divider = Divider::new(4); // 4-bit Divider
+    fn test_divider_unsigned_exhaustive() {
+        let divider = Divider::new(4, SignType::Unsigned); // 4-bit Divider
 
         // Iterate over all 4-bit values for A and B
         for a in 0..16 {
             for b in 0..16 {
-                // Convert to little-endian
-                let in_a = BitArray::from_bits(a, 4);
-                let in_b = BitArray::from_bits(b, 4);
+                for c in 0..16 {
+                    // Convert to little-endian
+                    let in_a = BitArray::from_bits(a, 4);
+                    let in_b = BitArray::from_bits(b, 4);
+                    let in_c = BitArray::from_bits(c, 4);
 
-                let old_ports = &[bitarr![Z; 4]; 4];
-
-                let updates = divider.run(RunContext {
-                    graphs: &Default::default(),
-                    old_ports,
-                    new_ports: &[
-                        in_a,
-                        in_b,
-                        bitarr![Z; 4], // Quotient placeholder
-                        bitarr![Z; 4], // Remainder placeholder
-                    ],
-                    inner_state: None,
-                });
-
-                // Compute expected quotient and remainder
-                let quotient = if b == 0 {
-                    BitArray::repeat(BitState::Unk, 4)
-                } else {
-                    BitArray::from_bits((a / b) & 0b1111, 4)
-                };
-
-
-                let remainder = if b == 0 {
-                    BitArray::repeat(BitState::Unk, 4)
-                } else {
-                    BitArray::from_bits( (a % b) & 0b1111, 4)
-                };
-
-                assert_eq!(
-                    updates,
-                    vec![
-                        PortUpdate { index: 2, value: quotient },
-                        PortUpdate { index: 3, value: remainder }
-                    ],
-                    "Divider failed for A={a}, B={b}"
-                );
+                    let old_ports = &[bitarr![Z; 4]; 5];
+    
+                    let updates = divider.run(RunContext {
+                        graphs: &Default::default(),
+                        old_ports,
+                        new_ports: &[
+                            in_a,
+                            in_b,
+                            in_c,
+                            bitarr![Z; 4], // Quotient placeholder
+                            bitarr![Z; 4], // Remainder placeholder
+                        ],
+                        inner_state: None,
+                    });
+    
+                    // Compute expected quotient and remainder
+                    let quotient = if b == 0 {
+                        in_a
+                    } else {
+                        BitArray::from_bits((((c << 4) | a) / b) & 0b1111, 4)
+                    };
+    
+    
+                    let remainder = if b == 0 {
+                        bitarr![0; 4]
+                    } else {
+                        BitArray::from_bits( (((c << 4) | a) % b) & 0b1111, 4)
+                    };
+    
+                    assert_eq!(
+                        updates,
+                        vec![
+                            PortUpdate { index: 3, value: quotient },
+                            PortUpdate { index: 4, value: remainder }
+                        ],
+                        "Divider failed for A={a}, B={b}, C={c}"
+                    );
+                }
             }
         }     
             
