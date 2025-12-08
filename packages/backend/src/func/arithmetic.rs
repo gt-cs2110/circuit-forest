@@ -1,6 +1,32 @@
+use std::cmp::Ordering;
+
+use crate::bitarr;
+use crate::bitarray::NotTwoValuedErr;
 use crate::circuit::CircuitGraphMap;
 use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarray::BitArray, bitarray::BitState};
+
+/// Parses a set of inputs, returning the results of each port.
+/// 
+/// This returns an error if any inputs are unknown.
+/// If any inputs are tristate, the corresponding input is None.
+/// Otherwise, this returns the bitvalue for each input.
+fn parse_args<const N: usize>(ports: &[BitArray]) -> Result<[Option<u64>; N], NotTwoValuedErr> {
+    // heh
+    fn trystate(a: BitArray) -> Result<Option<u64>, NotTwoValuedErr> {
+        match u64::try_from(a) {
+            Ok(v) => Ok(Some(v)),
+            Err(e) if e.is_imped() => Ok(None),
+            Err(e) => Err(e)
+        }
+    }
+
+    let mut out = [None; N];
+    for (out, &inp) in std::iter::zip(&mut out, ports) {
+        *out = trystate(inp)?;
+    }
+    Ok(out)
+}
 
 /// An adder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -30,57 +56,41 @@ impl Component for Adder {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
-        let cin = u64::try_from(ctx.new_ports[2]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
-                ]
-            }
+        // inputs: A[n], B[n], Cin[1]
+        // - Cin represents the carry in from the right
+        // outputs: Cout[1], S[n]
+        // - Cout represents the carry out to the left
+        //
+        // If any of A, B, cin are X, then all outputs are X
+        // If any of A, B are Z, then it is all Z
+        // If cin is Z, treat as 0
+        let (a, b, cin) = match parse_args(ctx.new_ports) {
+            Ok([Some(a), Some(b), cin]) => (a, b, cin),
+            Ok(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![Z] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+            ],
+            Err(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![X] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+            ]
         };
+        let cin = cin.unwrap_or(0);
 
-        let b_val = match b {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
+        let (sum, cout) = a.carrying_add(b, cin & 1 != 0);
+        match self.bitsize {
+            64.. => vec![
+                PortUpdate { index: 3, value: BitArray::from(cout) },
+                PortUpdate { index: 4, value: BitArray::from(sum) }
+            ],
+            _ => {
+                let cout = sum & (1 << self.bitsize) != 0;
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from(cout) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(sum, self.bitsize) }
                 ]
             }
-        };    
-
-        let cin_val = match cin {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
-                ]
-            }
-        };  
-
-
-        let bit_mask = (1u128 << self.bitsize) - 1;
-        let sum_val = (a_val as u128) + (b_val as u128) + (cin_val as u128);
-        let sum_bits = BitArray::from_bits((sum_val & bit_mask) as u64, self.bitsize);
-        let cout_bits = BitArray::from_bits(((sum_val >> self.bitsize) & 1) as u64, 1);
-
-
-        vec![
-            PortUpdate { index: 3, value: cout_bits },
-            PortUpdate { index: 4, value: sum_bits }
-        ]
+        }
     }
 }
 
@@ -102,9 +112,9 @@ impl Component for Subtractor {
         port_list(&[
             // inputs A and B for Subtractor
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
-            // Carry In Bit
+            // Borrow In Bit
             (PortProperties { ty: PortType::Input, bitsize: 1}, 1),
-            // Carry Out Bit
+            // Borrow Out Bit
             (PortProperties { ty: PortType::Output, bitsize: 1}, 1),
             // output
             (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
@@ -112,61 +122,41 @@ impl Component for Subtractor {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
-        let cin = u64::try_from(ctx.new_ports[2]);
-
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
-                ]
-            }
+        // inputs: A[n], B[n], Bin[1]
+        // - Bin represents the borrow out from the right
+        // outputs: Bout[1], S[n]
+        // - Bout represents the borrow out to the left
+        //
+        // If any of A, B, cin are X, then all outputs are X
+        // If any of A, B are Z, then it is all Z
+        // If cin is Z, treat as 0
+        let (a, b, bin) = match parse_args(ctx.new_ports) {
+            Ok([Some(a), Some(b), bin]) => (a, b, bin),
+            Ok(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![Z] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+            ],
+            Err(_) => return vec![
+                PortUpdate { index: 3, value: bitarr![X] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+            ]
         };
+        let bin = bin.unwrap_or(0);
 
-        let b_val = match b {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
+        let (diff, bout) = a.overflowing_sub(b.wrapping_add(bin & 1));
+        match self.bitsize {
+            64.. => vec![
+                PortUpdate { index: 3, value: BitArray::from(BitState::from(bout)) },
+                PortUpdate { index: 4, value: BitArray::from(diff) }
+            ],
+            _ => {
+                let bout = diff & (1 << self.bitsize) != 0;
+                vec![
+                    PortUpdate { index: 3, value: BitArray::from(BitState::from(bout)) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(diff, self.bitsize) }
                 ]
             }
-        };    
-
-        let cin_val = match cin {
-            Ok(val) => val,
-            Err(e) =>  {
-                let carry_bit = BitArray::repeat(e.bit_state(), 1);
-                let out_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 3, value: carry_bit },
-                    PortUpdate { index: 4, value: out_bits }
-                ]
-            }
-        };  
-
-        let bit_mask = (1i128 << self.bitsize) - 1;
-        let sum_val = (a_val as i128) - (b_val as i128) - (cin_val as i128);
-        let sum_bits = BitArray::from_bits((sum_val & bit_mask) as u64, self.bitsize);
-
-        let cout_bits = if sum_val < 0 {
-            BitArray::from_bits(1, 1)
-        } else {
-            BitArray::from_bits(0, 1)
-        };
-
-
-        vec![
-            PortUpdate { index: 3, value: cout_bits },
-            PortUpdate { index: 4, value: sum_bits }
-        ]
+        }
     }
 }
 
@@ -350,39 +340,41 @@ impl Component for Negator {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-
-        let a_val = match a {
+        let inp = match u64::try_from(ctx.new_ports[0]) {
             Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), self.bitsize);
-                return vec![
-                    PortUpdate { index: 1, value: error_bits },
-                ]
-            }
-        }; 
+            Err(e) => return vec![PortUpdate {
+                index: 1,
+                value: BitArray::repeat(e.bit_state(), self.bitsize)
+            }]
+        };
 
-        let mask = (1u128 << self.bitsize) - 1;
-        let val = (!(a_val as u128)) & mask;
-        let neg_val = (val + 1) & mask;
-        let out = BitArray::from_bits(neg_val as u64, self.bitsize);
-
-        vec![
-            PortUpdate { index: 1, value: out },
-        ]
+        let out = BitArray::from_bits(inp.wrapping_neg(), self.bitsize);
+        vec![PortUpdate { index: 1, value: out }]
     }
+}
+
+/// Signedness for integers, used for certain operations that differ between signedness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SignType {
+    /// Two's complement.
+    TwosComplement,
+    /// Unsigned.
+    Unsigned
 }
 
 /// A Comparator component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Comparator {
-    bitsize: u8
+    bitsize: u8,
+    signedness: SignType
+
 }
 impl Comparator {
     /// Creates a new instance of the comparator with specified bitsize.
-    pub fn new(bitsize: u8) -> Self {
+    pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
             bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            signedness
         }
     }
 }
@@ -401,41 +393,28 @@ impl Component for Comparator {
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        let a = u64::try_from(ctx.new_ports[0]);
-        let b = u64::try_from(ctx.new_ports[1]);
+        let [a, b] = match parse_args(ctx.new_ports) {
+            Ok([Some(a), Some(b)]) => [a, b],
+            Ok(_) => return vec![
+                PortUpdate { index: 2, value: bitarr![Z] },
+                PortUpdate { index: 3, value: bitarr![Z] },
+                PortUpdate { index: 4, value: bitarr![Z] },
+            ],
+            Err(_) => return vec![
+                PortUpdate { index: 2, value: bitarr![X] },
+                PortUpdate { index: 3, value: bitarr![X] },
+                PortUpdate { index: 4, value: bitarr![X] },
+            ]
+        };
 
-        let a_val = match a {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), 1);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                    PortUpdate { index: 3, value: error_bits },
-                    PortUpdate { index: 4, value: error_bits },
-                ]
-            }
-        }; 
-
-        let b_val = match b {
-            Ok(val) => val,
-            Err(e) =>  {
-                let error_bits = BitArray::repeat(e.bit_state(), 1);
-                return vec![
-                    PortUpdate { index: 2, value: error_bits },
-                    PortUpdate { index: 3, value: error_bits },
-                    PortUpdate { index: 4, value: error_bits },
-                ]
-            }
-        }; 
-
-        let lt = BitArray::from_bits((a_val < b_val) as u64, 1);
-        let eq = BitArray::from_bits((a_val == b_val) as u64, 1);
-        let gt = BitArray::from_bits((a_val > b_val) as u64, 1);
-
+        let cmp = match self.signedness {
+            SignType::TwosComplement => (a as i64).cmp(&(b as i64)),
+            SignType::Unsigned => a.cmp(&b),
+        };
         vec![
-            PortUpdate { index: 2, value: lt },
-            PortUpdate { index: 3, value: eq },
-            PortUpdate { index: 4, value: gt },
+            PortUpdate { index: 2, value: BitArray::from(cmp == Ordering::Less) },
+            PortUpdate { index: 3, value: BitArray::from(cmp == Ordering::Equal) },
+            PortUpdate { index: 4, value: BitArray::from(cmp == Ordering::Greater) },
         ]
     }
 }
@@ -868,8 +847,8 @@ mod tests {
     }
 
     #[test]
-    fn test_comparator_exhaustive() {
-        let cmp = Comparator::new(4); // 4-bit comparator
+    fn test_comparator_unsigned_exhaustive() {
+        let cmp = Comparator::new(4, SignType::Unsigned); // 4-bit comparator
 
         // Iterate over all 4-bit pairs A and B
         for a in 0..16 {
