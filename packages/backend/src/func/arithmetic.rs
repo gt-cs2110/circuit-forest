@@ -28,6 +28,23 @@ fn parse_args<const N: usize>(ports: &[BitArray]) -> Result<[Option<u64>; N], No
     Ok(out)
 }
 
+/// Extends number of given bitsize to a full 64-bit signed integer.
+fn sign_extend_64(n: u64, bitsize: u8) -> i64 {
+    let shift = u64::BITS - u32::from(bitsize);
+    
+    (n as i64)
+        .wrapping_shl(shift)
+        .wrapping_shr(shift)
+}
+/// Extends number of given bitsize to a full 128-bit signed integer.
+fn sign_extend_128(n: u128, bitsize: u8) -> i128 {
+    let shift = u128::BITS - u32::from(bitsize);
+    
+    (n as i128)
+        .wrapping_shl(shift)
+        .wrapping_shr(shift)
+}
+
 /// An adder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Adder {
@@ -236,9 +253,9 @@ impl Component for Multiplier {
                 ]
             },
             (_, SignType::TwosComplement) => {
-                let full_prod = i128::from(a)
-                    .wrapping_mul(i128::from(b))
-                    .wrapping_add(i128::from(cin));
+                let full_prod = sign_extend_128(u128::from(a), self.bitsize)
+                    .wrapping_mul(sign_extend_128(u128::from(b), self.bitsize))
+                    .wrapping_add(sign_extend_128(u128::from(cin), self.bitsize));
                 let mask = (1i128 << self.bitsize) - 1;
 
                 let prod = (full_prod & mask) as u64;
@@ -303,10 +320,6 @@ impl Component for Divider {
                 PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
             ]
         };
-        let a_hi = a_hi.unwrap_or(0);
-        let a = (u128::from(a_hi) << self.bitsize) | u128::from(a_lo);
-        let b = u128::from(b);
-
         match (b, self.signedness) {
             // Div by zero, just let it be div by 1
             (0, _) => {
@@ -316,15 +329,32 @@ impl Component for Divider {
                 ]
             }
             (_, SignType::Unsigned) => {
+                let a_hi = a_hi.unwrap_or(0); // ZEXT
+                let a = (u128::from(a_hi) << self.bitsize) | u128::from(a_lo);
+                let b = u128::from(b);
+
                 vec![
                     PortUpdate { index: 3, value: BitArray::from_bits((a / b) as u64, self.bitsize) },
                     PortUpdate { index: 4, value: BitArray::from_bits((a % b) as u64, self.bitsize) },
                 ]
             }
             (_, SignType::TwosComplement) => {
+                let sa = match a_hi {
+                    // a_hi concat a_lo
+                    Some(a_hi) => sign_extend_128({
+                       (u128::from(a_hi) << self.bitsize) | u128::from(a_lo)
+                    }, self.bitsize * 2),
+
+                    // a_lo, sign extended
+                    None => sign_extend_128(u128::from(a_lo), self.bitsize),
+                };
+                let sb = sign_extend_128(u128::from(b), self.bitsize);
+
+                let div = sa / sb;
+                let rem = sa % sb;
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits(((a as i128) / (b as i128)) as u64, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(((a as i128) % (b as i128)) as u64, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits(div as u64, self.bitsize) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(rem as u64, self.bitsize) },
                 ]
             }
         }
@@ -423,7 +453,7 @@ impl Component for Comparator {
         };
 
         let cmp = match self.signedness {
-            SignType::TwosComplement => (a as i64).cmp(&(b as i64)),
+            SignType::TwosComplement => sign_extend_64(a, self.bitsize).cmp(&sign_extend_64(b, self.bitsize)),
             SignType::Unsigned => a.cmp(&b),
         };
         vec![
@@ -479,7 +509,7 @@ impl Component for BitExtender {
             ExtensionType::Sign => ctx.new_ports[0].get(ctx.new_ports[0].len() - 1).unwrap(),
         };
         let value = ctx.new_ports[0].resize(self.out_bitsize, fill);
-        dbg!(fill, value);
+
         vec![PortUpdate { index: 1, value }]
     }
 }
@@ -586,7 +616,8 @@ mod tests {
                             PortUpdate { index: 3, value: expected_cout },
                             PortUpdate { index: 4, value: expected_sum }
                         ],
-                        "Adder failed for A=0x{a:04X}, B=0x{b:04X}, Cin={cin}"
+                        "Adder failed for A={:04b}, B={:04b}, Cin={cin}",
+                        a & 0xF, b & 0xF
                     );
                 }
             }
@@ -642,7 +673,8 @@ mod tests {
                             PortUpdate { index: 3, value: expected_cout },
                             PortUpdate { index: 4, value: expected_sum }
                         ],
-                        "Subtractor failed for A=0x{a:04X}, B=0x{b:04X}, Cin={cin}"
+                        "Subtractor failed for A={:04b}, B={:04b}, Cin={cin}",
+                        a & 0xF, b & 0xF
                     );
                 }
             }
@@ -651,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiplier_exhaustive() {
+    fn test_multiplier_unsigned_exhaustive() {
         let multiplier = Multiplier::new(4, SignType::Unsigned); // 4-bit multiplier
 
         // Iterate over all 4-bit values for A, B, cin
@@ -689,12 +721,61 @@ mod tests {
                             PortUpdate { index: 3, value: lower_bits },
                             PortUpdate { index: 4, value: upper_bits }
                         ],
-                        "Multiplier failed for A=0x{a:04X}, B=0x{b:04X}, Cin=0x{cin:04X}"
+                        "Multiplier failed for A={:04b}, B={:04b}, Cin={:04b}",
+                        a & 0xF, b & 0xF, cin & 0xF
                     );
                 }
             }
         }
     }
+
+    #[test]
+    fn test_multiplier_2c_exhaustive() {
+        let multiplier = Multiplier::new(4, SignType::TwosComplement); // 4-bit multiplier
+
+        // Iterate over all 4-bit values for A, B, cin
+        for a in -8..7i64 {
+            for b in -8..7i64 {
+                for cin in -8..7i64 {
+                    // Convert to little-endian
+                    let in_a = BitArray::from_bits(a as u64, 4);
+                    let in_b = BitArray::from_bits(b as u64, 4);
+                    let cin_ba = BitArray::from_bits(cin as u64, 4);
+
+                    let old_ports = &[bitarr![Z; 4]; 5];
+
+                    let updates = multiplier.run(RunContext {
+                        graphs: &Default::default(),
+                        old_ports,
+                        new_ports: &[
+                            in_a,
+                            in_b,
+                            cin_ba,
+                            bitarr![Z; 4], // Out placeholder
+                            bitarr![Z; 4], // Upper Bits placeholder
+                        ],
+                        inner_state: None,
+                    });
+
+                    // Compute expected upper and lower bits
+                    let total = a * b + cin;
+                    let lower_bits = BitArray::from_bits(total as u64 & 0b1111, 4);
+                    let upper_bits = BitArray::from_bits((total as u64 >> 4) & 0b1111, 4);
+
+                    assert_eq!(
+                        updates,
+                        vec![
+                            PortUpdate { index: 3, value: lower_bits },
+                            PortUpdate { index: 4, value: upper_bits }
+                        ],
+                        "Multiplier failed for A={:04b}, B={:04b}, Cin={:04b}",
+                        a & 0xF, b & 0xF, cin & 0xF
+                    );
+                }
+            }
+        }
+    }
+
 
     #[test]
     fn test_divider_unsigned_exhaustive() {
@@ -742,7 +823,61 @@ mod tests {
                         PortUpdate { index: 3, value: quotient },
                         PortUpdate { index: 4, value: remainder }
                     ],
-                    "Divider failed for A=0x{a:08X}, B=0x{b:04X}"
+                    "Divider failed for A={:08b}, B={:04b}",
+                    a & 0xF, b & 0xF
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_divider_2c_exhaustive() {
+        let divider = Divider::new(4, SignType::TwosComplement); // 4-bit Divider
+
+        // Iterate over all 8-bit values of A and 4-bit values of B
+        for a in -128..127i64 {
+            for b in -8..7i64 {
+                let a_hi = (a >> 4) & 0xF;
+                let a_lo = a & 0xF;
+                // Convert to little-endian
+                let in_a_hi = BitArray::from_bits(a_hi as u64, 4);
+                let in_a_lo = BitArray::from_bits(a_lo as u64, 4);
+                let in_b = BitArray::from_bits(b as u64, 4);
+
+                let old_ports = &[bitarr![Z; 4]; 5];
+
+                let updates = divider.run(RunContext {
+                    graphs: &Default::default(),
+                    old_ports,
+                    new_ports: &[
+                        in_a_lo,
+                        in_b,
+                        in_a_hi,
+                        bitarr![Z; 4], // Quotient placeholder
+                        bitarr![Z; 4], // Remainder placeholder
+                    ],
+                    inner_state: None,
+                });
+
+                // Compute expected quotient and remainder
+                let quotient = match b {
+                    0 => in_a_lo,
+                    _ => BitArray::from_bits(((a / b) & 0b1111) as u64, 4)
+                };
+
+                let remainder = match b {
+                    0 => bitarr![0; 4],
+                    _ => BitArray::from_bits(((a % b) & 0b1111) as u64, 4)
+                };
+
+                assert_eq!(
+                    updates,
+                    vec![
+                        PortUpdate { index: 3, value: quotient },
+                        PortUpdate { index: 4, value: remainder }
+                    ],
+                    "Divider failed for A={:08b}, B={:04b}",
+                    a & 0xFF, b & 0xF
                 );
             }
         }
@@ -780,14 +915,14 @@ mod tests {
                 vec![
                     PortUpdate { index: 1, value: out },
                 ],
-                "Negator failed for A=0x{a:04X}"
+                "Negator failed for A={:04b}", a & 0xF
             );
         }     
             
     }
 
     #[test]
-    fn test_comparator_exhaustive() {
+    fn test_comparator_unsigned_exhaustive() {
         let cmp = Comparator::new(4, SignType::Unsigned); // 4-bit comparator
 
         // Iterate over all 4-bit pairs A and B
@@ -831,7 +966,58 @@ mod tests {
                         PortUpdate { index: 3, value: eq },
                         PortUpdate { index: 4, value: gt },
                     ],
-                    "Comparator failed for A=0x{a:04X}, B=0x{b:04X}"
+                    "Comparator failed for A={:04b}, B={:04b}", a & 0xF, b & 0xF 
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_comparator_2c_exhaustive() {
+        let cmp = Comparator::new(4, SignType::TwosComplement); // 4-bit comparator
+
+        // Iterate over all 4-bit pairs A and B
+        for a in -8..7i64 {
+            for b in -8..7i64 {
+                let in_a = BitArray::from_bits(a as u64, 4);
+                let in_b = BitArray::from_bits(b as u64, 4);
+
+                // Dummy old_ports
+                let old_ports = &[
+                    bitarr![Z; 4], // A
+                    bitarr![Z; 4], // B
+                    bitarr![Z],    // LT
+                    bitarr![Z],    // EQ
+                    bitarr![Z],    // GT
+                ];
+
+                // Run the comparator
+                let updates = cmp.run(RunContext {
+                    graphs: &Default::default(),
+                    old_ports,
+                    new_ports: &[
+                        in_a,        // A
+                        in_b,        // B
+                        bitarr![Z],  // LT placeholder
+                        bitarr![Z],  // EQ placeholder
+                        bitarr![Z],  // GT placeholder
+                    ],
+                    inner_state: None,
+                });
+
+                // Expected results
+                let lt = BitArray::from_bits((a < b) as u64, 1);
+                let eq = BitArray::from_bits((a == b) as u64, 1);
+                let gt = BitArray::from_bits((a > b) as u64, 1);
+
+                assert_eq!(
+                    updates,
+                    vec![
+                        PortUpdate { index: 2, value: lt },
+                        PortUpdate { index: 3, value: eq },
+                        PortUpdate { index: 4, value: gt },
+                    ],
+                    "Comparator failed for A={:04b}, B={:04b}", a & 0xF, b & 0xF 
                 );
             }
         }
