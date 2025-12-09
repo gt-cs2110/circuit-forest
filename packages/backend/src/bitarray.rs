@@ -39,12 +39,13 @@ impl ShiftType {
             ShiftType::LogicalLeft => data.wrapping_shl(shift),
             ShiftType::LogicalRight => (data & mask).wrapping_shr(shift),
             ShiftType::ArithmeticRight => {
-                (data as i64)
+                data.cast_signed()
                     // Get sign
                     .wrapping_shl(u64::BITS - u32::from(bitsize))
                     .wrapping_shr(u64::BITS - u32::from(bitsize))
                     // Perform actual shift
-                    .wrapping_shr(shift) as u64
+                    .wrapping_shr(shift)
+                    .cast_unsigned()
             },
             // Minor optimization
             ShiftType::RotateLeft if bitsize >= 64 => data.rotate_left(shift),

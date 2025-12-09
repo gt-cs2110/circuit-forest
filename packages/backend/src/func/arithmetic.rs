@@ -32,7 +32,7 @@ fn parse_args<const N: usize>(ports: &[BitArray]) -> Result<[Option<u64>; N], No
 fn sign_extend_64(n: u64, bitsize: u8) -> i64 {
     let shift = u64::BITS - u32::from(bitsize);
     
-    (n as i64)
+    n.cast_signed()
         .wrapping_shl(shift)
         .wrapping_shr(shift)
 }
@@ -40,7 +40,7 @@ fn sign_extend_64(n: u64, bitsize: u8) -> i64 {
 fn sign_extend_128(n: u128, bitsize: u8) -> i128 {
     let shift = u128::BITS - u32::from(bitsize);
     
-    (n as i128)
+    n.cast_signed()
         .wrapping_shl(shift)
         .wrapping_shr(shift)
 }
@@ -659,8 +659,8 @@ mod tests {
                     });
 
                     // Compute expected sum and carry-out
-                    let total = (a as i64) - (b as i64) - (cin as i64);
-                    let expected_sum = BitArray::from_bits((total as u64) & 0b1111, 4);
+                    let total = a.cast_signed() - b.cast_signed() - cin.cast_signed();
+                    let expected_sum = BitArray::from_bits(total.cast_unsigned() & 0b1111, 4);
                     let expected_cout = if total < 0 {
                         BitArray::from_bits(1, 1)
                     } else {
@@ -738,9 +738,9 @@ mod tests {
             for b in -8..7i64 {
                 for cin in -8..7i64 {
                     // Convert to little-endian
-                    let in_a = BitArray::from_bits(a as u64, 4);
-                    let in_b = BitArray::from_bits(b as u64, 4);
-                    let cin_ba = BitArray::from_bits(cin as u64, 4);
+                    let in_a = BitArray::from_bits(a.cast_unsigned(), 4);
+                    let in_b = BitArray::from_bits(b.cast_unsigned(), 4);
+                    let cin_ba = BitArray::from_bits(cin.cast_unsigned(), 4);
 
                     let old_ports = &[bitarr![Z; 4]; 5];
 
@@ -759,8 +759,8 @@ mod tests {
 
                     // Compute expected upper and lower bits
                     let total = a * b + cin;
-                    let lower_bits = BitArray::from_bits(total as u64 & 0b1111, 4);
-                    let upper_bits = BitArray::from_bits((total as u64 >> 4) & 0b1111, 4);
+                    let lower_bits = BitArray::from_bits(total.cast_unsigned() & 0b1111, 4);
+                    let upper_bits = BitArray::from_bits((total.cast_unsigned() >> 4) & 0b1111, 4);
 
                     assert_eq!(
                         updates,
@@ -840,9 +840,9 @@ mod tests {
                 let a_hi = (a >> 4) & 0xF;
                 let a_lo = a & 0xF;
                 // Convert to little-endian
-                let in_a_hi = BitArray::from_bits(a_hi as u64, 4);
-                let in_a_lo = BitArray::from_bits(a_lo as u64, 4);
-                let in_b = BitArray::from_bits(b as u64, 4);
+                let in_a_hi = BitArray::from_bits(a_hi.cast_unsigned(), 4);
+                let in_a_lo = BitArray::from_bits(a_lo.cast_unsigned(), 4);
+                let in_b = BitArray::from_bits(b.cast_unsigned(), 4);
 
                 let old_ports = &[bitarr![Z; 4]; 5];
 
@@ -862,12 +862,12 @@ mod tests {
                 // Compute expected quotient and remainder
                 let quotient = match b {
                     0 => in_a_lo,
-                    _ => BitArray::from_bits(((a / b) & 0b1111) as u64, 4)
+                    _ => BitArray::from_bits(((a / b) & 0b1111).cast_unsigned(), 4)
                 };
 
                 let remainder = match b {
                     0 => bitarr![0; 4],
-                    _ => BitArray::from_bits(((a % b) & 0b1111) as u64, 4)
+                    _ => BitArray::from_bits(((a % b) & 0b1111).cast_unsigned(), 4)
                 };
 
                 assert_eq!(
@@ -979,8 +979,8 @@ mod tests {
         // Iterate over all 4-bit pairs A and B
         for a in -8..7i64 {
             for b in -8..7i64 {
-                let in_a = BitArray::from_bits(a as u64, 4);
-                let in_b = BitArray::from_bits(b as u64, 4);
+                let in_a = BitArray::from_bits(a.cast_unsigned(), 4);
+                let in_b = BitArray::from_bits(b.cast_unsigned(), 4);
 
                 // Dummy old_ports
                 let old_ports = &[
