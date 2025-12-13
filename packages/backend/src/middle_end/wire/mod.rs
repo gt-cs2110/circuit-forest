@@ -364,7 +364,7 @@ pub struct Wire {
 impl Wire {
     /// Creates a new Wire, returning None if `length` would result in overflowing coordinates.
     pub fn new(x: Axis, y: Axis, length: Axis, horizontal: bool) -> Option<Self> {
-        let acceptable = match horizontal {
+        let acceptable = length > 0 && match horizontal {
             true  => x.checked_add(length).is_some(),
             false => y.checked_add(length).is_some()
         };
@@ -379,8 +379,8 @@ impl Wire {
 
         match (q.0 - p.0, q.1 - p.1) {
             (0, 0) => None,
-            (0, length) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
-            (length, 0) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
+            (0, length) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
+            (length, 0) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
             _ => None
         }
     }
@@ -427,5 +427,140 @@ impl Wire {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_new() {
+        assert!(Wire::new(1, 1, 10, true).is_some());
+        assert!(Wire::new(1, 1, 10, false).is_some());
+
+        // edge cases
+        assert!(Wire::new(1, 9, Axis::MAX - 8, true).is_some());
+        assert!(Wire::new(1, 9, Axis::MAX - 8, false).is_none());
+        assert!(Wire::new(1, 1, 0, true).is_none());
+    }
+    #[test]
+    fn wire_from_endpoints() {
+        // Horizontal wire
+        let [p, q] = [(1, 4), (5, 4)];
+        let wire = Wire { x: 1, y: 4, length: 4, horizontal: true };
+        
+        assert_eq!(Wire::from_endpoints(p, q), Some(wire));
+        assert_eq!(Wire::from_endpoints(q, p), Some(wire));
+        
+        // Vertical wire
+        let [p, q] = [(1, 2), (1, 9)];
+        let wire = Wire { x: 1, y: 2, length: 7, horizontal: false };
+
+        assert_eq!(Wire::from_endpoints(p, q), Some(wire));
+        assert_eq!(Wire::from_endpoints(q, p), Some(wire));
+
+        // Diagonal wires
+        let [p, q] = [(1, 2), (3, 4)];
+        assert_eq!(Wire::from_endpoints(p, q), None);
+        assert_eq!(Wire::from_endpoints(q, p), None);
+
+        // Zero wires
+        assert_eq!(Wire::from_endpoints(p, p), None);
+    }
+    #[test]
+    fn wire_endpoints() {
+        // Horizontal wire
+        let [p, q] = [(1, 4), (5, 4)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert_eq!(w.endpoints(), [p, q]);
+        let w = Wire::from_endpoints(q, p).unwrap();
+        assert_eq!(w.endpoints(), [p, q]);
+        
+        let [p, q] = [(1, 2), (1, 9)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert_eq!(w.endpoints(), [p, q]);
+        let w = Wire::from_endpoints(q, p).unwrap();
+        assert_eq!(w.endpoints(), [p, q]);
+    }
+
+    #[test]
+    fn wire_contains() {
+        // Horizontal wire
+        let [p, q] = [(1, 4), (5, 4)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert!(!w.contains((0, 4)));
+        assert!(w.contains((1, 4)));
+        assert!(w.contains((2, 4)));
+        assert!(w.contains((3, 4)));
+        assert!(w.contains((4, 4)));
+        assert!(w.contains((5, 4)));
+        assert!(!w.contains((6, 4)));
+        assert!(!w.contains((1, 5)));
+        
+        // Vertical wire
+        let [p, q] = [(1, 2), (1, 6)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert!(!w.contains((1, 1)));
+        assert!(w.contains((1, 2)));
+        assert!(w.contains((1, 3)));
+        assert!(w.contains((1, 4)));
+        assert!(w.contains((1, 5)));
+        assert!(w.contains((1, 6)));
+        assert!(!w.contains((1, 7)));
+        assert!(!w.contains((0, 0)));
+    }
+
+    #[test]
+    fn wire_split() {
+        // Horizontal
+        let [p, m, q] = [(1, 2), (1, 9), (1, 11)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        let split = [
+            Wire::from_endpoints(p, m).unwrap(),
+            Wire::from_endpoints(m, q).unwrap(),
+        ];
+        assert_eq!(w.split(m), Some(split));
+        assert_eq!(w.split((2, 9)), None);
+        
+        // Vertical
+        let [p, m, q] = [(2, 6), (9, 6), (11, 6)];
+        let w = Wire::from_endpoints(p, q).unwrap();
+        let split = [
+            Wire::from_endpoints(p, m).unwrap(),
+            Wire::from_endpoints(m, q).unwrap(),
+        ];
+        assert_eq!(w.split(m), Some(split));
+        assert_eq!(w.split((9, 7)), None);
+    }
+
+    #[test]
+    fn wire_join() {
+        // Horizontal
+        let [p, m, q] = [(1, 2), (1, 9), (1, 11)];
+        let w1 = Wire::from_endpoints(p, m).unwrap();
+        let w2 = Wire::from_endpoints(m, q).unwrap();
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert_eq!(w1.join(w2), Some(w));
+                
+        // Vertical
+        let [p, m, q] = [(2, 6), (9, 6), (11, 6)];
+        let w1 = Wire::from_endpoints(p, m).unwrap();
+        let w2 = Wire::from_endpoints(m, q).unwrap();
+        let w = Wire::from_endpoints(p, q).unwrap();
+        assert_eq!(w1.join(w2), Some(w));
+
+        // None cases
+        let [p1, q1] = [(1, 2), (1, 9)];
+        let [p2, q2] = [(2, 9), (2, 11)];
+        let w1 = Wire::from_endpoints(p1, q1).unwrap();
+        let w2 = Wire::from_endpoints(p2, q2).unwrap();
+        assert_eq!(w1.join(w2), None);
+
+        let [p1, q1] = [(2, 1), (9, 1)];
+        let [p2, q2] = [(9, 2), (11, 2)];
+        let w1 = Wire::from_endpoints(p1, q1).unwrap();
+        let w2 = Wire::from_endpoints(p2, q2).unwrap();
+        assert_eq!(w1.join(w2), None);
     }
 }
