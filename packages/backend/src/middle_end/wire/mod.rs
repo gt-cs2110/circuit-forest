@@ -330,6 +330,7 @@ impl WireSet {
                 if let Some(k) = self.wires.edge_weight_mut(n1, n2) {
                     *k = flood_key;
                 }
+                frontier.push(n2);
             }
         }
     }

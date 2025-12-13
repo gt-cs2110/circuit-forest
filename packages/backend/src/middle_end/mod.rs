@@ -53,7 +53,6 @@ impl MiddleRepr {
         // - If a wire endpoint connects to the middle of a wire, the wire needs to be split (ValueKey is same)
         // - If a wire connects two wire meshes (e.g., two ValueKey sets), the two ValueKeys must be merged
         
-        // TODO: Check for wire landing in the middle
         let [p, q] = w.endpoints();
 
         let result = self.physical[ckey].wires.add_wire(p, q, || self.forest.circuit(ckey).add_value_node())
