@@ -632,6 +632,22 @@ mod tests {
             assert_eq!(actual_edges, expected_edges, "edges for key {key:?} should match")
         }
     }
+    fn assert_range_map(actual: &WireRangeMap, edges: impl IntoIterator<Item=(Coord, Coord)>) {
+        let mut hw = HashMap::<_, BTreeMap<_, _>>::new();
+        let mut vw = HashMap::<_, BTreeMap<_, _>>::new();
+        for (p, q) in edges {
+            let [(px, py), (qx, qy)] = minmax(p, q);
+            match (qx - px, qy - py) {
+                (0, 0) => panic!("all edges in expected should be non-zero-length"),
+                (0, l) => assert!(vw.entry(px).or_default().insert(py, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
+                (l, 0) => assert!(hw.entry(py).or_default().insert(px, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
+                (_, _) => panic!("all edges in expected should be horizontal or vertical")
+            }
+        }
+
+        assert_eq!(actual.horiz_wires, hw, "expected horizontal wires to match");
+        assert_eq!(actual.vert_wires, vw, "expected vertical wires to match");
+    }
 
     /// Assert edges of the graph are exactly the specified edge list.
     #[test]
@@ -649,20 +665,12 @@ mod tests {
         assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(key)));
         assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, nodes);
-        assert_graph_edges(&ws.wires, [
-            (key, vec![(n00, n01), (n01, n11), (n11, n12), (n01, n02)]),
-        ]);
 
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (4, BTreeMap::from_iter([(0, 4)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (0, BTreeMap::from_iter([(0, 4), (4, 6)])),
-            (4, BTreeMap::from_iter([(4, 6)]))
-        ]));
+        let edges = [(n00, n01), (n01, n11), (n11, n12), (n01, n02)];
+        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_range_map(&ws.ranges, edges);
     }
 
     #[test]
@@ -697,21 +705,18 @@ mod tests {
         };
         assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(k1)));
         
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, nodes);
-        assert_graph_edges(&ws.wires, [
-            (k0, vec![(n00, n01), (n01, n02)]),
-            (k1, vec![(n10, n11), (n11, n12)]),
-        ]);
 
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (3, BTreeMap::from_iter([(1, 1), (3, 1)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (2, BTreeMap::from_iter([(2, 1)])),
-            (3, BTreeMap::from_iter([(3, 1)]))
-        ]));
+        let edges = [
+            (n00, n01), (n01, n02),
+            (n10, n11), (n11, n12)
+        ];
+        assert_graph_edges(&ws.wires, [
+            (k0, edges[0..2].to_vec()),
+            (k1, edges[2..4].to_vec()),
+        ]);
+        assert_range_map(&ws.ranges, edges);
 
         // Join ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(n01, n11, &mut keygen) else {
@@ -721,18 +726,15 @@ mod tests {
         assert!(src_key == k0 || src_key == k1);
         assert!(dst_key == k0 || dst_key == k1);
 
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, nodes);
-        assert_eq!(ws.wires.edge_count(), 5);
 
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (3, BTreeMap::from_iter([(1, 1), (2, 1), (3, 1)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (2, BTreeMap::from_iter([(2, 1)])),
-            (3, BTreeMap::from_iter([(3, 1)]))
-        ]));
+        assert_eq!(ws.wires.edge_count(), 5);
+        assert_range_map(&ws.ranges, [
+            (n00, n01), (n01, n02),
+            (n10, n11), (n11, n12),
+            (n01, n11)
+        ]);
     }
 
     #[test]
@@ -755,35 +757,25 @@ mod tests {
         assert_eq!(ws.add_wire(n02, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
         assert_eq!(ws.add_wire(n00, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
         
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, [n00, n03]);
+        
         assert_graph_edges(&ws.wires, [
             (key, vec![(n00, n03)]),
         ]);
-
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (1, BTreeMap::from_iter([(1, 4)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::new());
+        assert_range_map(&ws.ranges, [(n00, n03)]);
 
         // Add nodes (2) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         assert_eq!(ws.add_wire(n13, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
         assert_eq!(ws.add_wire(n03, n04, &mut keygen), Some(AddWireResult::NoJoin(key)));
         assert_eq!(ws.add_wire(n04, n05, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, [n00, n03, n13, n05]);
-        assert_graph_edges(&ws.wires, [
-            (key, vec![(n00, n03), (n03, n13), (n03, n05)]),
-        ]);
-
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (1, BTreeMap::from_iter([(1, 4), (5, 6)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (7, BTreeMap::from_iter([(1, 2)])),
-        ]));
+        
+        let edges = [(n00, n03), (n03, n13), (n03, n05)];
+        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_range_map(&ws.ranges, edges);
     }
 
     #[test]
@@ -806,17 +798,13 @@ mod tests {
         assert_eq!(ws.add_wire(n00, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
         assert_eq!(ws.add_wire(n00, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
         
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, [n00, n03]);
+
         assert_graph_edges(&ws.wires, [
             (key, vec![(n00, n03)]),
         ]);
-
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (1, BTreeMap::from_iter([(1, 4)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::new());
+        assert_range_map(&ws.ranges, [(n00, n03)]);
     }
 
     #[test]
@@ -836,19 +824,12 @@ mod tests {
         };
         assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, [n00, n01, n02, n11]);
-        assert_graph_edges(&ws.wires, [
-            (key, vec![(n00, n01), (n01, n02), (n01, n11)]),
-        ]);
 
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (1, BTreeMap::from_iter([(1, 2), (3, 2)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (3, BTreeMap::from_iter([(1, 2)]))
-        ]));
+        let edges = [(n00, n01), (n01, n02), (n01, n11)];
+        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_range_map(&ws.ranges, edges);
     }
 
     #[test]
@@ -875,9 +856,7 @@ mod tests {
         // Check correct construction
         assert_graph_nodes(&ws.wires, []);
         assert_graph_edges(&ws.wires, []);
-
-        assert!(ws.ranges.horiz_wires.is_empty());
-        assert!(ws.ranges.vert_wires.is_empty());
+        assert_range_map(&ws.ranges, []);
     }
 
     #[test]
@@ -925,21 +904,16 @@ mod tests {
             (p, &set) == (n11, &HashSet::from_iter([n10, n11, n12]))
         );
 
-        // Check graph was constructed correctly
+        // Check wire set was constructed correctly
         assert_graph_nodes(&ws.wires, nodes);
         assert_graph_edges(&ws.wires, [
             (k0, vec![(n00, n01), (n01, n02)]),
             (k1, vec![(n10, n11), (n11, n12)]),
         ]);
-
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (3, BTreeMap::from_iter([(1, 1), (3, 1)]))
-        ]));
-        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
-            (2, BTreeMap::from_iter([(2, 1)])),
-            (3, BTreeMap::from_iter([(3, 1)]))
-        ]));
+        assert_range_map(&ws.ranges, [
+            (n00, n01), (n01, n02),
+            (n10, n11), (n11, n12),
+        ]);
     }
 
     #[test]
@@ -961,16 +935,12 @@ mod tests {
         // Remove nodes
         assert_eq!(ws.remove_wire(n01, n11), Some(RemoveWireResult::NoSplit(key)));
 
-        // Check graph & range map constructed correctly
+        // Check wire set constructed correctly
         assert_graph_nodes(&ws.wires, [n00, n02]);
         assert_graph_edges(&ws.wires, [
             (key, vec![(n00, n02)])
         ]);
-
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (0, BTreeMap::from_iter([(0, 2)]))
-        ]));
+        assert_range_map(&ws.ranges, [(n00, n02)]);
     }
 
     #[test]
@@ -988,15 +958,11 @@ mod tests {
         };
         assert!(matches!(ws.remove_wire(n01, n02), Some(RemoveWireResult::Split(_, _, _))));
 
-        // Check graph & range map constructed correctly
+        // Check wire set constructed correctly
         assert_graph_nodes(&ws.wires, nodes);
-        assert_graph_edges(&ws.wires, [
-            (key, vec![(n00, n01), (n02, n03)])
-        ]);
 
-        // Check range map was constructed correctly
-        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
-            (0, BTreeMap::from_iter([(0, 1), (2, 1)])),
-        ]));
+        let edges = [(n00, n01), (n02, n03)];
+        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_range_map(&ws.ranges, edges);
     }
 }
