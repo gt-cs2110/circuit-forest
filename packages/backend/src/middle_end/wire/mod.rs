@@ -24,6 +24,7 @@ impl From<Coord> for MeshKey {
 /// The result type for [`WireSet::add_wire`].
 /// 
 /// This enum indicates whether two [`ValueKey`]s need to be joined.
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum AddWireResult {
     /// No joining is necessary.
     /// The [`ValueKey`] provided is the key of the added wire.
@@ -55,7 +56,7 @@ pub enum RemoveWireResult {
 
 type WireRangeMap1D = HashMap<Axis, BTreeMap<Axis, Axis>>;
 /// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct WireRangeMap {
     /// All horizontal wires. This is Map<y, Map<start x, length>>.
     horiz_wires: WireRangeMap1D,
@@ -152,14 +153,42 @@ impl WireRangeMap {
         wires
     }
 }
+impl std::fmt::Debug for WireRangeMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct WR1DFmt<'a>(&'a WireRangeMap1D, bool);
+        impl std::fmt::Debug for WR1DFmt<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let &WR1DFmt(map, horizontal) = self;
+                f.debug_set().entries({
+                    map.iter().flat_map(|(&main_axis, main_map)| {
+                        main_map.iter().map(move |(&cross_axis, &length)| match horizontal {
+                            true => Wire::new(cross_axis, main_axis, length, horizontal).unwrap(),
+                            false => Wire::new(main_axis, cross_axis, length, horizontal).unwrap(),
+                        })
+                    })
+                })
+                .finish()
+            }
+        }
+
+        f.debug_struct("WireRangeMap")
+            .field("horiz_wires", &WR1DFmt(&self.horiz_wires, true))
+            .field("vert_wires", &WR1DFmt(&self.vert_wires, false))
+            .finish()
+    }
+}
+
+type WireGraph = GraphMap<MeshKey, ValueKey, Undirected>;
 /// The connection of wires in a circuit.
 #[derive(Debug, Default)]
 pub struct WireSet {
-    wires: GraphMap<MeshKey, ValueKey, Undirected>,
+    wires: WireGraph,
     ranges: WireRangeMap,
 }
 impl WireSet {
-    /// Find the ValueKey corresponding to a coordinate (if it exists).
+    /// Find the ValueKey corresponding to a coordinate.
+    /// 
+    /// This is None if the coordinate is not connected to a wire.
     pub fn find_key(&self, p: Coord) -> Option<ValueKey> {
         self.wires.edges(p.into())
             .next()
@@ -237,6 +266,7 @@ impl WireSet {
     /// If this function returns None, the wire could not be added.
     /// Otherwise, this function returns data needed to merge two groups of wires
     /// with different [`ValueKey`]s (if applicable).
+    #[must_use]
     pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         Wire::from_endpoints(p, q).map(|w| {
             // If horizontal or vertical, these two points can be connected.
@@ -277,6 +307,7 @@ impl WireSet {
     /// 
     /// If this function returns None, the wire does not exist & could not be removed.
     /// Otherwise, this function returns data needed to split a [`ValueKey`] (if applicable).
+    #[must_use]
     pub fn remove_wire(&mut self, p: Coord, q: Coord) -> Option<RemoveWireResult> {
         let [p, q] = minmax(p, q);
         
@@ -432,6 +463,8 @@ impl Wire {
 
 #[cfg(test)]
 mod tests {
+    use slotmap::SlotMap;
+
     use super::*;
 
     #[test]
@@ -562,5 +595,208 @@ mod tests {
         let w1 = Wire::from_endpoints(p1, q1).unwrap();
         let w2 = Wire::from_endpoints(p2, q2).unwrap();
         assert_eq!(w1.join(w2), None);
+    }
+
+    fn keygen() -> impl FnMut() -> ValueKey {
+        let mut map = SlotMap::with_key();
+        move || map.insert(())
+    }
+    /// Asserts nodes of the graph are exactly the specified node list.
+    fn assert_graph_nodes<const N: usize>(graph: &WireGraph, nodes: [Coord; N]) {
+        assert_eq!(graph.node_count(), N);
+        assert!(nodes.into_iter().all(|n| graph.contains_node(n.into())));
+    }
+    fn assert_graph_edges<const N: usize>(graph: &WireGraph, all_edges: [(Vec<(Coord, Coord)>, ValueKey); N]) {
+        assert_eq!(graph.edge_count(), all_edges.iter().map(|(v, _)| v.len()).sum());
+        for (edges, key) in all_edges {
+            for (p, q) in edges {
+                assert_eq!(graph.edge_weight(p.into(), q.into()), Some(&key));
+            }
+        }
+    }
+
+    /// Assert edges of the graph are exactly the specified edge list.
+    #[test]
+    fn wireset_add_basic() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let nodes @ [n00, n01, n11, n12, n02] = [(0, 0), (0, 4), (4, 4), (4, 10), (0, 10)];
+
+        // Add nodes:
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n01, &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins")
+        };
+        assert_eq!(ws.add_wire(n00, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
+
+        // Check graph was constructed correctly
+        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_edges(&ws.wires, [
+            (vec![(n00, n01), (n01, n11), (n11, n12), (n01, n02)], key),
+        ]);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (4, BTreeMap::from_iter([(0, 4)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
+            (0, BTreeMap::from_iter([(0, 4), (4, 6)])),
+            (4, BTreeMap::from_iter([(4, 6)]))
+        ]));
+    }
+
+    #[test]
+    fn wireset_add_fail() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        assert!(matches!(ws.add_wire((0, 0), (0, 1), &mut keygen), Some(AddWireResult::NoJoin(_))));
+        assert!(ws.add_wire((0, 0), (1, 2), &mut keygen).is_none());
+        assert!(ws.add_wire((0, 0), (0, 2), &mut keygen).is_none());
+    }
+
+    #[test]
+    fn wireset_add_join() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let nodes @ [n00, n01, n02, n10, n11, n12] = [
+            (2, 2), (2, 3), (1, 3),
+            (3, 4), (3, 3), (4, 3),
+        ];
+
+        // Add nodes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(n00, n01, &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(n10, n11, &mut keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(k1)));
+        
+        // Check graph was constructed correctly
+        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_edges(&ws.wires, [
+            (vec![(n00, n01), (n01, n02)], k0),
+            (vec![(n10, n11), (n11, n12)], k1),
+        ]);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (3, BTreeMap::from_iter([(1, 1), (3, 1)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
+            (2, BTreeMap::from_iter([(2, 1)])),
+            (3, BTreeMap::from_iter([(3, 1)]))
+        ]));
+
+        // Join ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(n01, n11, &mut keygen) else {
+            panic!("Expected join")
+        };
+        assert!(ffpt == n01 || ffpt == n11);
+        assert!(src_key == k0 || src_key == k1);
+        assert!(dst_key == k0 || dst_key == k1);
+
+        // Check graph was constructed correctly
+        assert_graph_nodes(&ws.wires, nodes);
+        assert_eq!(ws.wires.edge_count(), 5);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (3, BTreeMap::from_iter([(1, 1), (2, 1), (3, 1)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
+            (2, BTreeMap::from_iter([(2, 1)])),
+            (3, BTreeMap::from_iter([(3, 1)]))
+        ]));
+    }
+
+    #[test]
+    fn wireset_add_extend_wire() {
+        // Test that if wire of same orientation is attached to the end,
+        // it results in a proper extension of the wire (instead of the creation of a new wire)
+
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02, n03, n04, n05, n13] = [
+            (1, 1), (3, 1), (5, 1), (7, 1), (9, 1), (11, 1),
+            (7, 3),
+        ];
+
+        // Add nodes (1) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n01, n02, &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        assert_eq!(ws.add_wire(n02, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n00, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        
+        // Check graph was constructed correctly
+        assert_graph_nodes(&ws.wires, [n00, n03]);
+        assert_graph_edges(&ws.wires, [
+            (vec![(n00, n03)], key),
+        ]);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (1, BTreeMap::from_iter([(1, 4)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::new());
+
+        // Add nodes (2) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        assert_eq!(ws.add_wire(n13, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n03, n04, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(n04, n05, &mut keygen), Some(AddWireResult::NoJoin(key)));
+
+        assert_graph_nodes(&ws.wires, [n00, n03, n13, n05]);
+        assert_graph_edges(&ws.wires, [
+            (vec![(n00, n03), (n03, n13), (n03, n05)], key),
+        ]);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (1, BTreeMap::from_iter([(1, 4), (5, 6)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
+            (7, BTreeMap::from_iter([(1, 2)])),
+        ]));
+    }
+
+    #[test]
+    fn wireset_add_split_wire() {
+        // Test that adding a wire that connects 
+        // to the middle of another wire creates a junction.
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02, n11] = [
+            (1, 1), (3, 1), (5, 1), (3, 3),
+        ];
+
+        // Add nodes (1) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n02, &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
+
+        // Check graph was constructed correctly
+        assert_graph_nodes(&ws.wires, [n00, n01, n02, n11]);
+        assert_graph_edges(&ws.wires, [
+            (vec![(n00, n01), (n01, n02), (n01, n11)], key),
+        ]);
+
+        // Check range map was constructed correctly
+        assert_eq!(ws.ranges.horiz_wires, HashMap::from_iter([
+            (1, BTreeMap::from_iter([(1, 2), (3, 2)]))
+        ]));
+        assert_eq!(ws.ranges.vert_wires, HashMap::from_iter([
+            (3, BTreeMap::from_iter([(1, 2)]))
+        ]));
     }
 }
