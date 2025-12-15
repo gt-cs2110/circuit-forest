@@ -235,8 +235,9 @@ impl WireSet {
     /// Checks if there's a wire at the coordinate and splitting it into two if needed.
     /// 
     /// Returns whether a split was successful.
-    fn split_joint(&mut self, c: Coord, horizontal: bool) -> bool {
-        let mut it = WireAtPointIter::new(self.ranges.axis_map(horizontal), horizontal, c)
+    fn split_wire_on_joint(&mut self, c: Coord, horizontal: bool) -> bool {
+        // Get perpendicular map
+        let mut it = WireAtPointIter::new(self.ranges.axis_map(!horizontal), !horizontal, c)
             .filter_map(|w| Some((w, w.split(c)?)));
         
         let Some((w, [w1, w2])) = it.next() else {
@@ -274,13 +275,15 @@ impl WireSet {
         Wire::from_endpoints(p, q).map(|w| {
             // If horizontal or vertical, these two points can be connected.
     
-            // TODO: Detect if intersecting another wire
-    
+            let [p, q] = w.endpoints();
+            // If endpoints intersect the middle of a wire, create an intersection:
+            self.split_wire_on_joint(p, w.horizontal);
+            self.split_wire_on_joint(q, w.horizontal);
+
             // Add to wire maps:
             debug_assert!(self.ranges.add_wire(w), "Wire should have been added successfully");
     
             // Add to wire graph:
-            let [p, q] = w.endpoints();
             match (self.find_key(p), self.find_key(q)) {
                 (None, None) => {
                     let new_key = new_vk();
