@@ -57,6 +57,48 @@ pub enum RemoveWireResult {
 }
 
 type WireRangeMap1D = HashMap<Axis, BTreeMap<Axis, NonZero<Axis>>>;
+struct WireAtPointIter<'a> {
+    entry: Option<std::collections::btree_map::Range<'a, Axis, NonZero<Axis>>>,
+    horizontal: bool,
+    coord: Coord
+}
+impl<'a> WireAtPointIter<'a> {
+    fn new(map: &'a WireRangeMap1D, horizontal: bool, coord: Coord) -> Self {
+        let (x, y) = coord;
+        let (main, cross) = match horizontal {
+            true  => (y, x),
+            false => (x, y)
+        };
+        let entry = map.get(&main).map(|m| m.range(..=cross));
+        Self { entry, horizontal, coord }
+    }
+}
+impl Iterator for WireAtPointIter<'_> {
+    type Item = Wire;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next_item = self.entry.as_mut()?.next_back()
+            .map(|(&crs, &length)| match self.horizontal {
+                true  => Wire::new_raw(crs, self.coord.1, length, self.horizontal),
+                false => Wire::new_raw(self.coord.0, crs, length, self.horizontal)
+            })
+            .filter(|w| w.contains(self.coord));
+
+        if next_item.is_none() {
+            self.entry.take();
+        }
+        next_item
+    }
+}
+
+fn wires_all_iter(map: &WireRangeMap1D, horizontal: bool) -> impl Iterator<Item=Wire> {
+    map.iter().flat_map(move |(&main_axis, main_map)| {
+        main_map.iter().map(move |(&cross_axis, &length)| match horizontal {
+            true  => Wire::new_raw(cross_axis, main_axis, length, horizontal),
+            false => Wire::new_raw(main_axis, cross_axis, length, horizontal)
+        })
+    })
+}
 /// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
 #[derive(Default)]
 struct WireRangeMap {
@@ -102,57 +144,25 @@ impl WireRangeMap {
         }
     }
 
-    /// Gets all of the vertical wires at the coord
-    /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
-    /// 
-    /// This avoids allocation by borrowing a buffer.
-    fn vert_wires_at_coord<'a>(&self, c: Coord, buf: &'a mut [Wire; 2]) -> &'a mut [Wire] {
-        let mut len = 0;
-        if let Some(m) = self.vert_wires.get(&c.0) {
-            let it = m.range(..=c.1).rev()
-                .map(|(&y, &length)| Wire { x: c.0, y, length, horizontal: false })
-                .take_while(|w| w.contains(c));
-            // Write elements of iterator to buffer
-            for w in it {
-                buf[len] = w;
-                len += 1;
-            }
+    /// Gets the wire map for the corresponding `horizontal` value.
+    fn axis_map(&self, horizontal: bool) -> &WireRangeMap1D {
+        match horizontal {
+            true  => &self.horiz_wires,
+            false => &self.vert_wires
         }
-        
-        // Get slice which actually holds the correct data
-        &mut buf[..len]
-    }
-    /// Gets all of the horizontal wires at the coord
-    /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
-    /// 
-    /// This avoids allocation by borrowing a buffer.
-    fn horiz_wires_at_coord<'a>(&self, c: Coord, buf: &'a mut [Wire; 2]) -> &'a mut [Wire] {
-        let mut len = 0;
-        if let Some(m) = self.horiz_wires.get(&c.1) {
-            let it = m.range(..=c.0).rev()
-                .map(|(&x, &length)| Wire { x, y: c.1, length, horizontal: true })
-                .take_while(|w| w.contains(c));
-            // Write elements of iterator to buffer
-            for w in it {
-                buf[len] = w;
-                len += 1;
-            }
-        }
-        
-        // Get slice which actually holds the correct data
-        &mut buf[..len]
     }
 
-    /// Gets all of the horizontal wires at the coord
+    /// Gets all of the wires at the coord
     /// (including those that coord only intersects, not necessarily just the ones coord is an endpoint of).
-    pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
-        let mut v_wires = Default::default();
-        let mut h_wires = Default::default();
+    pub fn wires_at_coord(&self, c: Coord) -> impl Iterator<Item=Wire> {
+        WireAtPointIter::new(&self.vert_wires, false, c)
+            .chain(WireAtPointIter::new(&self.horiz_wires, true, c))
+    }
 
-        let mut wires = vec![];
-        wires.extend_from_slice(self.vert_wires_at_coord(c, &mut v_wires));
-        wires.extend_from_slice(self.horiz_wires_at_coord(c, &mut h_wires));
-        wires
+    /// Gets all of the wires defined in the map.
+    pub fn wires(&self) -> impl Iterator<Item=Wire> {
+        wires_all_iter(&self.vert_wires, true)
+            .chain(wires_all_iter(&self.horiz_wires, true))
     }
 }
 impl std::fmt::Debug for WireRangeMap {
@@ -161,15 +171,9 @@ impl std::fmt::Debug for WireRangeMap {
         impl std::fmt::Debug for WR1DFmt<'_> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 let &WR1DFmt(map, horizontal) = self;
-                f.debug_set().entries({
-                    map.iter().flat_map(|(&main_axis, main_map)| {
-                        main_map.iter().map(move |(&cross_axis, &length)| match horizontal {
-                            true => Wire::new(cross_axis, main_axis, length.get(), horizontal).unwrap(),
-                            false => Wire::new(main_axis, cross_axis, length.get(), horizontal).unwrap(),
-                        })
-                    })
-                })
-                .finish()
+                f.debug_set()
+                    .entries(wires_all_iter(map, horizontal))
+                    .finish()
             }
         }
 
@@ -228,15 +232,8 @@ impl WireSet {
     /// 
     /// Returns whether a split was successful.
     fn split_joint(&mut self, c: Coord, horizontal: bool) -> bool {
-        let mut buf = Default::default();
-        let splittable_wires = match horizontal {
-            true  => self.ranges.vert_wires_at_coord(c, &mut buf),
-            false => self.ranges.horiz_wires_at_coord(c, &mut buf),
-        };
-        
-        let mut it = splittable_wires
-            .iter_mut()
-            .filter_map(|&mut w| Some((w, w.split(c)?)));
+        let mut it = WireAtPointIter::new(self.ranges.axis_map(horizontal), horizontal, c)
+            .filter_map(|w| Some((w, w.split(c)?)));
         
         let Some((w, [w1, w2])) = it.next() else {
             return false;
@@ -372,7 +369,7 @@ impl WireSet {
     /// 
     /// This returns all wire segments, including segments that this coord
     /// is in the middle of.
-    pub fn wires_at_coord(&self, c: Coord) -> Vec<Wire> {
+    pub fn wires_at_coord(&self, c: Coord) -> impl Iterator<Item = Wire> {
         self.ranges.wires_at_coord(c)
     }
 }
@@ -403,6 +400,14 @@ impl Wire {
         };
 
         acceptable.then_some(Self { x, y, length: NonZero::new(length)?, horizontal })
+    }
+    /// Returns a wire from parameters, assuming all conditions are correct.
+    /// 
+    /// Panics if not.
+    fn new_raw(x: Axis, y: Axis, length: NonZero<Axis>, horizontal: bool) -> Self {
+        let _ = x.strict_add(length.get());
+        let _ = y.strict_add(length.get());
+        Self { x, y, length, horizontal }
     }
 
     /// Constructs a wire out of endpoints, returning None if not 1D.
@@ -485,14 +490,14 @@ mod tests {
     fn wire_from_endpoints() {
         // Horizontal wire
         let [p, q] = [(1, 4), (5, 4)];
-        let wire = Wire { x: 1, y: 4, length: NonZero::new(4).unwrap(), horizontal: true };
+        let wire = Wire::new(1, 4, 4, true).unwrap();
         
         assert_eq!(Wire::from_endpoints(p, q), Some(wire));
         assert_eq!(Wire::from_endpoints(q, p), Some(wire));
         
         // Vertical wire
         let [p, q] = [(1, 2), (1, 9)];
-        let wire = Wire { x: 1, y: 2, length: NonZero::new(7).unwrap(), horizontal: false };
+        let wire = Wire::new(1, 2, 7, false).unwrap();
 
         assert_eq!(Wire::from_endpoints(p, q), Some(wire));
         assert_eq!(Wire::from_endpoints(q, p), Some(wire));
