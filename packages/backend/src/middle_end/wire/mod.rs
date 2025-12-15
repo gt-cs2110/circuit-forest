@@ -110,6 +110,7 @@ struct WireRangeMap {
 }
 impl WireRangeMap {
     /// Adds a wire to the range map.
+    /// This returns whether the wire addition was successful.
     pub fn add_wire(&mut self, w: Wire) -> bool {
         let entry = match w.horizontal {
             true  => self.horiz_wires.entry(w.y).or_default().entry(w.x),
@@ -675,6 +676,26 @@ mod tests {
         assert_graph_nodes(&ws.wires, nodes);
 
         let edges = [(n00, n01), (n01, n11), (n11, n12), (n01, n02)];
+        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_range_map(&ws.ranges, edges);
+    }
+
+    #[test]
+    fn wireset_add_subset() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire((0, 0), (0, 2), &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins")
+        };
+        assert_eq!(ws.add_wire((0, 0), (0, 1), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire((0, 1), (0, 1), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire((0, 0), (0, 2), &mut keygen), Some(AddWireResult::NoJoin(key)));
+
+        // Check wire set was constructed correctly
+        assert_graph_nodes(&ws.wires, [(0, 0), (0, 2)]);
+
+        let edges = [((0, 0), (0, 2))];
         assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
