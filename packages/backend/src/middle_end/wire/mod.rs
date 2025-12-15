@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::num::NonZero;
 
 use petgraph::Undirected;
 use petgraph::prelude::GraphMap;
@@ -55,7 +56,7 @@ pub enum RemoveWireResult {
     Split(Coord, ValueKey, HashSet<Coord>)
 }
 
-type WireRangeMap1D = HashMap<Axis, BTreeMap<Axis, Axis>>;
+type WireRangeMap1D = HashMap<Axis, BTreeMap<Axis, NonZero<Axis>>>;
 /// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
 #[derive(Default)]
 struct WireRangeMap {
@@ -163,8 +164,8 @@ impl std::fmt::Debug for WireRangeMap {
                 f.debug_set().entries({
                     map.iter().flat_map(|(&main_axis, main_map)| {
                         main_map.iter().map(move |(&cross_axis, &length)| match horizontal {
-                            true => Wire::new(cross_axis, main_axis, length, horizontal).unwrap(),
-                            false => Wire::new(main_axis, cross_axis, length, horizontal).unwrap(),
+                            true => Wire::new(cross_axis, main_axis, length.get(), horizontal).unwrap(),
+                            false => Wire::new(main_axis, cross_axis, length.get(), horizontal).unwrap(),
                         })
                     })
                 })
@@ -381,14 +382,14 @@ fn minmax<T: Ord>(p: T, q: T) -> [T; 2] {
 }
 
 /// A wire.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Wire {
     /// The lowermost X coordinate of the wire.
     x: Axis,
     /// The lowermost Y coordinate of the wire.
     y: Axis,
     /// The length of the wire.
-    length: Axis,
+    length: NonZero<Axis>,
     /// Whether the wire is horizontal or vertical.
     #[serde(rename = "isHorizontal")]
     horizontal: bool
@@ -396,12 +397,12 @@ pub struct Wire {
 impl Wire {
     /// Creates a new Wire, returning None if `length` would result in overflowing coordinates.
     pub fn new(x: Axis, y: Axis, length: Axis, horizontal: bool) -> Option<Self> {
-        let acceptable = length > 0 && match horizontal {
+        let acceptable = match horizontal {
             true  => x.checked_add(length).is_some(),
             false => y.checked_add(length).is_some()
         };
 
-        acceptable.then_some(Self { x, y, length, horizontal })
+        acceptable.then_some(Self { x, y, length: NonZero::new(length)?, horizontal })
     }
 
     /// Constructs a wire out of endpoints, returning None if not 1D.
@@ -409,10 +410,10 @@ impl Wire {
         // Let p = the left-/top-most coord, q = the other coord.
         let [p, q] = minmax(p, q);
 
-        match (q.0 - p.0, q.1 - p.1) {
-            (0, 0) => None,
-            (0, length) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
-            (length, 0) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
+        match (NonZero::new(q.0 - p.0), NonZero::new(q.1 - p.1)) {
+            (None, None) => None,
+            (None, Some(length)) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
+            (Some(length), None) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
             _ => None
         }
     }
@@ -420,16 +421,16 @@ impl Wire {
     /// The endpoints of the wire.
     pub fn endpoints(&self) -> [Coord; 2] {
         match self.horizontal {
-            true  => [(self.x, self.y), (self.x + self.length, self.y)],
-            false => [(self.x, self.y), (self.x, self.y + self.length)],
+            true  => [(self.x, self.y), (self.x + self.length.get(), self.y)],
+            false => [(self.x, self.y), (self.x, self.y + self.length.get())],
         }
     }
 
     /// Detect whether this wire includes the specified coordinate.
     pub fn contains(&self, c: Coord) -> bool {
         match self.horizontal {
-            true  => self.y == c.1 && (self.x <= c.0) && (c.0 - self.x <= self.length),
-            false => self.x == c.0 && (self.y <= c.1) && (c.1 - self.y <= self.length),
+            true  => self.y == c.1 && (self.x <= c.0) && (c.0 - self.x <= self.length.get()),
+            false => self.x == c.0 && (self.y <= c.1) && (c.1 - self.y <= self.length.get()),
         }
     }
 
@@ -484,14 +485,14 @@ mod tests {
     fn wire_from_endpoints() {
         // Horizontal wire
         let [p, q] = [(1, 4), (5, 4)];
-        let wire = Wire { x: 1, y: 4, length: 4, horizontal: true };
+        let wire = Wire { x: 1, y: 4, length: NonZero::new(4).unwrap(), horizontal: true };
         
         assert_eq!(Wire::from_endpoints(p, q), Some(wire));
         assert_eq!(Wire::from_endpoints(q, p), Some(wire));
         
         // Vertical wire
         let [p, q] = [(1, 2), (1, 9)];
-        let wire = Wire { x: 1, y: 2, length: 7, horizontal: false };
+        let wire = Wire { x: 1, y: 2, length: NonZero::new(7).unwrap(), horizontal: false };
 
         assert_eq!(Wire::from_endpoints(p, q), Some(wire));
         assert_eq!(Wire::from_endpoints(q, p), Some(wire));
@@ -637,10 +638,10 @@ mod tests {
         let mut vw = HashMap::<_, BTreeMap<_, _>>::new();
         for (p, q) in edges {
             let [(px, py), (qx, qy)] = minmax(p, q);
-            match (qx - px, qy - py) {
-                (0, 0) => panic!("all edges in expected should be non-zero-length"),
-                (0, l) => assert!(vw.entry(px).or_default().insert(py, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
-                (l, 0) => assert!(hw.entry(py).or_default().insert(px, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
+            match (NonZero::new(qx - px), NonZero::new(qy - py)) {
+                (None, None) => panic!("all edges in expected should be non-zero-length"),
+                (None, Some(l)) => assert!(vw.entry(px).or_default().insert(py, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
+                (Some(l), None) => assert!(hw.entry(py).or_default().insert(px, l).is_none(), "there should not be two edges with the same starting endpoint in expected"),
                 (_, _) => panic!("all edges in expected should be horizontal or vertical")
             }
         }
