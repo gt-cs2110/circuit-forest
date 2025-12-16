@@ -59,8 +59,8 @@ impl MiddleRepr {
             .unwrap_or_else(|| unreachable!("p, q are 1d"));
         match result {
             wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, k1, k2) => {
-                self.forest.circuit(ckey).join(&[k1, k2]);
+            wire::AddWireResult::Join(c, k1, keys) => {
+                self.forest.circuit(ckey).join(&keys);
                 self.physical[ckey].wires.flood_fill(c, k1);
             },
         }

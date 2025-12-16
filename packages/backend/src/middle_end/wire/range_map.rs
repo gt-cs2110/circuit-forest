@@ -38,29 +38,27 @@ impl WireRangeMap1D {
 
     /// If the index intersects a wire, then split the wires.
     /// Returns whether this split was successful.
-    pub fn split(&mut self, index: Axis) -> bool {
+    pub fn split(&mut self, index: Axis) -> Option<([Wire1D; 2], Wire1D)> {
         let WireAtResult::One(w) = self.wire_at(index) else {
-            return false;
+            return None;
         };
-        let Some(left_len) = NonZero::new(index - w.start) else {
-            return false;
-        };
-        let Some(right_len) = NonZero::new(w.start + w.length.get() - index) else {
-            return false;
-        };
+        let left_len = NonZero::new(index - w.start)?;
+        let right_len = NonZero::new(w.start + w.length.get() - index)?;
 
         let wire_len = self.map.get_mut(&w.start).unwrap();
         *wire_len = left_len;
 
         let add_result = self.map.insert(index, right_len);
         debug_assert!(add_result.is_none(), "Expected wire addition without conflict");
-        true
+        Some(([Wire1D { start: w.start, length: left_len }, Wire1D { start: index, length: right_len }], w))
     }
     /// If the index is a joint between two wires, then merge the two wires.
-    /// Returns whether this merge was successful.
-    pub fn join(&mut self, index: Axis) -> bool {
+    /// Returns three wires:
+    /// - The two wires that are joined
+    /// - The resulting joined wire
+    pub fn join(&mut self, index: Axis) -> Option<([Wire1D; 2], Wire1D)> {
         let WireAtResult::Two([l, r]) = self.wire_at(index) else {
-            return false;
+            return None;
         };
 
         let result = self.map.remove(&r.start);
@@ -69,7 +67,7 @@ impl WireRangeMap1D {
         let wire_len = self.map.get_mut(&l.start).unwrap();
         *wire_len = wire_len.checked_add(r.length.get()).unwrap();
 
-        true
+        Some(([l, r], Wire1D { start: l.start, length: *wire_len }))
     }
     /// Insert a wire.
     /// This returns which wires were actually added (if there was a wire already in the range).
@@ -206,4 +204,13 @@ impl Wire1D {
     fn contains(&self, c: Axis) -> bool {
         self.start <= c && c <= self.start + self.length.get()
     }
+}
+
+/// Convert a 1D split-join return value into a 2D split-join return value.
+pub(super) fn sj_to_2d(split_join: ([Wire1D; 2], Wire1D), horizontal: bool, cross: Axis) -> ([Wire; 2], Wire) {
+    let (operands, result) = split_join;
+    (
+        operands.map(|w| w.to_2d(horizontal, cross)),
+        result.to_2d(horizontal, cross)
+    )
 }
