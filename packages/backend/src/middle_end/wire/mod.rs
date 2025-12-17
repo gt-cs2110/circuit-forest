@@ -290,36 +290,36 @@ impl WireSet {
             .collect();
 
         // Add to wire maps:
-        let mut deleted = vec![];
+        let mut removed = vec![];
         let mut added = vec![];
-        let mut update_set = |deleted_wires: &[Wire], merged_wire| {
-            added.pop_if(|w| deleted_wires.contains(w));
-            deleted.extend_from_slice(deleted_wires);
+        let mut update_set = |removed_wires: &[Wire], merged_wire| {
+            added.pop_if(|w| removed_wires.contains(w));
+            removed.extend_from_slice(removed_wires);
             added.push(merged_wire);
         };
         for subwire in self.ranges.add_wire(w) {
             // For the two endpoints, try merging wires,
-            // and keeping track of which wires are added/deleted
+            // and keeping track of which wires are added/removed
             let [l, r] = subwire.endpoints();
             let jl = self.ranges.join_wire(l);
             let jr = self.ranges.join_wire(r);
             match (jl, jr) {
-                (Some((l_deleted_wires, l_merged)), Some((r_deleted_wires, r_merged))) => {
-                    update_set(&l_deleted_wires, l_merged);
-                    update_set(&r_deleted_wires, r_merged);
+                (Some((l_splits, l_joined)), Some((r_splits, r_joined))) => {
+                    update_set(&l_splits, l_joined);
+                    update_set(&r_splits, r_joined);
                 },
-                (Some((deleted_wires, merged)), None) | (None, Some((deleted_wires, merged))) => {
-                    update_set(&deleted_wires, merged);
+                (Some((splits, joined)), None) | (None, Some((splits, joined))) => {
+                    update_set(&splits, joined);
                 },
                 (None, None) => update_set(&[], subwire)
             }
         }
-        if deleted.is_empty() && added.is_empty() {
+        if removed.is_empty() && added.is_empty() {
             return None;
         }
 
-        // Delete each wire in `deleted`.
-        for w in deleted {
+        // Delete each wire in `removed`.
+        for w in removed {
             let removed = self.graph_remove_wire(w);
             debug_assert!(
                 removed.is_none_or(|k| keys.contains(&k)),
@@ -389,9 +389,9 @@ impl WireSet {
         let mut deleted_keys = HashSet::new();
         let mut split_groups = HashMap::new();
         
-        let (deleted, added) = self.ranges.remove_wire(w);
+        let (removed, added) = self.ranges.remove_wire(w);
         // No activity occurred, so no need to continue:
-        if deleted.is_empty() && added.is_empty() {
+        if removed.is_empty() && added.is_empty() {
             return None;
         }
 
@@ -402,7 +402,7 @@ impl WireSet {
                 .expect("Added wire should have corresponding key");
             self.wires.add_edge(l.into(), r.into(), k);
         }
-        for w in deleted {
+        for w in removed {
             let [l, r] = w.endpoints();
 
             self.split_wire_on_joint(l, w.horizontal);
