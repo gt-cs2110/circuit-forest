@@ -22,7 +22,7 @@ new_key_type! {
 
 #[derive(Debug, Default)]
 pub struct MiddleRepr {
-    forest: CircuitForest,
+    engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>
 }
 
@@ -48,6 +48,7 @@ pub struct ComponentProps {
 
 pub enum ReprEditErr {
     CannotAddComponent,
+    CannotAddWire,
     CannotRemoveWire,
     Todo
 }
@@ -71,17 +72,16 @@ impl MiddleRepr {
 /// This cannot be done with a function
 /// because this is returning a place rather than a value.
 macro_rules! circ {
-    ($self:ident.circuit)  => { $self.repr.forest.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.forest.graphs[$self.key] };
-    ($self:ident.state)    => { $self.repr.forest.state[$self.key] };
+    ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
+    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
+    ($self:ident.state)    => { $self.repr.engine.state[$self.key] };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, pos: Coord) -> Result<(), ReprEditErr> {
         let physical = physical.into();
-        let Some(ComponentBounds { bounds, ports }) = physical.bounds().into_absolute(pos) else {
-            return Err(ReprEditErr::CannotAddComponent);
-        };
+        let ComponentBounds { bounds, ports } = physical.bounds().into_absolute(pos)
+            .ok_or(ReprEditErr::CannotAddComponent)?;
         let props = ComponentProps {
             label: String::new(),
             origin: pos,
@@ -92,7 +92,7 @@ impl MiddleCircuit<'_> {
 
         if let Some(component) = physical.engine_component() {
             // Is engine component:
-            let fkey = circ!(self.circuit).add_function_node(component);
+            let fkey = circ!(self.engine).add_function_node(component);
             circ!(self.physical).components.insert(fkey, props);
         } else {
             // Is UI component:
@@ -101,7 +101,10 @@ impl MiddleCircuit<'_> {
         
         Ok(())
     }
-    
+    pub fn remove_component(&mut self, key: FunctionKey) -> Result<(), ReprEditErr> {
+        todo!()
+    }
+
     pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
         // Add to wire set if it doesn't overlap with anything.
         // Cases:
@@ -110,12 +113,12 @@ impl MiddleCircuit<'_> {
         
         let [p, q] = w.endpoints();
 
-        let result = circ!(self.physical).wires.add_wire(p, q, || circ!(self.circuit).add_value_node())
-            .unwrap_or_else(|| unreachable!("p, q are 1d"));
+        let result = circ!(self.physical).wires.add_wire(p, q, || circ!(self.engine).add_value_node())
+            .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
             wire::AddWireResult::NoJoin(_) => {},
             wire::AddWireResult::Join(c, k1, keys) => {
-                circ!(self.circuit).join(&keys);
+                circ!(self.engine).join(&keys);
                 circ!(self.physical).wires.flood_fill(c, k1);
             },
         }
@@ -129,7 +132,7 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
         for k in deleted_keys {
-            circ!(self.circuit).remove_value_node(k);
+            circ!(self.engine).remove_value_node(k);
         }
         for (k, groups) in split_groups {
             for group in &groups[1..] {
@@ -145,11 +148,15 @@ impl MiddleCircuit<'_> {
                     }).collect();
 
                 // Split and update physical:
-                let flood_key = circ!(self.circuit).split(k, &ports);
+                let flood_key = circ!(self.engine).split(k, &ports);
                 circ!(self.physical).wires.flood_fill(c, flood_key);
             }
         }
 
         Ok(())
+    }
+
+    pub fn run(&mut self) {
+        todo!()
     }
 }
