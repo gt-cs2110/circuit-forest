@@ -56,7 +56,7 @@ type WireGraph = GraphMap<MeshKey, ValueKey, Undirected>;
 /// The connection of wires in a circuit.
 #[derive(Debug, Default)]
 pub struct WireSet {
-    wires: WireGraph,
+    graph: WireGraph,
     ranges: WireRangeMap,
 }
 impl WireSet {
@@ -64,7 +64,7 @@ impl WireSet {
     /// 
     /// This is None if the coordinate is not connected to a wire.
     pub fn find_key(&self, p: Coord) -> Option<ValueKey> {
-        self.wires.edges(p.into())
+        self.graph.edges(p.into())
             .next()
             .map(|(_, _, &k)| k)
     }
@@ -79,23 +79,23 @@ impl WireSet {
             let Some(k) = self.graph_remove_wire(joined) else {
                 unreachable!("Expected wire to split to exist");
             };
-            self.wires.add_edge(p.into(), c.into(), k);
-            self.wires.add_edge(c.into(), q.into(), k);
+            self.graph.add_edge(p.into(), c.into(), k);
+            self.graph.add_edge(c.into(), q.into(), k);
         }
     }
 
     /// Removes node if it is not connected to any wire.
     fn remove_if_singleton(&mut self, n: Coord) {
         let n = n.into();
-        if self.wires.neighbors(n).next().is_none() {
-            self.wires.remove_node(n);
+        if self.graph.neighbors(n).next().is_none() {
+            self.graph.remove_node(n);
         }
     }
 
     /// Removes wire from graph, returning the value key if the wire was successfully removed.
     fn graph_remove_wire(&mut self, w: Wire) -> Option<ValueKey> {
         let [p, q] = w.endpoints();
-        let result = self.wires.remove_edge(p.into(), q.into());
+        let result = self.graph.remove_edge(p.into(), q.into());
         self.remove_if_singleton(p);
         self.remove_if_singleton(q);
 
@@ -197,7 +197,7 @@ impl WireSet {
             }
         };
         // Add all the wires
-        self.wires.extend(
+        self.graph.extend(
             added.into_iter().map(|w| {
                 let [l, r] = w.endpoints();
                 (l.into(), r.into(), fill_key)
@@ -205,7 +205,7 @@ impl WireSet {
         );
         // Break up any new wires with any joints that connect to this wire.
         for c in w.coord_iter() {
-            let intersecting = self.wires.neighbors(c.into())
+            let intersecting = self.graph.neighbors(c.into())
                 .any(|other| matches!(other, MeshKey::WireJoint(_)));
             if intersecting {
                 self.split_wire_on_joint(c, w.horizontal);
@@ -242,7 +242,7 @@ impl WireSet {
             let k = self.find_key(l)
                 .or_else(|| self.find_key(r))
                 .expect("Added wire should have corresponding key");
-            self.wires.add_edge(l.into(), r.into(), k);
+            self.graph.add_edge(l.into(), r.into(), k);
         }
         for w in removed {
             let [l, r] = w.endpoints();
@@ -260,8 +260,8 @@ impl WireSet {
             .collect();
         // Find all groups of joints following split:
         while let Some((c, k)) = key_endpoints.pop() {
-            let group: HashSet<_> = Bfs::new(&self.wires, c.into())
-                .iter(&self.wires)
+            let group: HashSet<_> = Bfs::new(&self.graph, c.into())
+                .iter(&self.graph)
                 .filter_map(|m| match m {
                     MeshKey::WireJoint(c) => Some(c),
                     MeshKey::Tunnel(_) => None,
@@ -288,7 +288,7 @@ impl WireSet {
                 assert_eq!(lk, rk, "Joined wires should have same keys");
 
                 let [j0, j1] = j.endpoints();
-                self.wires.add_edge(j0.into(), j1.into(), lk);
+                self.graph.add_edge(j0.into(), j1.into(), lk);
             }
         }
 
@@ -304,12 +304,12 @@ impl WireSet {
         let mut frontier = vec![MeshKey::WireJoint(p)];
 
         while let Some(k) = frontier.pop() {
-            let edges_to_flood: Vec<_> = self.wires.edges(k)
+            let edges_to_flood: Vec<_> = self.graph.edges(k)
                 .filter(|&(_, _, &key)| key != flood_key)
                 .map(|(n1, n2, _)| (n1, n2))
                 .collect();
             for (n1, n2) in edges_to_flood {
-                if let Some(k) = self.wires.edge_weight_mut(n1, n2) {
+                if let Some(k) = self.graph.edge_weight_mut(n1, n2) {
                     *k = flood_key;
                 }
                 frontier.push(n2);
@@ -386,10 +386,10 @@ mod tests {
         assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_nodes(&ws.graph, nodes);
 
         let edges = [(n00, n01), (n01, n11), (n11, n12), (n01, n02)];
-        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 
@@ -426,13 +426,13 @@ mod tests {
         assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(k1)));
         
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_nodes(&ws.graph, nodes);
 
         let edges = [
             (n00, n01), (n01, n02),
             (n10, n11), (n11, n12)
         ];
-        assert_graph_edges(&ws.wires, [
+        assert_graph_edges(&ws.graph, [
             (k0, edges[0..2].to_vec()),
             (k1, edges[2..4].to_vec()),
         ]);
@@ -447,9 +447,9 @@ mod tests {
         assert!(dst_key.contains(&k0) && dst_key.contains(&k1));
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_nodes(&ws.graph, nodes);
 
-        assert_eq!(ws.wires.edge_count(), 5);
+        assert_eq!(ws.graph.edge_count(), 5);
         assert_range_map(&ws.ranges, [
             (n00, n01), (n01, n02),
             (n10, n11), (n11, n12),
@@ -478,9 +478,9 @@ mod tests {
         assert_eq!(ws.add_wire(n00, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
         
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n03]);
+        assert_graph_nodes(&ws.graph, [n00, n03]);
         
-        assert_graph_edges(&ws.wires, [
+        assert_graph_edges(&ws.graph, [
             (key, vec![(n00, n03)]),
         ]);
         assert_range_map(&ws.ranges, [(n00, n03)]);
@@ -491,10 +491,10 @@ mod tests {
         assert_eq!(ws.add_wire(n04, n05, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n03, n13, n05]);
+        assert_graph_nodes(&ws.graph, [n00, n03, n13, n05]);
         
         let edges = [(n00, n03), (n03, n13), (n03, n05)];
-        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 
@@ -516,9 +516,9 @@ mod tests {
         assert!(ws.add_wire(n00, n02, &mut keygen).is_none());
         
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n03]);
+        assert_graph_nodes(&ws.graph, [n00, n03]);
 
-        assert_graph_edges(&ws.wires, [
+        assert_graph_edges(&ws.graph, [
             (key, vec![(n00, n03)]),
         ]);
         assert_range_map(&ws.ranges, [(n00, n03)]);
@@ -542,10 +542,10 @@ mod tests {
         assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n01, n02, n11]);
+        assert_graph_nodes(&ws.graph, [n00, n01, n02, n11]);
 
         let edges = [(n00, n01), (n01, n02), (n01, n11)];
-        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 
@@ -568,10 +568,10 @@ mod tests {
         assert_eq!(ws.add_wire(n00, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n01, n02, n11]);
+        assert_graph_nodes(&ws.graph, [n00, n01, n02, n11]);
 
         let edges = [(n00, n01), (n01, n02), (n01, n11)];
-        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 
@@ -631,8 +631,8 @@ mod tests {
         assert_remove(ws.remove_wire(n00, n01), [key], []);
 
         // Check corre0ct construction
-        assert_graph_nodes(&ws.wires, []);
-        assert_graph_edges(&ws.wires, []);
+        assert_graph_nodes(&ws.graph, []);
+        assert_graph_edges(&ws.graph, []);
         assert_range_map(&ws.ranges, []);
     }
 
@@ -707,8 +707,8 @@ mod tests {
         );
 
         // Check wire set was constructed correctly
-        assert_graph_nodes(&ws.wires, nodes);
-        assert_graph_edges(&ws.wires, [
+        assert_graph_nodes(&ws.graph, nodes);
+        assert_graph_edges(&ws.graph, [
             (k0, vec![(n00, n01), (n01, n02), (n10, n11), (n11, n12)]),
         ]);
         assert_range_map(&ws.ranges, [
@@ -737,8 +737,8 @@ mod tests {
         assert_remove(ws.remove_wire(n01, n11), [], []);
 
         // Check wire set constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n02]);
-        assert_graph_edges(&ws.wires, [
+        assert_graph_nodes(&ws.graph, [n00, n02]);
+        assert_graph_edges(&ws.graph, [
             (key, vec![(n00, n02)])
         ]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
@@ -764,10 +764,10 @@ mod tests {
         );
 
         // Check wire set constructed correctly
-        assert_graph_nodes(&ws.wires, nodes);
+        assert_graph_nodes(&ws.graph, nodes);
 
         let edges = [(n00, n01), (n02, n03)];
-        assert_graph_edges(&ws.wires, [(key, edges.to_vec())]);
+        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 
@@ -817,10 +817,10 @@ mod tests {
         assert_remove(ws.remove_wire(n01, n04), [], []);
 
         // Check wire set constructed correctly
-        assert_graph_nodes(&ws.wires, [n00, n01, n04, n05]);
+        assert_graph_nodes(&ws.graph, [n00, n01, n04, n05]);
 
         let edges = [(n00, n01), (n04, n05)];
-        assert_graph_edges(&ws.wires, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
+        assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
 }
