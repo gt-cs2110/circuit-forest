@@ -325,7 +325,7 @@ impl WireSet {
         for w in removed {
             let removed = self.graph_remove_wire(w);
             debug_assert!(
-                removed.is_none_or(|k| keys.contains(&k)),
+                removed.is_some_and(|k| keys.contains(&k)),
                 "Removal of edge should have value key which is already accounted for"
             );
         }
