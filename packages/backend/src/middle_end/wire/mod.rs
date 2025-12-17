@@ -1123,4 +1123,32 @@ mod tests {
         // Remove nodes:
         assert_remove(ws.remove_wire(n01, n11), [], []);
     }
+
+    #[test]
+    fn wireset_remove_slice_two() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02, n03, n04, n05] = [
+            (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)
+        ];
+
+        // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(n00, n02, &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        let Some(AddWireResult::NoJoin(k2)) = ws.add_wire(n03, n05, &mut keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_ne!(k1, k2);
+        
+        assert_remove(ws.remove_wire(n01, n04), [], []);
+
+        // Check wire set constructed correctly
+        assert_graph_nodes(&ws.wires, [n00, n01, n04, n05]);
+
+        let edges = [(n00, n01), (n04, n05)];
+        assert_graph_edges(&ws.wires, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
+        assert_range_map(&ws.ranges, edges);
+    }
 }

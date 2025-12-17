@@ -130,19 +130,27 @@ impl WireRangeMap1D {
         // Split start joint
         if let Some(([spl, spr], joined)) = self.split(start) {
             removed.push(joined);
+            
             added.push(spl);
-
-            // spr is a synthetically added wire,
-            // so if it exists and is not going to be split later,
-            // then remove it so it doesn't get tracked later.
             if spr.endpoints()[1] <= end {
+                // spr is a synthetically added wire,
+                // so if it exists and is not going to be split later,
+                // then remove it so it doesn't get tracked later.
                 self.map.remove(&spr.start);
+            } else {
+                added.push(spr);
             }
         }
         // Split end joint
-        if let Some(([spl, spr], _)) = self.split(end) {
-            added.push(spr);
+        if let Some(([spl, spr], joined)) = self.split(end) {
+            // joined also needs to be removed as long as
+            // it wasn't synthetically created (in the last split step)
+            if added.pop_if(|&mut w| w == joined).is_none() {
+                removed.push(joined);
+            }
+            
             self.map.remove(&spl.start);
+            added.push(spr);
         }
 
         // Add any extra wires between
