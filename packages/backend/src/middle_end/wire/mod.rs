@@ -292,26 +292,29 @@ impl WireSet {
         // Add to wire maps:
         let mut removed = vec![];
         let mut added = vec![];
-        let mut update_set = |removed_wires: &[Wire], merged_wire| {
-            added.pop_if(|w| removed_wires.contains(w));
-            removed.extend_from_slice(removed_wires);
-            added.push(merged_wire);
-        };
         for subwire in self.ranges.add_wire(w) {
             // For the two endpoints, try merging wires,
             // and keeping track of which wires are added/removed
+            added.push(subwire);
             let [l, r] = subwire.endpoints();
-            let jl = self.ranges.join_wire(l);
-            let jr = self.ranges.join_wire(r);
-            match (jl, jr) {
-                (Some((l_splits, l_joined)), Some((r_splits, r_joined))) => {
-                    update_set(&l_splits, l_joined);
-                    update_set(&r_splits, r_joined);
-                },
-                (Some((splits, joined)), None) | (None, Some((splits, joined))) => {
-                    update_set(&splits, joined);
-                },
-                (None, None) => update_set(&[], subwire)
+            if let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
+                // Remove spl:
+                if added.pop_if(|&mut w| w == spl).is_none() {
+                    removed.push(spl);
+                }
+                // Remove spr:
+                let result = added.pop();
+                debug_assert_eq!(result, Some(spr));
+                // Add joined:
+                added.push(joined);
+            }
+            if let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
+                // Remove spl:
+                let result = added.pop();
+                debug_assert_eq!(result, Some(spl));
+                // Remove spr, add joined:
+                removed.push(spr);
+                added.push(joined);
             }
         }
         if removed.is_empty() && added.is_empty() {
