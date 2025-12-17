@@ -120,20 +120,43 @@ impl WireRangeMap1D {
     }
     /// Removes a wire.
     /// This returns which wires were actually removed (if there was negative space in the range).
-    pub fn remove(&mut self, w: Wire1D) -> Vec<Wire1D> {
+    pub fn remove(&mut self, w: Wire1D) -> (Vec<Wire1D>, Vec<Wire1D>) {
         let Wire1D { start, length } = w;
         let end = start + length.get();
-        self.split(start);
-        self.split(end);
 
-        let removed: Vec<_> = self.map.range(start .. start + length.get())
-            .map(|(&start, &length)| Wire1D { start, length })
-            .collect();
-        
-        for w in &removed {
+        let mut removed = vec![];
+        let mut added = vec![];
+
+        // Split start joint
+        if let Some(([spl, spr], joined)) = self.split(start) {
+            removed.push(joined);
+            added.push(spl);
+
+            // spr is a synthetically added wire,
+            // so if it exists and is not going to be split later,
+            // then remove it so it doesn't get tracked later.
+            if spr.endpoints()[1] <= end {
+                self.map.remove(&spr.start);
+            }
+        }
+        // Split end joint
+        if let Some(([spl, spr], _)) = self.split(end) {
+            added.push(spr);
+            self.map.remove(&spl.start);
+        }
+
+        // Add any extra wires between
+        let len = removed.len();
+        removed.extend({
+            self.map.range(start .. start + length.get())
+                .map(|(&start, &length)| Wire1D { start, length })
+        });
+        // Update map
+        for w in &removed[len..] {
             self.map.remove(&w.start);
         }
-        removed
+
+        (removed, added)
     }
 
     /// Gets the wires at the specified coordinate

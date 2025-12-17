@@ -70,14 +70,9 @@ impl MiddleRepr {
     pub fn remove_wire(&mut self, ckey: CircuitKey, w: Wire) -> Result<(), ReprEditErr> {
         let [p, q] = w.endpoints();
 
-        match self.physical[ckey].wires.remove_wire(p, q) {
-            Some(wire::RemoveWireResult::NoSplit(_)) => Ok(()),
-            Some(wire::RemoveWireResult::Split(c, k, coords)) => {
-                let nk = self.forest.circuit(ckey).split(k, &[ todo!("get ports connected to mesh") ]);
-                self.physical[ckey].wires.flood_fill(c, nk);
-                Ok(())
-            },
-            None => Err(ReprEditErr::CannotRemoveWire),
-        }
+        let wire::RemoveWireResult { deleted_keys, split_groups } = self.physical[ckey].wires.remove_wire(p, q)
+            .ok_or(ReprEditErr::CannotRemoveWire)?;
+
+        todo!()
     }
 }
