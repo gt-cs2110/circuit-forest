@@ -95,6 +95,35 @@ impl CircuitGraph {
         self.functions.insert(node)
     }
 
+    /// Removes a value node.
+    /// 
+    /// This function deletes the node and any edges connected to it.
+    /// It also returns whether the action was successful.
+    pub fn remove_value(&mut self, value: ValueKey) -> bool {
+        if let Some(ValueNode { bitsize: _, links }) = self.values.remove(value) {
+            for FunctionPort { gate, index } in links {
+                let result = self.functions[gate].links[index].take();
+                debug_assert_eq!(result, Some(value), "Removal of function port should have yielded correct key");
+            }
+            true
+        } else {
+            false
+        }
+    }
+    /// Removes a function node.
+    /// 
+    /// This function deletes the node and any edges connected to it.
+    /// It also returns whether the action was successful.
+    pub fn remove_function(&mut self, gate: FunctionKey) -> bool {
+        if self.functions.contains_key(gate) {
+            self.clear_edges(gate);
+            self.functions.remove(gate);
+            true
+        } else {
+            false
+        }
+    }
+
     /// When connecting another port to the value node,
     /// update the value node's current bitsize with
     /// the new connection (with specified bitsize).

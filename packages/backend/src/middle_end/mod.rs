@@ -117,6 +117,28 @@ impl MiddleRepr {
         let wire::RemoveWireResult { deleted_keys, split_groups } = self.physical[ckey].wires.remove_wire(p, q)
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
-        todo!()
+        for k in deleted_keys {
+            self.forest.circuit(ckey).remove_value_node(k);
+        }
+        for (k, groups) in split_groups {
+            for group in &groups[1..] {
+                let &c = group.iter().next().unwrap();
+
+                // Get all ports associated with coordinates:
+                let ports: Vec<_> = self.physical[ckey].components.iter()
+                    .flat_map(|(gate, p)| {
+                        p.ports.iter()
+                            .enumerate()
+                            .filter(|&(_, p)| group.contains(p))
+                            .map(move |(index, _)| FunctionPort { gate, index })
+                    }).collect();
+
+                // Split and update physical:
+                let flood_key = self.forest.circuit(ckey).split(k, &ports);
+                self.physical[ckey].wires.flood_fill(c, flood_key);
+            }
+        }
+
+        Ok(())
     }
 }

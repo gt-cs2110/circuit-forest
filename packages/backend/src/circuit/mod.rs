@@ -131,6 +131,38 @@ impl Circuit<'_> {
         key
     }
 
+    /// Removes a value node and any state linking to it.
+    pub fn remove_value_node(&mut self, value: ValueKey) -> bool {
+        if let Some(vnode) = circ!(self.graphs).values.get(value) {
+            // Update transient state:
+            circ!(self.states).transient.frontier.extend(vnode.links.iter().map(|l| l.gate));
+            
+            circ!(self.graphs).remove_value(value);
+            circ!(self.states).remove_node_value(value);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes a value node and any state linking to it.
+    pub fn remove_function_node(&mut self, gate: FunctionKey) -> bool {
+        if let Some(fnode) = circ!(self.graphs).functions.get(gate) {
+            // Update transient state:
+            for &ml in &fnode.links {
+                if let Some(l) = ml {
+                    circ!(self.states).add_transient(l, true);
+                }
+            }
+            
+            circ!(self.graphs).remove_function(gate);
+            circ!(self.states).remove_function_value(gate);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Connect a wire to a port in the Circuit's graph.
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         circ!(self.graphs).connect(wire, port);

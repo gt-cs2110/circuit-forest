@@ -85,6 +85,14 @@ impl CircuitState {
         self.values.remove(k);
         self.transient.triggers.remove(k);
     }
+    /// Removes a value node from CircuitState.
+    /// 
+    /// If this function is called, then `CircuitState::get_node_value`
+    /// should NOT be called on this ValueKey.
+    pub fn remove_function_value(&mut self, k: FunctionKey) {
+        self.functions.remove(k);
+        self.transient.frontier.remove(&k);
+    }
     /// Signals that an update should be propagated from a value node.
     /// 
     /// If `recalculate` is true, this also recomputes the node's bit value
