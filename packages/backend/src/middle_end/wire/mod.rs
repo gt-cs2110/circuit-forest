@@ -232,31 +232,17 @@ impl WireSet {
 
     /// Checks if there is a wire to split, and splitting it into two if needed.
     /// 
-    /// This function accepts the coordinate to split at and the orientation of the wire
-    /// the coordinate is an endpoint of.
-    /// This tries to look for any wires which are perpendicular to this wire,
-    /// splitting it if one is found.
-    /// 
-    /// Returns whether a split was successful.
+    /// This function accepts the coordinate to split at.
     fn split_wire_on_joint(&mut self, c: Coord, horizontal: bool) {
-        // Get perpendicular map
-        let mut it = self.ranges.wires_at_coord_dir(!horizontal, c)
-            .filter(|w| w.split(c).is_some());
-        
-        let Some(w) = it.next() else { return };
-
-        // Split wires in graph:
-        let Some(k) = self.graph_remove_wire(w) else {
-            unreachable!("Expected wire to split to exist");
-        };
-        let [p, q] = w.endpoints();
-        self.wires.add_edge(p.into(), c.into(), k);
-        self.wires.add_edge(c.into(), q.into(), k);
-        // Split wires in map:
-        assert!(
-            self.ranges.split_wire(w.horizontal, c).is_some(),
-            "Expected wire to be splittable"
-        );
+        if let Some((_, joined)) = self.ranges.split_wire(horizontal, c) {
+            let [p, q] = joined.endpoints();
+            // Split wires in graph:
+            let Some(k) = self.graph_remove_wire(joined) else {
+                unreachable!("Expected wire to split to exist");
+            };
+            self.wires.add_edge(p.into(), c.into(), k);
+            self.wires.add_edge(c.into(), q.into(), k);
+        }
     }
 
     /// Removes node if it is not connected to any wire.
@@ -296,8 +282,8 @@ impl WireSet {
         let qk = self.find_key(q);
 
         // If endpoints intersect the middle of a wire, create an intersection:
-        self.split_wire_on_joint(p, w.horizontal);
-        self.split_wire_on_joint(q, w.horizontal);
+        self.split_wire_on_joint(p, !w.horizontal);
+        self.split_wire_on_joint(q, !w.horizontal);
         // All keys along wire:
         let keys: HashSet<_> = w.coord_iter()
             .filter_map(|c| self.find_key(c))
@@ -378,13 +364,9 @@ impl WireSet {
         // Break up any new wires with any joints that connect to this wire.
         for c in w.coord_iter() {
             let intersecting = self.wires.neighbors(c.into())
-                .any(|other| match other {
-                    MeshKey::WireJoint(r) => Wire::from_endpoints(c, r)
-                        .is_some_and(|w2| w.horizontal != w2.horizontal),
-                    MeshKey::Tunnel(_) => false,
-                });
+                .any(|other| matches!(other, MeshKey::WireJoint(_)));
             if intersecting {
-                self.split_wire_on_joint(c, !w.horizontal);
+                self.split_wire_on_joint(c, w.horizontal);
             }
         }
 
@@ -423,19 +405,19 @@ impl WireSet {
         for w in deleted {
             let [l, r] = w.endpoints();
 
-            self.split_wire_on_joint(l, !w.horizontal);
-            self.split_wire_on_joint(r, !w.horizontal);
+            self.split_wire_on_joint(l, w.horizontal);
+            self.split_wire_on_joint(r, w.horizontal);
 
             let k = self.graph_remove_wire(w).expect("Key should be deleted");
             deleted_keys.insert(k);
         }
 
         // Determine what keys need to be split:
-        let mut key_endpoints: HashSet<_> = w.coord_iter()
+        let mut key_endpoints: Vec<_> = w.coord_iter()
             .filter_map(|c| Some((c, self.find_key(c)?)))
             .collect();
         // Find all groups of joints following split:
-        while let Some(&(c, k)) = key_endpoints.iter().next() {
+        while let Some((c, k)) = key_endpoints.pop() {
             let group: HashSet<_> = Bfs::new(&self.wires, c.into())
                 .iter(&self.wires)
                 .filter_map(|m| match m {
@@ -471,11 +453,11 @@ impl WireSet {
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
 
-    /// Replaces the [`ValueKey`] of all the wires connecting to the specified Coord
-    /// with the specified [`ValueKey`].
+    /// Replaces the [`ValueKey`] of all wires connecting to the Coord
+    /// with the specified flood key.
     /// 
-    /// This works as long as Coord only has 1 [`ValueKey`] 
-    /// or is connected to 2 [`ValueKey`]s (one of which is the flood key).
+    /// All wires with a path to the coordinate that are not of the flood key
+    /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
         let mut frontier = vec![MeshKey::WireJoint(p)];
 
@@ -579,34 +561,6 @@ impl Wire {
         };
         range.map(mapper)
     }
-
-    /// Splits a wire into two, returning None if the specified coordinate does not intersect the wire.
-    pub fn split(&self, c: Coord) -> Option<[Wire; 2]> {
-        match self.contains(c) {
-            true => {
-                let [l, r] = self.endpoints();
-                Self::from_endpoints(l, c)
-                    .zip(Self::from_endpoints(c, r))
-                    .map(Into::into)
-            }
-            false => None
-        }
-    }
-
-    /// Joins two wires, returning None if the two wires would not join into a 1D wire.
-    pub fn join(&self, w: Wire) -> Option<Wire> {
-        // if both are same orientation & align on endpoint then join
-        let [l1, r1] = self.endpoints();
-        let [l2, r2] = w.endpoints();
-
-        if r1 == l2 {
-            Self::from_endpoints(l1, r2)
-        } else if l1 == r2 {
-            Self::from_endpoints(l2, r1)
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
@@ -692,59 +646,6 @@ mod tests {
         assert!(w.contains((1, 6)));
         assert!(!w.contains((1, 7)));
         assert!(!w.contains((0, 0)));
-    }
-
-    #[test]
-    fn wire_split() {
-        // Horizontal
-        let [p, m, q] = [(1, 2), (1, 9), (1, 11)];
-        let w = Wire::from_endpoints(p, q).unwrap();
-        let split = [
-            Wire::from_endpoints(p, m).unwrap(),
-            Wire::from_endpoints(m, q).unwrap(),
-        ];
-        assert_eq!(w.split(m), Some(split));
-        assert_eq!(w.split((2, 9)), None);
-        
-        // Vertical
-        let [p, m, q] = [(2, 6), (9, 6), (11, 6)];
-        let w = Wire::from_endpoints(p, q).unwrap();
-        let split = [
-            Wire::from_endpoints(p, m).unwrap(),
-            Wire::from_endpoints(m, q).unwrap(),
-        ];
-        assert_eq!(w.split(m), Some(split));
-        assert_eq!(w.split((9, 7)), None);
-    }
-
-    #[test]
-    fn wire_join() {
-        // Horizontal
-        let [p, m, q] = [(1, 2), (1, 9), (1, 11)];
-        let w1 = Wire::from_endpoints(p, m).unwrap();
-        let w2 = Wire::from_endpoints(m, q).unwrap();
-        let w = Wire::from_endpoints(p, q).unwrap();
-        assert_eq!(w1.join(w2), Some(w));
-                
-        // Vertical
-        let [p, m, q] = [(2, 6), (9, 6), (11, 6)];
-        let w1 = Wire::from_endpoints(p, m).unwrap();
-        let w2 = Wire::from_endpoints(m, q).unwrap();
-        let w = Wire::from_endpoints(p, q).unwrap();
-        assert_eq!(w1.join(w2), Some(w));
-
-        // None cases
-        let [p1, q1] = [(1, 2), (1, 9)];
-        let [p2, q2] = [(2, 9), (2, 11)];
-        let w1 = Wire::from_endpoints(p1, q1).unwrap();
-        let w2 = Wire::from_endpoints(p2, q2).unwrap();
-        assert_eq!(w1.join(w2), None);
-
-        let [p1, q1] = [(2, 1), (9, 1)];
-        let [p2, q2] = [(9, 2), (11, 2)];
-        let w1 = Wire::from_endpoints(p1, q1).unwrap();
-        let w2 = Wire::from_endpoints(p2, q2).unwrap();
-        assert_eq!(w1.join(w2), None);
     }
 
     fn keygen() -> impl FnMut() -> ValueKey {
