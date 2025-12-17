@@ -51,15 +51,33 @@ pub enum ReprEditErr {
     CannotRemoveWire,
     Todo
 }
+pub struct MiddleCircuit<'a> {
+    repr: &'a mut MiddleRepr,
+    key: CircuitKey
+}
 impl MiddleRepr {
+    /// Creates a new middle representation.
     pub fn new() -> Self {
-        Self {
-            forest: CircuitForest::new(),
-            physical: Default::default()
-        }
+        Self::default()
     }
+    /// Creates a mutable view for a given subcircuit.
+    pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
+        MiddleCircuit { repr: self, key }
+    }
+}
 
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, ckey: CircuitKey, physical: C, pos: Coord) -> Result<(), ReprEditErr> {
+/// Basic macro to pretend Circuit has the "graph" and "state" fields.
+/// 
+/// This cannot be done with a function
+/// because this is returning a place rather than a value.
+macro_rules! circ {
+    ($self:ident.circuit)  => { $self.repr.forest.circuit($self.key) };
+    ($self:ident.graph)    => { $self.repr.forest.graphs[$self.key] };
+    ($self:ident.state)    => { $self.repr.forest.state[$self.key] };
+    ($self:ident.physical) => { $self.repr.physical[$self.key] };
+}
+impl MiddleCircuit<'_> {
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, pos: Coord) -> Result<(), ReprEditErr> {
         let physical = physical.into();
         let Some(ComponentBounds { bounds, ports }) = physical.bounds().into_absolute(pos) else {
             return Err(ReprEditErr::CannotAddComponent);
@@ -74,17 +92,17 @@ impl MiddleRepr {
 
         if let Some(component) = physical.engine_component() {
             // Is engine component:
-            let fkey = self.forest.circuit(ckey).add_function_node(component);
-            self.physical[ckey].components.insert(fkey, props);
+            let fkey = circ!(self.circuit).add_function_node(component);
+            circ!(self.physical).components.insert(fkey, props);
         } else {
             // Is UI component:
-            self.physical[ckey].ui_components.insert(props);
+            circ!(self.physical).ui_components.insert(props);
         }
         
         Ok(())
     }
     
-    pub fn add_wire(&mut self, ckey: CircuitKey, w: Wire) -> Result<(), ReprEditErr> {
+    pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
         // Add to wire set if it doesn't overlap with anything.
         // Cases:
         // - If a wire endpoint connects to the middle of a wire, the wire needs to be split (ValueKey is same)
@@ -92,33 +110,33 @@ impl MiddleRepr {
         
         let [p, q] = w.endpoints();
 
-        let result = self.physical[ckey].wires.add_wire(p, q, || self.forest.circuit(ckey).add_value_node())
+        let result = circ!(self.physical).wires.add_wire(p, q, || circ!(self.circuit).add_value_node())
             .unwrap_or_else(|| unreachable!("p, q are 1d"));
         match result {
             wire::AddWireResult::NoJoin(_) => {},
             wire::AddWireResult::Join(c, k1, keys) => {
-                self.forest.circuit(ckey).join(&keys);
-                self.physical[ckey].wires.flood_fill(c, k1);
+                circ!(self.circuit).join(&keys);
+                circ!(self.physical).wires.flood_fill(c, k1);
             },
         }
 
         Ok(())
     }
-    pub fn remove_wire(&mut self, ckey: CircuitKey, w: Wire) -> Result<(), ReprEditErr> {
+    pub fn remove_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
         let [p, q] = w.endpoints();
 
-        let wire::RemoveWireResult { deleted_keys, split_groups } = self.physical[ckey].wires.remove_wire(p, q)
+        let wire::RemoveWireResult { deleted_keys, split_groups } = circ!(self.physical).wires.remove_wire(p, q)
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
         for k in deleted_keys {
-            self.forest.circuit(ckey).remove_value_node(k);
+            circ!(self.circuit).remove_value_node(k);
         }
         for (k, groups) in split_groups {
             for group in &groups[1..] {
                 let &c = group.iter().next().unwrap();
 
                 // Get all ports associated with coordinates:
-                let ports: Vec<_> = self.physical[ckey].components.iter()
+                let ports: Vec<_> = circ!(self.physical).components.iter()
                     .flat_map(|(gate, p)| {
                         p.ports.iter()
                             .enumerate()
@@ -127,8 +145,8 @@ impl MiddleRepr {
                     }).collect();
 
                 // Split and update physical:
-                let flood_key = self.forest.circuit(ckey).split(k, &ports);
-                self.physical[ckey].wires.flood_fill(c, flood_key);
+                let flood_key = circ!(self.circuit).split(k, &ports);
+                circ!(self.physical).wires.flood_fill(c, flood_key);
             }
         }
 
