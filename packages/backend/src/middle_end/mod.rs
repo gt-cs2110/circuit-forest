@@ -51,9 +51,9 @@ pub struct ComponentProps {
 
 pub enum ReprEditErr {
     CannotAddComponent,
+    CannotRemoveComponent,
     CannotAddWire,
     CannotRemoveWire,
-    Todo
 }
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,
@@ -100,8 +100,10 @@ impl MiddleCircuit<'_> {
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
                 let port = FunctionPort { gate, index };
-                let result = circ!(self.physical).wires.add_port(c, port, || circ!(self.engine).add_value_node());
-                debug_assert!(result.is_some(), "Expected port addition to be successful");
+                let value = circ!(self.physical).wires.add_port(c, port, || circ!(self.engine).add_value_node())
+                    .expect("Expected port addition to be successful");
+                
+                circ!(self.engine).connect_one(value, port);
             }
 
             circ!(self.physical).components.insert(gate, props);
@@ -120,8 +122,23 @@ impl MiddleCircuit<'_> {
         
         Ok(())
     }
-    pub fn remove_component(&mut self, key: FunctionKey) -> Result<(), ReprEditErr> {
-        todo!()
+    pub fn remove_component(&mut self, gate: FunctionKey) -> Result<(), ReprEditErr> {
+        let props = circ!(self.physical).components.remove(gate)
+            .ok_or(ReprEditErr::CannotRemoveComponent)?;
+
+        let result = circ!(self.engine).remove_function_node(gate);
+        debug_assert!(result, "Engine removal should succeed");
+        
+        // Remove all ports from wire set:
+        for index in 0..props.ports.len() {
+            let port = FunctionPort { gate, index };
+
+            let result = circ!(self.physical).wires.remove_port(port)
+                .expect("Wire removal should succeed");
+            self.resolve_remove(result);
+        }
+
+        Ok(())
     }
 
     pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
@@ -187,6 +204,6 @@ impl MiddleCircuit<'_> {
     }
 
     pub fn run(&mut self) {
-        todo!()
+        circ!(self.engine).propagate();
     }
 }
