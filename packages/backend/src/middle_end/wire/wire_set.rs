@@ -1,25 +1,38 @@
 use std::collections::{HashMap, HashSet};
 
-use petgraph::Undirected;
-use petgraph::prelude::GraphMap;
+use petgraph::prelude::UnGraphMap;
 use petgraph::visit::{Bfs, Walker};
 
-use crate::circuit::graph::ValueKey;
+use crate::circuit::graph::{FunctionPort, ValueKey};
+use crate::middle_end::string_interner::TunnelSymbol;
 use crate::middle_end::wire::{Wire, WireRangeMap, minmax};
-use crate::middle_end::{Coord, UIKey};
+use crate::middle_end::Coord;
 
 
 /// A key to attach onto the wire set graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum MeshKey {
+pub enum MeshKey {
     /// A joint (a wire point)
     WireJoint(Coord),
+    /// A function port.
+    Port(FunctionPort),
     /// A tunnel.
-    Tunnel(UIKey)
+    Tunnel(TunnelSymbol),
+
 }
 impl From<Coord> for MeshKey {
     fn from(value: Coord) -> Self {
-        MeshKey::WireJoint(value)
+        Self::WireJoint(value)
+    }
+}
+impl From<FunctionPort> for MeshKey {
+    fn from(value: FunctionPort) -> Self {
+        Self::Port(value)
+    }
+}
+impl From<TunnelSymbol> for MeshKey {
+    fn from(value: TunnelSymbol) -> Self {
+        Self::Tunnel(value)
     }
 }
 
@@ -40,6 +53,7 @@ pub enum AddWireResult {
     Join(Coord, ValueKey, Vec<ValueKey>)
 }
 
+type SplitGroupMap = HashMap<ValueKey, Vec<HashSet<MeshKey>>>;
 /// The result type for [`WireSet::remove_wire`].
 /// 
 /// The struct holds the keys that no longer have an edge associated
@@ -49,10 +63,10 @@ pub struct RemoveWireResult {
     /// Keys that need to be deleted (no edges are associated with it anymore).
     pub deleted_keys: HashSet<ValueKey>,
     /// A map of all keys and sets that need to be split.
-    pub split_groups: HashMap<ValueKey, Vec<HashSet<Coord>>>
+    pub split_groups: SplitGroupMap
 }
 
-type WireGraph = GraphMap<MeshKey, ValueKey, Undirected>;
+type WireGraph = UnGraphMap<MeshKey, ValueKey>;
 /// The connection of wires in a circuit.
 #[derive(Debug, Default)]
 pub struct WireSet {
@@ -63,8 +77,8 @@ impl WireSet {
     /// Find the ValueKey corresponding to a coordinate.
     /// 
     /// This is None if the coordinate is not connected to a wire.
-    pub fn find_key(&self, p: Coord) -> Option<ValueKey> {
-        self.graph.edges(p.into())
+    pub fn find_key<K: Into<MeshKey>>(&self, key: K) -> Option<ValueKey> {
+        self.graph.edges(key.into())
             .next()
             .map(|(_, _, &k)| k)
     }
@@ -84,22 +98,53 @@ impl WireSet {
         }
     }
 
-    /// Removes node if it is not connected to any wire.
-    fn remove_if_singleton(&mut self, n: Coord) {
-        let n = n.into();
-        if self.graph.neighbors(n).next().is_none() {
-            self.graph.remove_node(n);
+    
+    /// Removes an edge from the graph and removes any singleton nodes.
+    fn graph_remove_edge(&mut self, l: MeshKey, r: MeshKey) -> Option<ValueKey> {
+        /// Removes node if it is not connected to any wire.
+        fn remove_if_singleton(graph: &mut WireGraph, n: MeshKey) {
+            if graph.neighbors(n).next().is_none() {
+                graph.remove_node(n);
+            }
         }
+
+        let result = self.graph.remove_edge(l, r);
+        remove_if_singleton(&mut self.graph, l);
+        remove_if_singleton(&mut self.graph, r);
+
+        result
     }
 
     /// Removes wire from graph, returning the value key if the wire was successfully removed.
     fn graph_remove_wire(&mut self, w: Wire) -> Option<ValueKey> {
         let [p, q] = w.endpoints();
-        let result = self.graph.remove_edge(p.into(), q.into());
-        self.remove_if_singleton(p);
-        self.remove_if_singleton(q);
+        self.graph_remove_edge(p.into(), q.into())
+    }
 
-        result
+    /// Takes a group of keys and tries to separate each coordinate into ValueKey groups.
+    ///
+    /// This ignores any keys which no longer have an associated ValueKey.
+    fn compute_meshes<K: Into<MeshKey>>(&mut self, coords: impl IntoIterator<Item=K>) -> SplitGroupMap {
+        let mut split_groups = HashMap::new();
+        
+        let mut coords: Vec<_> = coords.into_iter()
+            .map(|c| c.into())
+            .filter_map(|c| Some((c, self.find_key(c)?)))
+            .collect();
+
+        // Find all groups of joints following split:
+        while let Some((c, k)) = coords.pop() {
+            let group: HashSet<_> = Bfs::new(&self.graph, c)
+                .iter(&self.graph)
+                .collect();
+
+            coords.retain(|&(c, _)| !group.contains(&c));
+            split_groups.entry(k)
+                .or_insert_with(Vec::new)
+                .push(group);
+        }
+        
+        split_groups
     }
     /// Add a wire to the graph, connecting points p and q.
     /// A `new_vk` callback needs to be provided in case edge pq is disconnected 
@@ -215,6 +260,41 @@ impl WireSet {
         Some(result)
     }
     
+    /// Adds a port to the graph, connecting some coordinate to the port.
+    /// A `new_vk` callback needs to be provided in case the edge is disconnected 
+    /// from the rest of the graph and needs a new key.
+    /// 
+    /// This returns `Some(())` if addition was possible, or `None` if not
+    /// (e.g., if edge already exists or if port already exists as a node).
+    pub fn add_port(&mut self, c: Coord, port: FunctionPort, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
+        if self.graph.contains_node(port.into()) {
+            return None;
+        }
+        if self.graph.contains_edge(c.into(), port.into()) {
+            return None;
+        }
+
+        let key = self.find_key(c).unwrap_or_else(new_vk);
+        self.graph.add_edge(c.into(), port.into(), key);
+        Some(key)
+    }
+
+    /// Adds a tunnel link to the graph, connecting some coordinate to the tunnel.
+    /// A `new_vk` callback needs to be provided in case the edge is disconnected 
+    /// from the rest of the graph and needs a new key.
+    /// 
+    /// This returns `Some(())` if addition was possible, or `None` if not
+    /// (e.g., if edge already exists).
+    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
+        if self.graph.contains_edge(c.into(), tunnel.into()) {
+            return None;
+        }
+
+        let key = self.find_key(c).unwrap_or_else(new_vk);
+        self.graph.add_edge(c.into(), tunnel.into(), key);
+        Some(key)
+    }
+
     /// Removes the wire from the graph between p and q.
     /// 
     /// Note that this function only removes wires that are directly connected by joints
@@ -229,7 +309,6 @@ impl WireSet {
         // Remove from wire graph & map:
         let w = Wire::from_endpoints(p, q)?;
         let mut deleted_keys = HashSet::new();
-        let mut split_groups = HashMap::new();
         
         let (removed, added) = self.ranges.remove_wire(w);
         // No activity occurred, so no need to continue:
@@ -254,27 +333,8 @@ impl WireSet {
             deleted_keys.insert(k);
         }
 
-        // Determine what keys need to be split:
-        let mut key_endpoints: Vec<_> = w.coord_iter()
-            .filter_map(|c| Some((c, self.find_key(c)?)))
-            .collect();
-        // Find all groups of joints following split:
-        while let Some((c, k)) = key_endpoints.pop() {
-            let group: HashSet<_> = Bfs::new(&self.graph, c.into())
-                .iter(&self.graph)
-                .filter_map(|m| match m {
-                    MeshKey::WireJoint(c) => Some(c),
-                    MeshKey::Tunnel(_) => None,
-                })
-                .collect();
-
-            key_endpoints.retain(|(c, _)| !group.contains(c));
-            split_groups.entry(k)
-                .or_insert_with(Vec::new)
-                .push(group);
-        }
-        
-        // Clean up deleted_keys & splits
+        // Determine how the old key is split:
+        let mut split_groups = self.compute_meshes(w.coord_iter());
         split_groups.retain(|k, groups| {
             deleted_keys.remove(k);
             groups.len() > 1 // if <= 1, then this key doesn't need to be split
@@ -295,13 +355,62 @@ impl WireSet {
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
 
+    /// Removes a port from the graph.
+    /// 
+    /// If this function returns `None`, then the port doesn't exist on the graph.
+    /// If this function returns `Some(_)`, it returns a `RemoveWireResult`,
+    ///     which may include a key to delete.
+    #[must_use]
+    pub fn remove_port(&mut self, port: FunctionPort) -> Option<RemoveWireResult> {
+        let p = port.into();
+        let mut it = self.graph.neighbors(p);
+        
+        let MeshKey::WireJoint(c) = it.next()? else {
+            return None;
+        };
+        debug_assert!(it.next().is_none(), "Function port should only have 1 neighbor");
+
+        let k = self.graph_remove_edge(p, c.into())?;
+        debug_assert!(!self.graph.contains_node(port.into()), "Function port should no longer exist");
+
+        // If coord node no longer exists, 
+        // then no wires are connected (and therefore this key cannot exist).
+        let deleted_keys = match self.graph.contains_node(c.into()) {
+            true  => HashSet::new(),
+            false => HashSet::from([k]),
+        };
+
+        Some(RemoveWireResult { deleted_keys, split_groups: Default::default() })
+    }
+
+    /// Removes a tunnel link from the graph.
+    /// 
+    /// If this function returns `None`, then the edge doesn't exist on the graph.
+    /// If the function returns `Some(_)`, it returns a `RemoveWireResult`,
+    ///     which may indicate keys to delete & split.
+    #[must_use]
+    pub fn remove_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol) -> Option<RemoveWireResult> {
+        let k = self.graph_remove_edge(c.into(), tunnel.into())?;
+
+        // If neither node exists, then the key of this link can no longer exist.
+        let deleted_keys = match self.graph.contains_node(c.into()) || self.graph.contains_node(tunnel.into()) {
+            true  => HashSet::new(),
+            false => HashSet::from([k]),
+        };
+        // Find groups:
+        let mut split_groups = self.compute_meshes::<MeshKey>([c.into(), tunnel.into()]);
+        split_groups.retain(|_, groups| groups.len() > 1);
+
+        Some(RemoveWireResult { deleted_keys, split_groups })
+    }
+
     /// Replaces the [`ValueKey`] of all wires connecting to the Coord
     /// with the specified flood key.
     /// 
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-        let mut frontier = vec![MeshKey::WireJoint(p)];
+        let mut frontier = vec![p.into()];
 
         while let Some(k) = frontier.pop() {
             let edges_to_flood: Vec<_> = self.graph.edges(k)
@@ -343,7 +452,7 @@ mod tests {
     /// Asserts nodes of the graph are exactly the specified node list.
     fn assert_graph_nodes<const N: usize>(graph: &WireGraph, nodes: [Coord; N]) {
         let actual: BTreeSet<_> = graph.nodes().collect();
-        let expected: BTreeSet<_> = nodes.into_iter().map(MeshKey::WireJoint).collect();
+        let expected: BTreeSet<_> = nodes.into_iter().map(Into::into).collect();
         assert_eq!(actual, expected, "nodes in graph should match");
     }
     fn assert_graph_edges<const N: usize>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(Coord, Coord)>); N]) {
@@ -360,7 +469,7 @@ mod tests {
                 .collect();
             let mut expected_edges: Vec<_> = expected_edgemap[key]
                 .iter()
-                .map(|&(l, r)| minmax(MeshKey::from(l), MeshKey::from(r)))
+                .map(|&(l, r)| minmax(l.into(), r.into()))
                 .collect();
 
             actual_edges.sort();
@@ -590,9 +699,9 @@ mod tests {
         // Fixed order for groups:
         let a_groups = split_groups.into_iter()
             .map(|(key, value)| (key, {
-                let mut g = value.into_iter()
+                let mut g: Vec<_> = value.into_iter()
                     .map(<BTreeSet<_>>::from_iter)
-                    .collect::<Vec<_>>();
+                    .collect();
                 g.sort();
                 g
             }))
@@ -600,9 +709,13 @@ mod tests {
 
         let e_groups = e_split_groups.into_iter()
             .map(|(key, value)| (key, {
-                let mut g = value.into_iter()
-                    .map(<BTreeSet<_>>::from_iter)
-                    .collect::<Vec<_>>();
+                let mut g: Vec<_> = value.into_iter()
+                    .map(|s| {
+                        s.into_iter()
+                            .map(Into::into)
+                            .collect::<BTreeSet<_>>()
+                    })
+                    .collect();
                 g.sort();
                 g
             }))
