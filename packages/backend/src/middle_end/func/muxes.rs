@@ -1,5 +1,5 @@
 use crate::func::{self, ComponentFn};
-use crate::middle_end::func::{ComponentBounds, PhysicalComponent};
+use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, RelativeComponentBounds};
 
 const PLEXER_WIDTH: u32 = 3;
 
@@ -17,7 +17,7 @@ impl PhysicalComponent for Mux {
         "Mux"
     }
 
-    fn bounds(&self) -> ComponentBounds {
+    fn bounds(&self) -> RelativeComponentBounds {
         let n_inputs = self.sim.n_inputs() as u32;
         
         let width = PLEXER_WIDTH;
@@ -26,13 +26,10 @@ impl PhysicalComponent for Mux {
         let origin = (width, n_inputs);
         let ports = [(1, height)].into_iter() // selector
             .chain((0..n_inputs).map(|i| (0, 1 + i))) // inputs
-            .chain([origin]) //output
-            .collect(); 
+            .chain([origin]); //output
 
-        ComponentBounds {
-            bounds: [(0, 0), (width, height)],
-            ports
-        }.into_relative(origin)
+        AbsoluteComponentBounds::new((width, height), ports)
+            .into_relative(origin)
     }
 }
 
@@ -50,7 +47,7 @@ impl PhysicalComponent for Demux {
         "Demux"
     }
 
-    fn bounds(&self) -> ComponentBounds {
+    fn bounds(&self) -> RelativeComponentBounds {
         let n_outputs = self.sim.n_outputs() as u32;
         
         let width = PLEXER_WIDTH;
@@ -59,13 +56,10 @@ impl PhysicalComponent for Demux {
         let origin = (0, n_outputs);
         let ports = [(1, height)].into_iter() // selector
             .chain([origin]) // input
-            .chain((0..n_outputs).map(|i| (width, 1 + i))) // outputs
-            .collect();
+            .chain((0..n_outputs).map(|i| (width, 1 + i))); // outputs
 
-        ComponentBounds {
-            bounds: [(0, 0), (width, height)],
-            ports
-        }.into_relative(origin)
+        AbsoluteComponentBounds::new((width, height), ports)
+            .into_relative(origin)
     }
 }
 
@@ -83,7 +77,7 @@ impl PhysicalComponent for Decoder {
         "Decoder"
     }
 
-    fn bounds(&self) -> ComponentBounds {
+    fn bounds(&self) -> RelativeComponentBounds {
         let n_outputs = self.sim.n_outputs() as u32;
         
         let width = PLEXER_WIDTH;
@@ -91,12 +85,9 @@ impl PhysicalComponent for Decoder {
 
         let origin = (1, height);
         let ports = [origin].into_iter() // selector
-            .chain((0..n_outputs).map(|i| (width, 1 + i))) // outputs
-            .collect();
+            .chain((0..n_outputs).map(|i| (width, 1 + i))); // outputs
 
-        ComponentBounds {
-            bounds: [(0, 0), (width, height)],
-            ports
-        }.into_relative(origin)
+        AbsoluteComponentBounds::new((width, height), ports)
+            .into_relative(origin)
     }
 }

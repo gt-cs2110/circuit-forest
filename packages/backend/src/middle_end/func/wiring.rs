@@ -1,7 +1,5 @@
 use crate::{bitarr, func};
-use crate::middle_end::func::PhysicalComponent;
-
-use super::ComponentBounds;
+use crate::middle_end::func::{PhysicalComponent, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -17,8 +15,8 @@ impl PhysicalComponent for Input {
         "Input"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        ComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
     }
 }
 
@@ -36,8 +34,8 @@ impl PhysicalComponent for Output {
         "Output"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        ComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
     }
 }
 
@@ -55,8 +53,8 @@ impl PhysicalComponent for Constant {
         "Constant"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        ComponentBounds::single_port_from_bitsize(self.sim.get_value().len())
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_value().len())
     }
 }
 
@@ -72,10 +70,8 @@ impl PhysicalComponent for Power {
         "Power"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        let origin = (1, 3);
-        ComponentBounds::new_absolute((2, 3), vec![origin])
-            .into_relative(origin)
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_with_origin(2, 3, (1, 3))
     }
 }
 
@@ -91,10 +87,8 @@ impl PhysicalComponent for Ground {
         "Ground"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        let origin = (1, 0);
-        ComponentBounds::new_absolute((2, 3), vec![origin])
-            .into_relative(origin)
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_with_origin(2, 3, (1, 0))
     }
 }
 
@@ -109,10 +103,8 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn bounds(&self) -> ComponentBounds {
-        let origin = (3, 1);
-        ComponentBounds::new_absolute((3, 2), vec![origin])
-            .into_relative(origin)
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
     }
 }
 
@@ -130,16 +122,12 @@ impl PhysicalComponent for Splitter {
         "Splitter"
     }
 
-    fn bounds(&self) -> ComponentBounds {
+    fn bounds(&self) -> RelativeComponentBounds {
         let bitsize = i32::from(self.sim.get_bitsize());
         let ports = [(0, 0)].into_iter()
-            .chain((1..=bitsize).map(|i| (2 * i, 2)))
-            .collect();
+            .chain((1..=bitsize).map(|i| (2 * i, 2)));
 
-        ComponentBounds {
-            bounds: [(0, 0), (bitsize * 2, 2)],
-            ports,
-        }
+        RelativeComponentBounds::new((bitsize * 2, 2), ports)
     }
 }
 

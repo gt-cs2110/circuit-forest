@@ -12,19 +12,32 @@ use enum_dispatch::enum_dispatch;
 pub trait PhysicalComponent {
     fn engine_component(&self) -> Option<ComponentFn>;
     fn component_name(&self) -> &'static str;
-    fn bounds(&self) -> ComponentBounds;
+    fn bounds(&self) -> RelativeComponentBounds;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComponentBounds<C = CoordDelta> {
+pub struct ComponentBounds<C> {
     pub bounds: [C; 2],
     pub ports: Vec<C>
 }
+pub type RelativeComponentBounds = ComponentBounds<CoordDelta>;
+pub type AbsoluteComponentBounds = ComponentBounds<Coord>;
 
-impl ComponentBounds {
+impl<C: Default> ComponentBounds<C> {
+    pub fn new(dims: C, ports: impl IntoIterator<Item = C>) -> Self {
+        Self {
+            bounds: [Default::default(), dims],
+            ports: Vec::from_iter(ports)
+        }
+    }
+}
+impl RelativeComponentBounds {
     fn single_port(width: u32, height: u32) -> Self {
-        let origin = (width, height / 2);
-        ComponentBounds::new_absolute((width, height), vec![origin])
+        Self::single_port_with_origin(width, height, (width, height / 2))
+    }
+
+    fn single_port_with_origin(width: u32, height: u32, origin: Coord) -> Self {
+        ComponentBounds::new((width, height), [origin])
             .into_relative(origin)
     }
 
@@ -45,33 +58,27 @@ impl ComponentBounds {
         }
     }
 
-    pub(crate) fn into_absolute(self, origin: Coord) -> Option<ComponentBounds<Coord>> {
+    pub(crate) fn into_absolute(self, origin: Coord) -> Option<AbsoluteComponentBounds> {
         fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
             p.0.checked_add_signed(delta.0)
                 .zip(p.1.checked_add_signed(delta.1))
         }
 
-        let ComponentBounds { bounds: [b0, b1], ports } = self;
+        let Self { bounds: [b0, b1], ports } = self;
         let bounds = [add(origin, b0)?, add(origin, b1)?];
         let ports = ports.into_iter()
             .map(|delta| add(origin, delta))
             .collect::<Option<_>>()?;
-        Some(ComponentBounds { bounds, ports })
+        Some(AbsoluteComponentBounds { bounds, ports })
     }
 }
-impl ComponentBounds<Coord> {
-    fn new_absolute(dims: Coord, ports: impl IntoIterator<Item=Coord>) -> Self {
-        Self {
-            bounds: [(0, 0), dims],
-            ports: Vec::from_iter(ports)
-        }
-    }
-    pub(crate) fn into_relative(self, origin: Coord) -> ComponentBounds {
+impl AbsoluteComponentBounds {
+    pub(crate) fn into_relative(self, origin: Coord) -> RelativeComponentBounds {
         fn sub(p: Coord, q: Coord) -> CoordDelta {
             (p.0.wrapping_sub(q.0) as AxisDelta, p.1.wrapping_sub(q.1) as AxisDelta)
         }
 
-        let ComponentBounds { bounds: [b0, b1], ports } = self;
+        let Self { bounds: [b0, b1], ports } = self;
         let bounds = [
             sub(b0, origin),
             sub(b1, origin)
@@ -80,7 +87,7 @@ impl ComponentBounds<Coord> {
             .map(|p| sub(p, origin))
             .collect();
         
-        ComponentBounds { bounds, ports }
+        RelativeComponentBounds { bounds, ports }
     }
 }
 
