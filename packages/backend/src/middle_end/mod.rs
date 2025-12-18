@@ -147,9 +147,7 @@ impl MiddleCircuit<'_> {
         // - If a wire endpoint connects to the middle of a wire, the wire needs to be split (ValueKey is same)
         // - If a wire connects two wire meshes (e.g., two ValueKey sets), the two ValueKeys must be merged
         
-        let [p, q] = w.endpoints();
-
-        let result = circ!(self.physical).wires.add_wire(p, q, || circ!(self.engine).add_value_node())
+        let result = circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node())
             .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
             wire::AddWireResult::NoJoin(_) => {},
@@ -162,9 +160,7 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
     pub fn remove_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
-        let [p, q] = w.endpoints();
-
-        let result = circ!(self.physical).wires.remove_wire(p, q)
+        let result = circ!(self.physical).wires.remove_wire(w)
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
         self.resolve_remove(result);

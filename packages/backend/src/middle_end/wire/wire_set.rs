@@ -5,7 +5,7 @@ use petgraph::visit::{Bfs, Walker};
 
 use crate::circuit::graph::{FunctionPort, ValueKey};
 use crate::middle_end::string_interner::TunnelSymbol;
-use crate::middle_end::wire::{Wire, WireRangeMap, minmax};
+use crate::middle_end::wire::{Wire, WireRangeMap};
 use crate::middle_end::Coord;
 
 
@@ -146,9 +146,9 @@ impl WireSet {
         
         split_groups
     }
-    /// Add a wire to the graph, connecting points p and q.
-    /// A `new_vk` callback needs to be provided in case edge pq is disconnected 
-    /// from the rest of the graph and needs a new key.
+    /// Add a wire to the graph.
+    /// A `new_vk` callback needs to be provided in case the wire is not
+    /// connected to the rest of the graph and needs a new key.
     /// 
     /// This function may add additional wires (e.g., if a connection would result in an intersection)
     /// or subsume wires which already exist (e.g., to extend a wire).
@@ -157,9 +157,7 @@ impl WireSet {
     /// Otherwise, this function returns data needed to merge two groups of wires
     /// with different [`ValueKey`]s (if applicable).
     #[must_use]
-    pub fn add_wire(&mut self, p: Coord, q: Coord, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
-        let w = Wire::from_endpoints(p, q)?;
-
+    pub fn add_wire(&mut self, w: Wire, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         // If horizontal or vertical, these two points can be connected.
         let [p, q] = w.endpoints();
         let pk = self.find_key(p);
@@ -295,7 +293,7 @@ impl WireSet {
         Some(key)
     }
 
-    /// Removes the wire from the graph between p and q.
+    /// Removes the wire from the graph.
     /// 
     /// Note that this function only removes wires that are directly connected by joints
     /// in the circuit.
@@ -303,13 +301,10 @@ impl WireSet {
     /// If this function returns None, the wire does not exist & could not be removed.
     /// Otherwise, this function returns data needed to split a [`ValueKey`] (if applicable).
     #[must_use]
-    pub fn remove_wire(&mut self, p: Coord, q: Coord) -> Option<RemoveWireResult> {
-        let [p, q] = minmax(p, q);
+    pub fn remove_wire(&mut self, w: Wire) -> Option<RemoveWireResult> {
+        let [p, q] = w.endpoints();
         
         // Remove from wire graph & map:
-        let w = Wire::from_endpoints(p, q)?;
-        let mut deleted_keys = HashSet::new();
-        
         let (removed, added) = self.ranges.remove_wire(w);
         // No activity occurred, so no need to continue:
         if removed.is_empty() && added.is_empty() {
@@ -323,6 +318,8 @@ impl WireSet {
                 .expect("Added wire should have corresponding key");
             self.graph.add_edge(l.into(), r.into(), k);
         }
+
+        let mut deleted_keys = HashSet::new();
         for w in removed {
             let [l, r] = w.endpoints();
 
@@ -456,6 +453,8 @@ mod tests {
         assert_eq!(actual, expected, "nodes in graph should match");
     }
     fn assert_graph_edges<const N: usize>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(Coord, Coord)>); N]) {
+        use crate::middle_end::wire::minmax;
+        
         let expected_edgemap = HashMap::from(all_edges);
         
         let mut edgelist: Vec<_> = graph.all_edges().collect();
@@ -477,6 +476,10 @@ mod tests {
             assert_eq!(actual_edges, expected_edges, "edges for key {key:?} should match")
         }
     }
+    fn w(p: Coord, q: Coord) -> Wire {
+        Wire::from_endpoints(p, q)
+            .expect("points should be 1D")
+    }
 
     /// Assert edges of the graph are exactly the specified edge list.
     #[test]
@@ -487,12 +490,12 @@ mod tests {
         let nodes @ [n00, n01, n11, n12, n02] = [(0, 0), (0, 4), (4, 4), (4, 10), (0, 10)];
 
         // Add nodes:
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
@@ -503,14 +506,12 @@ mod tests {
     }
 
     #[test]
-    fn wireset_add_fail() {
+    fn wireset_add_duplicate() {
         let mut keygen = keygen();
         let mut ws = WireSet::default();
 
-        assert!(matches!(ws.add_wire((0, 0), (0, 1), &mut keygen), Some(AddWireResult::NoJoin(_))));
-        assert!(ws.add_wire((0, 0), (0, 0), &mut keygen).is_none()); // zero wire
-        assert!(ws.add_wire((0, 0), (0, 1), &mut keygen).is_none()); // same wire
-        assert!(ws.add_wire((0, 0), (1, 2), &mut keygen).is_none()); // diagonal wire
+        assert!(matches!(ws.add_wire(w((0, 0), (0, 1)), &mut keygen), Some(AddWireResult::NoJoin(_))));
+        assert!(ws.add_wire(w((0, 0), (0, 1)), &mut keygen).is_none()); // same wire
     }
 
     #[test]
@@ -524,15 +525,15 @@ mod tests {
         ];
 
         // Add nodes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(AddWireResult::NoJoin(k0)));
         
-        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(n10, n11, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n10, n11), &mut keygen) else {
             panic!("Expected second wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(k1)));
+        assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(AddWireResult::NoJoin(k1)));
         
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
@@ -548,7 +549,7 @@ mod tests {
         assert_range_map(&ws.ranges, edges);
 
         // Join ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(n01, n11, &mut keygen) else {
+        let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(w(n01, n11), &mut keygen) else {
             panic!("Expected join")
         };
         assert!(ffpt == n01 || ffpt == n11);
@@ -580,11 +581,11 @@ mod tests {
         ];
 
         // Add nodes (1) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n01, n02, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n01, n02), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n02, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n00, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n02, n03), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n00, n01), &mut keygen), Some(AddWireResult::NoJoin(key)));
         
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n03]);
@@ -595,9 +596,9 @@ mod tests {
         assert_range_map(&ws.ranges, [(n00, n03)]);
 
         // Add nodes (2) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        assert_eq!(ws.add_wire(n13, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n03, n04, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n04, n05, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n13, n03), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n03, n04), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n04, n05), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n03, n13, n05]);
@@ -616,13 +617,13 @@ mod tests {
             (1, 1), (3, 1), (5, 1), (7, 1)
         ];
 
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n02, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n02), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n01, n03, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n03), &mut keygen), Some(AddWireResult::NoJoin(key)));
         // Nothing added:
-        assert!(ws.add_wire(n00, n03, &mut keygen).is_none());
-        assert!(ws.add_wire(n00, n02, &mut keygen).is_none());
+        assert!(ws.add_wire(w(n00, n03), &mut keygen).is_none());
+        assert!(ws.add_wire(w(n00, n02), &mut keygen).is_none());
         
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n03]);
@@ -645,10 +646,10 @@ mod tests {
         ];
 
         // Add nodes (1) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n02, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n02), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n01, n02, n11]);
@@ -671,10 +672,10 @@ mod tests {
         ];
 
         // Add nodes (1) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n01, n11, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n01, n11), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n00, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n00, n02), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n01, n02, n11]);
@@ -730,18 +731,18 @@ mod tests {
         let [n00, n01, n11, n12, n02] = [(0, 0), (0, 4), (4, 4), (4, 10), (0, 10)];
 
         // Add nodes:
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Remove nodes:
-        assert_remove(ws.remove_wire(n01, n02), [], []);
-        assert_remove(ws.remove_wire(n11, n12), [], []);
-        assert_remove(ws.remove_wire(n01, n11), [], []);
-        assert_remove(ws.remove_wire(n00, n01), [key], []);
+        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        assert_remove(ws.remove_wire(w(n11, n12)), [], []);
+        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
+        assert_remove(ws.remove_wire(w(n00, n01)), [key], []);
 
         // Check corre0ct construction
         assert_graph_nodes(&ws.graph, []);
@@ -755,11 +756,11 @@ mod tests {
         let mut ws = WireSet::default();
 
         let [n0, n1, n2] = [(0, 1), (0, 2), (0, 3)];
-        let Some(AddWireResult::NoJoin(k)) = ws.add_wire(n0, n1, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k)) = ws.add_wire(w(n0, n1), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
 
-        assert_remove(ws.remove_wire(n0, n2), [k], []);
+        assert_remove(ws.remove_wire(w(n0, n2)), [k], []);
     }
 
     #[test]
@@ -770,13 +771,13 @@ mod tests {
         let [n0, n1, n2, n3, n4, n5] = [
             (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)
         ];
-        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(n1, n2, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n1, n2), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        let Some(AddWireResult::NoJoin(k2)) = ws.add_wire(n3, n4, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k2)) = ws.add_wire(w(n3, n4), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        assert_remove(ws.remove_wire(n0, n5), [k1, k2], []);
+        assert_remove(ws.remove_wire(w(n0, n5)), [k1, k2], []);
     }
 
     #[test]
@@ -784,13 +785,12 @@ mod tests {
         let mut keygen = keygen();
         let mut ws = WireSet::default();
 
-        assert_eq!(ws.remove_wire((0, 0), (0, 1)), None); // Empty
+        assert_eq!(ws.remove_wire(w((0, 0), (0, 1))), None); // Empty
 
-        let Some(AddWireResult::NoJoin(_)) = ws.add_wire((0, 1), (0, 2), &mut keygen) else {
+        let Some(AddWireResult::NoJoin(_)) = ws.add_wire(w((0, 1), (0, 2)), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        assert_eq!(ws.remove_wire((0, 5), (0, 9)), None); // Does not exist
-        assert_eq!(ws.remove_wire((0, 1), (3, 3)), None); // Diagonal
+        assert_eq!(ws.remove_wire(w((0, 5), (0, 9))), None); // Does not exist
     }
 
     #[test]
@@ -804,17 +804,17 @@ mod tests {
         ];
 
         // Add nodes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(k0)));
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(k0)));
-        assert_eq!(ws.add_wire(n10, n11, &mut keygen), Some(AddWireResult::NoJoin(k0)));
-        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n10, n11), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(AddWireResult::NoJoin(k0)));
         
         // Remove nodes
         assert_remove(
-            ws.remove_wire(n01, n11),
+            ws.remove_wire(w(n01, n11)),
             [],
             [(k0, vec![HashSet::from([n00, n01, n02]), HashSet::from([n10, n11, n12])])]
         );
@@ -840,14 +840,14 @@ mod tests {
         ];
 
         // Add nodes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n01, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(AddWireResult::NoJoin(key)));
         
         // Remove nodes
-        assert_remove(ws.remove_wire(n01, n11), [], []);
+        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
 
         // Check wire set constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n02]);
@@ -867,11 +867,11 @@ mod tests {
         ];
 
         // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n03, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n03), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
         assert_remove(
-            ws.remove_wire(n01, n02),
+            ws.remove_wire(w(n01, n02)),
             [],
             [(key, vec![HashSet::from([n00, n01]), HashSet::from([n02, n03])])]
         );
@@ -895,18 +895,18 @@ mod tests {
             ];
 
         // Add nodes:
-        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(n00, n01, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(key)) = ws.add_wire(w(n00, n01), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins")
         };
-        assert_eq!(ws.add_wire(n01, n11, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n11, n10, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n10, n00, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n11, n12, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n12, n02, &mut keygen), Some(AddWireResult::NoJoin(key)));
-        assert_eq!(ws.add_wire(n02, n01, &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n11, n10), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n10, n00), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n12, n02), &mut keygen), Some(AddWireResult::NoJoin(key)));
+        assert_eq!(ws.add_wire(w(n02, n01), &mut keygen), Some(AddWireResult::NoJoin(key)));
 
         // Remove nodes:
-        assert_remove(ws.remove_wire(n01, n11), [], []);
+        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
     }
 
     #[test]
@@ -919,15 +919,15 @@ mod tests {
         ];
 
         // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(n00, n02, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n00, n02), &mut keygen) else {
             panic!("Expected first wire add to be successful and require no joins");
         };
-        let Some(AddWireResult::NoJoin(k2)) = ws.add_wire(n03, n05, &mut keygen) else {
+        let Some(AddWireResult::NoJoin(k2)) = ws.add_wire(w(n03, n05), &mut keygen) else {
             panic!("Expected second wire add to be successful and require no joins");
         };
         assert_ne!(k1, k2);
         
-        assert_remove(ws.remove_wire(n01, n04), [], []);
+        assert_remove(ws.remove_wire(w(n01, n04)), [], []);
 
         // Check wire set constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n01, n04, n05]);
