@@ -1,4 +1,4 @@
-use crate::func;
+use crate::engine::func;
 use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// A subcircuit component.

@@ -1,7 +1,7 @@
 use crate::bitarr;
 use crate::bitarray::{BitArray, BitState};
-use crate::circuit::CircuitGraphMap;
-use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
+use crate::engine::CircuitGraphMap;
+use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// A register component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]

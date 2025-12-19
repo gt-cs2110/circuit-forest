@@ -1,6 +1,6 @@
 use slotmap::new_key_type;
 
-use crate::circuit::graph::FunctionKey;
+use crate::engine::FunctionKey;
 
 new_key_type! {
     /// Key for UI components that are not linked to an engine function.

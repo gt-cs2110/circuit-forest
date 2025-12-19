@@ -10,8 +10,8 @@
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
 use crate::bitarray::{BitArray, BitState};
-use crate::circuit::CircuitGraphMap;
-use crate::circuit::state::InnerFunctionState;
+use crate::engine::CircuitGraphMap;
+use crate::engine::state::InnerFunctionState;
 
 use enum_dispatch::enum_dispatch;
 pub use gates::*;
@@ -160,7 +160,7 @@ impl Sensitivity {
     /// 
     /// ```
     /// use circuitsim_engine::bitarray::bitarr;
-    /// use circuitsim_engine::func::Sensitivity;
+    /// use circuitsim_engine::engine::func::Sensitivity;
     /// 
     /// let lo = bitarr![0];
     /// let hi = bitarr![1];
@@ -182,7 +182,7 @@ impl Sensitivity {
     /// 
     /// ```
     /// use circuitsim_engine::bitarray::bitarr;
-    /// use circuitsim_engine::func::Sensitivity;
+    /// use circuitsim_engine::engine::func::Sensitivity;
     /// 
     /// let lo = bitarr![0];
     /// let hi = bitarr![1];

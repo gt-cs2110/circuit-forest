@@ -1,6 +1,6 @@
 use crate::bitarray::BitArray;
-use crate::circuit::CircuitGraphMap;
-use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
+use crate::engine::CircuitGraphMap;
+use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -142,8 +142,10 @@ impl Component for Splitter {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitarray::BitState;
+    use crate::engine::func::floating_ports;
+
     use super::*;
-    use crate::{bitarray::{BitArray, BitState}, func::floating_ports};
 
     #[test]
     fn test_splitter_split() {

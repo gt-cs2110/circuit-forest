@@ -1,7 +1,6 @@
 use slotmap::{SecondaryMap, SlotMap};
 
-use crate::circuit::graph::{FunctionKey, FunctionPort};
-use crate::circuit::{CircuitForest, CircuitKey};
+use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
@@ -65,7 +64,7 @@ pub enum ReprEditErr {
 }
 
 /// A mutable view of a middle-end circuit,
-/// which includes its engine component ([`crate::circuit::Circuit`])
+/// which includes its engine component ([`crate::engine::Circuit`])
 /// and its physical properties ([`CircuitArea`]).
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,

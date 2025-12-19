@@ -1,4 +1,5 @@
-use crate::{bitarr, func};
+use crate::engine::func;
+use crate::bitarr;
 use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.

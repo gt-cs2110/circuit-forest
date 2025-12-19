@@ -10,9 +10,8 @@ use std::ops::{Index, IndexMut};
 
 use slotmap::{SlotMap, new_key_type};
 
-use crate::circuit::CircuitGraphMap;
-use crate::func::{Component, ComponentFn, PortProperties};
-
+use crate::engine::CircuitGraphMap;
+use crate::engine::func::{Component, ComponentFn, PortProperties};
 
 new_key_type! {
     /// Key type for maps to values.
@@ -238,8 +237,9 @@ impl IndexMut<FunctionKey> for CircuitGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::{CircuitGraph, CircuitGraphMap, FunctionNode, FunctionPort};
-    use crate::func::{And, Not, ComponentFn};
+    use super::*;
+    use crate::engine::func::{And, Not, ComponentFn};
+
     #[test]
     fn test_join() {
         let mut graph = CircuitGraph::default();

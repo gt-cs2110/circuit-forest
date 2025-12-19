@@ -1,6 +1,6 @@
-use crate::circuit::state::{CircuitState, InnerFunctionState, PropagationState};
-use crate::circuit::{CircuitGraphMap, CircuitKey};
-use crate::func::{Component, ComponentFn, PortProperties, PortType, PortUpdate, RunContext};
+use crate::engine::state::{CircuitState, InnerFunctionState, PropagationState};
+use crate::engine::{CircuitGraphMap, CircuitKey};
+use crate::engine::func::{Component, ComponentFn, PortProperties, PortType, PortUpdate, RunContext};
 
 /// A subcircuit component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]

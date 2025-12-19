@@ -6,7 +6,7 @@ pub use wiring::*;
 pub use muxes::*;
 pub use misc::*;
 
-use crate::func::ComponentFn;
+use crate::engine::func::ComponentFn;
 use crate::middle_end::{AxisDelta, Coord, CoordDelta, MiddleCircuit};
 use enum_dispatch::enum_dispatch;
 

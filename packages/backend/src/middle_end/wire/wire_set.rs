@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use petgraph::prelude::UnGraphMap;
 use petgraph::visit::{Bfs, Walker};
 
-use crate::circuit::graph::{FunctionPort, ValueKey};
+use crate::engine::{FunctionPort, ValueKey};
 use crate::middle_end::string_interner::TunnelSymbol;
 use crate::middle_end::wire::{Wire, WireRangeMap};
 use crate::middle_end::Coord;

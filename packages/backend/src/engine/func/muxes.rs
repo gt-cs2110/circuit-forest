@@ -1,6 +1,6 @@
 
-use crate::circuit::CircuitGraphMap;
-use crate::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
+use crate::engine::CircuitGraphMap;
+use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarr, bitarray::BitArray};
 
 /// Minimum number of selector bits for Mux/Demux/Decoder.
@@ -147,8 +147,9 @@ impl Component for Decoder {
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::func::floating_ports;
+
     use super::*;
-    use crate::{bitarray::BitArray, func::floating_ports};
 
     #[test]
     fn test_mux() {

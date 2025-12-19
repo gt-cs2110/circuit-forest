@@ -1,14 +1,11 @@
 //! Circuit module used to create circuits/sub-circuits.
 
-pub mod state;
-pub mod graph;
-
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::bitarray::BitArray;
-use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionNode, FunctionPort, ValueKey};
-use crate::circuit::state::{CircuitState, PropagationState};
-use crate::func::ComponentFn;
+use crate::engine::graph::{CircuitGraph, FunctionKey, FunctionNode, FunctionPort, ValueKey};
+use crate::engine::state::{CircuitState, PropagationState};
+use crate::engine::func::{self, ComponentFn};
 
 new_key_type! {
     /// Key type for maps to circuits.
@@ -16,7 +13,7 @@ new_key_type! {
 }
 
 /// The map of circuit graphs.
-pub type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
+pub(super) type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// A group of circuits.
 /// 
 /// This encompasses multiple circuits.
@@ -25,7 +22,7 @@ pub type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// as a subcircuit.
 #[derive(Default, Debug)]
 pub struct CircuitForest {
-    graphs: SlotMap<CircuitKey, CircuitGraph>,
+    graphs: CircuitGraphMap,
     states: SecondaryMap<CircuitKey, CircuitState>,
 }
 impl CircuitForest {
@@ -62,19 +59,6 @@ impl CircuitForest {
     }
 }
 
-/// Issues which can occur to a value node.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum ValueIssue {
-    /// Represents a collision of bit values (short circuit).
-    ShortCircuit,
-
-    /// Represents a connection with two different bitsizes.
-    MismatchedBitsizes,
-
-    /// Represents a connection whose value is unstable.
-    OscillationDetected
-}
-
 /// A mutable view of a circuit, 
 /// which includes its structure ([`CircuitGraph`]) and its state ([`CircuitState`]).
 #[derive(Debug)]
@@ -95,7 +79,7 @@ impl Circuit<'_> {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_input(&mut self, arr: BitArray) -> (FunctionKey, ValueKey) {
-        let func = self.add_function_node(crate::func::Input::new(arr.len()));
+        let func = self.add_function_node(func::Input::new(arr.len()));
         let value = self.add_value_node();
         
         let result = self.replace_port(FunctionPort { gate: func, index: 0 }, arr);
@@ -109,7 +93,7 @@ impl Circuit<'_> {
     /// Adds an input function node and value node (a wire connecting from the input)
     /// using the passed value.
     pub fn add_output(&mut self, bitsize: u8) -> (FunctionKey, ValueKey) {
-        let func = self.add_function_node(crate::func::Output::new(bitsize));
+        let func = self.add_function_node(func::Output::new(bitsize));
         let value = self.add_value_node();
 
         self.connect_all(func, &[value]);
@@ -215,7 +199,7 @@ impl Circuit<'_> {
     /// 
     /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
     /// 
-    /// [`ValueNode`]: crate::circuit::graph::ValueNode
+    /// [`ValueNode`]: super::graph::ValueNode
     pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         circ!(self.states)[key].replace_value(val)?;
 
@@ -276,10 +260,9 @@ impl Circuit<'_> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::bitarr;
-    use crate::circuit::CircuitForest;
-    use crate::circuit::graph::FunctionPort;
-    use crate::func::{And, Not, ComponentFn};
+    use func::{And, Not, ComponentFn};
 
     #[test]
     fn test_replace() {

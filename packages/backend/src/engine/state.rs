@@ -12,8 +12,21 @@ use slotmap::{SecondaryMap, SparseSecondaryMap};
 use slotmap::secondary::Entry;
 
 use crate::bitarray::{bitarr, BitArray};
-use crate::circuit::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueIssue, ValueKey};
-use crate::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
+use crate::engine::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueKey};
+use crate::engine::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
+
+/// Issues which can occur to a value node.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum ValueIssue {
+    /// Represents a collision of bit values (short circuit).
+    ShortCircuit,
+
+    /// Represents a connection with two different bitsizes.
+    MismatchedBitsizes,
+
+    /// Represents a connection whose value is unstable.
+    OscillationDetected
+}
 
 /// The state of the circuit.
 /// 
@@ -67,19 +80,19 @@ impl CircuitState {
 
     /// Gets the bit value of a [`ValueNode`].
     /// 
-    /// [`ValueNode`]: crate::circuit::graph::ValueNode
+    /// [`ValueNode`]: super::graph::ValueNode
     pub fn get_node_value(&self, k: ValueKey) -> BitArray {
         self[k].get_value()
     }
     /// Gets the bit value of a port attached to a [`FunctionNode`].
     /// 
-    /// [`FunctionNode`]: crate::circuit::graph::FunctionNode
+    /// [`FunctionNode`]: super::graph::FunctionNode
     pub fn get_port_value(&self, p: FunctionPort) -> BitArray {
         self[p.gate].get_port(p.index)
     }
     /// Gets all issues associated with a given [`ValueNode`].
     /// 
-    /// [`ValueNode`]: crate::circuit::graph::ValueNode
+    /// [`ValueNode`]: super::graph::ValueNode
     pub fn get_issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
         &self[k].issues
     }
@@ -249,7 +262,7 @@ impl IndexMut<FunctionKey> for CircuitState {
 
 /// The state of a [`ValueNode`].
 /// 
-/// [`ValueNode`]: crate::circuit::graph::ValueNode
+/// [`ValueNode`]: super::graph::ValueNode
 #[derive(Debug)]
 pub struct ValueState {
     pub(crate) value: BitArray,
@@ -312,7 +325,7 @@ pub enum InnerFunctionState {
 
 /// The state of a [`FunctionNode`].
 /// 
-/// [`FunctionNode`]: crate::circuit::graph::FunctionNode
+/// [`FunctionNode`]: super::graph::FunctionNode
 #[derive(Debug)]
 pub struct FunctionState {
     pub(crate) ports: Vec<BitArray>,

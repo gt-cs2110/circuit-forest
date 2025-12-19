@@ -1,4 +1,4 @@
-use crate::func::{self, ComponentFn};
+use crate::engine::func::{self, ComponentFn};
 use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 const PLEXER_WIDTH: u32 = 3;
