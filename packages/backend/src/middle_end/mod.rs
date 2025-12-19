@@ -256,7 +256,7 @@ impl MiddleCircuit<'_> {
     }
 
     /// Updates the engine.
-    pub fn run(&mut self) {
+    pub fn propagate(&mut self) {
         circ!(self.engine).propagate();
     }
 }
