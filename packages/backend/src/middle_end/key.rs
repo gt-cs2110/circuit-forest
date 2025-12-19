@@ -6,7 +6,9 @@ new_key_type! {
     /// Key for UI components that are not linked to an engine function.
     pub struct UIKey;
 }
+
 /// Key for all middle-end components.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum ComponentKey {
     /// Component associated with engine function node.
     Function(FunctionKey),

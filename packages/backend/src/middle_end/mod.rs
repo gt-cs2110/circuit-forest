@@ -115,11 +115,10 @@ impl MiddleCircuit<'_> {
             
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
-                let port = FunctionPort { gate, index };
-                let value = circ!(self.physical).wires.add_port(c, port, || circ!(self.engine).add_value_node())
+                let value = circ!(self.physical).wires.add_port(c, gate.into(), index, || circ!(self.engine).add_value_node())
                     .expect("Expected port addition to be successful");
                 
-                circ!(self.engine).connect_one(value, port);
+                circ!(self.engine).connect_one(value, FunctionPort { gate, index });
             }
 
             circ!(self.physical).components.insert(gate, props);
@@ -139,54 +138,37 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
-    /// Removes a function component from the circuit.
+    /// Removes a component from the circuit.
     /// 
     /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
-    fn remove_function_component(&mut self, gate: FunctionKey) -> Result<(), ReprEditErr> {
-        let props = circ!(self.physical).components.remove(gate)
-            .ok_or(ReprEditErr::CannotRemoveComponent)?;
+    pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
+        let props = match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.remove(gate),
+            ComponentKey::UI(key) => circ!(self.physical).ui_components.remove(key),
+        }.ok_or(ReprEditErr::CannotRemoveComponent)?;
 
-        let result = circ!(self.engine).remove_function_node(gate);
-        debug_assert!(result, "Engine removal should succeed");
-        
-        // Remove all ports from wire set:
-        for index in 0..props.ports.len() {
-            let port = FunctionPort { gate, index };
-
-            let result = circ!(self.physical).wires.remove_port(port)
-                .expect("Component removal should succeed");
-            self.handle_remove(result);
+        // Remove from engine (if applicable):
+        if let ComponentKey::Function(gate) = key {
+            let result = circ!(self.engine).remove_function_node(gate);
+            debug_assert!(result, "Engine removal should succeed");
         }
-
-        Ok(())
-    }
-
-    /// Removes a UI component from the circuit.
-    /// 
-    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
-    fn remove_ui_component(&mut self, key: UIKey) -> Result<(), ReprEditErr> {
-        let props = circ!(self.physical).ui_components.remove(key)
-            .ok_or(ReprEditErr::CannotRemoveComponent)?;
-
+        
+        // Handle tunnels specially:
         if matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
             let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                 .expect("Tunnel should have an assigned symbol");
             circ!(self.physical).wires.remove_tunnel(props.origin, sym)
                 .expect("Tunnel removal should succeed");
         } else {
-            todo!("Non-tunnel UI component removal of wires");
+            // Remove all ports from wire set:
+            for index in 0..props.ports.len() {
+                let result = circ!(self.physical).wires.remove_port(key, index)
+                    .expect("Component removal should succeed");
+                self.handle_remove(result);
+            }
         }
 
         Ok(())
-    }
-    /// Removes a component from the circuit.
-    /// 
-    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
-    pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
-        match key {
-            ComponentKey::Function(k) => self.remove_function_component(k),
-            ComponentKey::UI(k) => self.remove_ui_component(k),
-        }
     }
 
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
@@ -242,7 +224,7 @@ impl MiddleCircuit<'_> {
                 // Get all ports associated with coordinates:
                 let ports: Vec<_> = group.iter()
                     .filter_map(|&k| match k {
-                        wire::MeshKey::Port(p) => Some(p),
+                        wire::MeshKey::Port(ComponentKey::Function(gate), index) => Some(FunctionPort { gate, index }),
                         _ => None
                     })
                     .collect();

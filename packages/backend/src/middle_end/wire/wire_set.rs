@@ -6,7 +6,7 @@ use petgraph::visit::{Bfs, Walker};
 use crate::engine::{FunctionPort, ValueKey};
 use crate::middle_end::string_interner::TunnelSymbol;
 use crate::middle_end::wire::{Wire, WireRangeMap};
-use crate::middle_end::Coord;
+use crate::middle_end::{ComponentKey, Coord};
 
 
 /// A key to attach onto the wire set graph.
@@ -14,8 +14,8 @@ use crate::middle_end::Coord;
 pub enum MeshKey {
     /// A joint (a wire point)
     WireJoint(Coord),
-    /// A function port.
-    Port(FunctionPort),
+    /// A component port (excluding tunnels).
+    Port(ComponentKey, usize),
     /// A tunnel.
     Tunnel(TunnelSymbol),
 
@@ -27,7 +27,14 @@ impl From<Coord> for MeshKey {
 }
 impl From<FunctionPort> for MeshKey {
     fn from(value: FunctionPort) -> Self {
-        Self::Port(value)
+        let FunctionPort { gate, index } = value;
+        Self::Port(gate.into(), index)
+    }
+}
+impl From<(ComponentKey, usize)> for MeshKey {
+    fn from(value: (ComponentKey, usize)) -> Self {
+        let (component, index) = value;
+        Self::Port(component, index)
     }
 }
 impl From<TunnelSymbol> for MeshKey {
@@ -264,16 +271,19 @@ impl WireSet {
     /// 
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists or if port already exists as a node).
-    pub fn add_port(&mut self, c: Coord, port: FunctionPort, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
-        if self.graph.contains_node(port.into()) {
+    pub fn add_port(&mut self, c: Coord, key: ComponentKey, index: usize, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
+        let c = c.into();
+        let port = (key, index).into();
+
+        if self.graph.contains_node(port) {
             return None;
         }
-        if self.graph.contains_edge(c.into(), port.into()) {
+        if self.graph.contains_edge(c, port) {
             return None;
         }
 
         let key = self.find_key(c).unwrap_or_else(new_vk);
-        self.graph.add_edge(c.into(), port.into(), key);
+        self.graph.add_edge(c, port, key);
         Some(key)
     }
 
@@ -358,17 +368,17 @@ impl WireSet {
     /// If this function returns `Some(_)`, it returns a `RemoveWireResult`,
     ///     which may include a key to delete.
     #[must_use]
-    pub fn remove_port(&mut self, port: FunctionPort) -> Option<RemoveWireResult> {
-        let p = port.into();
-        let mut it = self.graph.neighbors(p);
+    pub fn remove_port(&mut self, key: ComponentKey, index: usize) -> Option<RemoveWireResult> {
+        let port = (key, index).into();
+        let mut it = self.graph.neighbors(port);
         
         let MeshKey::WireJoint(c) = it.next()? else {
             return None;
         };
         debug_assert!(it.next().is_none(), "Function port should only have 1 neighbor");
 
-        let k = self.graph_remove_edge(p, c.into())?;
-        debug_assert!(!self.graph.contains_node(port.into()), "Function port should no longer exist");
+        let k = self.graph_remove_edge(port, c.into())?;
+        debug_assert!(!self.graph.contains_node(port), "Function port should no longer exist");
 
         // If coord node no longer exists, 
         // then no wires are connected (and therefore this key cannot exist).
