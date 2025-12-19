@@ -1,5 +1,5 @@
 use crate::func::{self, ComponentFn};
-use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 const PLEXER_WIDTH: u32 = 3;
 
@@ -17,7 +17,7 @@ impl PhysicalComponent for Mux {
         "Mux"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_inputs = self.sim.n_inputs() as u32;
         
         let width = PLEXER_WIDTH;
@@ -47,7 +47,7 @@ impl PhysicalComponent for Demux {
         "Demux"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_outputs = self.sim.n_outputs() as u32;
         
         let width = PLEXER_WIDTH;
@@ -77,7 +77,7 @@ impl PhysicalComponent for Decoder {
         "Decoder"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_outputs = self.sim.n_outputs() as u32;
         
         let width = PLEXER_WIDTH;

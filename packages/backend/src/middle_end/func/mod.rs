@@ -7,8 +7,41 @@ pub use muxes::*;
 pub use misc::*;
 
 use crate::func::ComponentFn;
-use crate::middle_end::{AxisDelta, Coord, CoordDelta};
+use crate::middle_end::{AxisDelta, Coord, CoordDelta, MiddleCircuit};
 use enum_dispatch::enum_dispatch;
+
+/// Orientation.
+/// 
+/// This is typically used to describe the orientation of a component which can be rotated.
+#[expect(missing_docs)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy)]
+pub enum Orientation {
+    North, South, East, West
+}
+/// The handedness (or mirror orientation).
+/// 
+/// This is typically used to describe the mirror orientation of a component
+/// which is chiral (not mirror-symmetric).
+/// 
+/// This typically affects the position of the main port
+/// (e.g., selector port for muxes and decoders, or the join port of a splitter).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy)]
+pub enum Handedness {
+    /// Right-handedness. The main port will either be top or left.
+    TopLeft,
+    /// Left-handedness. The main port will either be down or right.
+    DownRight
+}
+
+// TODO: Utilize above structs for various physical component definitions
+
+/// Context available during [`PhysicalComponent`] initialization.
+pub struct PhysicalInitContext<'a> {
+    /// The circuit this component is being placed in.
+    pub circuit: &'a MiddleCircuit<'a>,
+    /// The label of the component.
+    pub label: &'a str
+}
 
 /// A component that can be added in a [middle-end circuit](`crate::middle_end::MiddleRepr`).
 #[enum_dispatch]
@@ -28,7 +61,7 @@ pub trait PhysicalComponent {
     /// These components are relative to the origin (0, 0),
     /// meaning that when placed, the locations are relative
     /// to the point the component is placed.
-    fn bounds(&self) -> RelativeComponentBounds;
+    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds;
 }
 
 /// Struct containing the physical bounds of a component and location of ports.

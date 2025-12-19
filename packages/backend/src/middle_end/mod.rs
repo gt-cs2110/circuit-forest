@@ -2,7 +2,7 @@ use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::circuit::graph::{FunctionKey, FunctionPort};
 use crate::circuit::{CircuitForest, CircuitKey};
-use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum};
+use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -101,8 +101,9 @@ impl MiddleCircuit<'_> {
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
+        let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
-        let ComponentBounds { bounds, ports } = physical.bounds().into_absolute(pos)
+        let ComponentBounds { bounds, ports } = physical.bounds(ctx).into_absolute(pos)
             .ok_or(ReprEditErr::CannotAddComponent)?;
         let props = ComponentProps {
             label: label.to_string(),

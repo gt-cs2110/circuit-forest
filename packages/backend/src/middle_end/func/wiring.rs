@@ -1,5 +1,5 @@
 use crate::{bitarr, func};
-use crate::middle_end::func::{PhysicalComponent, RelativeComponentBounds};
+use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -15,7 +15,7 @@ impl PhysicalComponent for Input {
         "Input"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
     }
 }
@@ -34,7 +34,7 @@ impl PhysicalComponent for Output {
         "Output"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
     }
 }
@@ -53,7 +53,7 @@ impl PhysicalComponent for Constant {
         "Constant"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_from_bitsize(self.sim.get_value().len())
     }
 }
@@ -70,7 +70,7 @@ impl PhysicalComponent for Power {
         "Power"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(2, 3, (1, 3))
     }
 }
@@ -87,7 +87,7 @@ impl PhysicalComponent for Ground {
         "Ground"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(2, 3, (1, 0))
     }
 }
@@ -106,7 +106,7 @@ impl PhysicalComponent for Splitter {
         "Splitter"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let bitsize = i32::from(self.sim.get_bitsize());
         let ports = [(0, 0)].into_iter()
             .chain((1..=bitsize).map(|i| (2 * i, 2)));
@@ -127,7 +127,7 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
     }
 }
@@ -144,7 +144,7 @@ impl PhysicalComponent for Probe {
         "Probe"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port(2, 2)
     }
 }

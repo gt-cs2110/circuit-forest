@@ -1,5 +1,5 @@
 use crate::func;
-use crate::middle_end::func::{PhysicalComponent, RelativeComponentBounds};
+use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// A subcircuit component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -15,7 +15,7 @@ impl PhysicalComponent for Subcircuit {
         "Subcircuit"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         todo!()
     }
 }
@@ -32,7 +32,7 @@ impl PhysicalComponent for Text {
         "Text"
     }
 
-    fn bounds(&self) -> RelativeComponentBounds {
+    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         todo!()
     }
 }
