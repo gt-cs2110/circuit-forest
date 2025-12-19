@@ -1,4 +1,4 @@
-use slotmap::{SecondaryMap, SlotMap, new_key_type};
+use slotmap::{SecondaryMap, SlotMap};
 
 use crate::circuit::graph::{FunctionKey, FunctionPort};
 use crate::circuit::{CircuitForest, CircuitKey};
@@ -6,23 +6,20 @@ use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalCompon
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
+mod key;
 mod serialize;
 mod string_interner;
 pub mod wire;
 pub mod func;
 
 pub use string_interner::TunnelSymbol;
+pub use key::{ComponentKey, UIKey};
 
 type Axis = u32;
 type Coord = (Axis, Axis);
 
 type AxisDelta = i32;
 type CoordDelta = (AxisDelta, AxisDelta);
-
-new_key_type! {
-    /// Key for UI components that are not part of component.
-    pub struct UIKey;
-}
 
 /// A group of middle circuits.
 #[derive(Debug, Default)]
@@ -133,7 +130,7 @@ impl MiddleCircuit<'_> {
             // Add tunnel to wire set:
             if !props.label.is_empty() && matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
-                let sym = circ!(self.physical).tunnel_interner.intern(&props.label);
+                let sym = circ!(self.physical).tunnel_interner.add_ref(&props.label);
                 circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
             }
 
@@ -143,10 +140,10 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
-    /// Removes a component from the circuit.
+    /// Removes a function component from the circuit.
     /// 
     /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
-    pub fn remove_component(&mut self, gate: FunctionKey) -> Result<(), ReprEditErr> {
+    fn remove_function_component(&mut self, gate: FunctionKey) -> Result<(), ReprEditErr> {
         let props = circ!(self.physical).components.remove(gate)
             .ok_or(ReprEditErr::CannotRemoveComponent)?;
 
@@ -158,11 +155,39 @@ impl MiddleCircuit<'_> {
             let port = FunctionPort { gate, index };
 
             let result = circ!(self.physical).wires.remove_port(port)
-                .expect("Wire removal should succeed");
+                .expect("Component removal should succeed");
             self.handle_remove(result);
         }
 
         Ok(())
+    }
+
+    /// Removes a UI component from the circuit.
+    /// 
+    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
+    fn remove_ui_component(&mut self, key: UIKey) -> Result<(), ReprEditErr> {
+        let props = circ!(self.physical).ui_components.remove(key)
+            .ok_or(ReprEditErr::CannotRemoveComponent)?;
+
+        if matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
+            let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
+                .expect("Tunnel should have an assigned symbol");
+            circ!(self.physical).wires.remove_tunnel(props.origin, sym)
+                .expect("Tunnel removal should succeed");
+        } else {
+            todo!("Non-tunnel UI component removal of wires");
+        }
+
+        Ok(())
+    }
+    /// Removes a component from the circuit.
+    /// 
+    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
+    pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
+        match key {
+            ComponentKey::Function(k) => self.remove_function_component(k),
+            ComponentKey::UI(k) => self.remove_ui_component(k),
+        }
     }
 
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
