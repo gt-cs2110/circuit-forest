@@ -112,7 +112,9 @@ impl CircuitState {
     /// (until the circuit stabilizes or an oscillation occurs).
     /// 
     /// This takes the graph to determine the relationship between nodes.
-    pub fn propagate(&mut self, graphs: &CircuitGraphMap, key: CircuitKey) {
+    /// 
+    /// This returns whether the propagation completes in full and does not result in oscillation.
+    pub fn propagate(&mut self, graphs: &CircuitGraphMap, key: CircuitKey) -> bool {
         let graph = &graphs[key];
         const RUN_ITER_LIMIT: usize = 10_000;
 
@@ -122,7 +124,7 @@ impl CircuitState {
                 for key in self.transient.values.keys() {
                     self.values[key].add_issue(ValueIssue::OscillationDetected);
                 }
-                break;
+                return false;
             }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
             for (node, PropagationState { recalculate }) in std::mem::take(&mut self.transient.values) {
@@ -216,6 +218,7 @@ impl CircuitState {
 
             iteration += 1;
         }
+        true
     }
 }
 

@@ -90,10 +90,12 @@ mod tests {
         assert_eq!(circuit.get_output(out), bitarr![Z]);
 
         assert!(circuit.set_input(inp, bitarr![0]).is_ok());
+        circuit.propagate();
         assert_eq!(circuit.state().get_node_value(wire), bitarr![0]);
         assert_eq!(circuit.get_output(out), bitarr![0]);
 
         assert!(circuit.set_input(inp, bitarr![1]).is_ok());
+        circuit.propagate();
         assert_eq!(circuit.state().get_node_value(wire), bitarr![1]);
         assert_eq!(circuit.get_output(out), bitarr![1]);
     }
@@ -116,6 +118,7 @@ mod tests {
 
         circuit.connect_all(gates[0], &[wires[0], wires[1]]);
         circuit.connect_all(gates[1], &[wires[1], wires[0]]);
+        circuit.propagate();
 
         assert!(circuit.replace_value(wires[0], BitArray::from(a)).is_ok());
         circuit.run(&[wires[0]]);

@@ -168,7 +168,6 @@ impl Circuit<'_> {
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         circ!(self.graphs).connect(wire, port);
         circ!(self.states).add_transient(wire, true);
-        self.propagate();
     }
 
     /// Clear the function node of connections and connect all of the passed ports to it.
@@ -180,26 +179,31 @@ impl Circuit<'_> {
                 circ!(self.graphs).connect(wire, FunctionPort { gate, index });
                 circ!(self.states).add_transient(wire, true);
             });
-        self.propagate();
     }
 
     /// Propagates an update through the circuit
     /// (until the circuit stabilizes or an oscillation occurs).
     /// 
     /// The provided `input` argument indicates which value nodes were updated.
-    pub fn run(&mut self, inputs: &[ValueKey]) {
-        circ!(self.states).transient.values = inputs.iter().copied()
-            .map(|k| (k, PropagationState { recalculate: false }))
-            .collect();
-        circ!(self.states).transient.functions.clear();
-
-        self.propagate();
+    /// 
+    /// This returns whether the run completes in full and does not result in oscillation.
+    pub fn run(&mut self, inputs: &[ValueKey]) -> bool {
+        // Propagate once to resolve any unresolved transient state.
+        // If successful, then repropagate updates from the specified inputs.
+        self.propagate() && {
+            circ!(self.states).transient.values = inputs.iter().copied()
+                .map(|k| (k, PropagationState { recalculate: false }))
+                .collect();
+            self.propagate()
+        }
     }
 
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).
-    pub fn propagate(&mut self) {
-        circ!(self.states).propagate(&self.forest.graphs, self.key);
+    /// 
+    /// This returns whether the propagation completes in full and does not result in oscillation.
+    pub fn propagate(&mut self) -> bool {
+        circ!(self.states).propagate(&self.forest.graphs, self.key)
     }
 
     /// Gets current circuit state.
@@ -257,10 +261,7 @@ impl Circuit<'_> {
     #[allow(dead_code)]
     pub(crate) fn set_input(&mut self, key: FunctionKey, value: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         assert!(matches!(circ!(self.graphs).functions[key].func, ComponentFn::Input(_)), "Expected input function");
-        
         self.replace_port(FunctionPort { gate: key, index: 0 }, value)?;
-        // FIXME: Have alternative which doesn't propagate
-        self.propagate();
 
         Ok(())
     }
