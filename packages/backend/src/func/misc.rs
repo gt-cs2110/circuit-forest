@@ -1,4 +1,4 @@
-use crate::circuit::state::{CircuitState, InnerFunctionState, TriggerState};
+use crate::circuit::state::{CircuitState, InnerFunctionState, PropagationState};
 use crate::circuit::{CircuitGraphMap, CircuitKey};
 use crate::func::{Component, ComponentFn, PortProperties, PortType, PortUpdate, RunContext};
 
@@ -48,7 +48,7 @@ impl Component for Subcircuit {
             // FIXME: This is equivalent to [`Circuit::replace_port`].
             let result = fst.replace_port(0, value);
             if let Some(wire) = ctx.graphs[self.key].functions[fk].links[0] {
-                st.transient.triggers.insert(wire, TriggerState { recalculate: true });
+                st.transient.values.insert(wire, PropagationState { recalculate: true });
             }
             assert!(result.is_ok(), "Port update have the correct bitsize");
 

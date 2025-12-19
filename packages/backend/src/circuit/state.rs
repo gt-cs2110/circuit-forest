@@ -56,9 +56,9 @@ impl CircuitState {
         }
 
         // All values tentatively need to be recomputed
-        state.transient.triggers.extend({
+        state.transient.values.extend({
             graph.values.keys()
-                .map(|k| (k, TriggerState { recalculate: true }))
+                .map(|k| (k, PropagationState { recalculate: true }))
         });
         state.propagate(graphs, key);
 
@@ -89,7 +89,7 @@ impl CircuitState {
     /// should NOT be called on this ValueKey.
     pub fn remove_node_value(&mut self, k: ValueKey) {
         self.values.remove(k);
-        self.transient.triggers.remove(k);
+        self.transient.values.remove(k);
     }
     /// Removes a value node from CircuitState.
     /// 
@@ -97,7 +97,7 @@ impl CircuitState {
     /// should NOT be called on this ValueKey.
     pub fn remove_function_value(&mut self, k: FunctionKey) {
         self.functions.remove(k);
-        self.transient.frontier.remove(&k);
+        self.transient.functions.remove(&k);
     }
     /// Signals that an update should be propagated from a value node.
     /// 
@@ -105,7 +105,7 @@ impl CircuitState {
     /// before propagating.
     /// 
     pub(crate) fn add_transient(&mut self, k: ValueKey, recalculate: bool) {
-        self.transient.triggers.insert(k, TriggerState { recalculate });
+        self.transient.values.insert(k, PropagationState { recalculate });
     }
 
     /// Pushes transient state, propagating any updates through
@@ -119,13 +119,13 @@ impl CircuitState {
         let mut iteration = 0;
         while !self.transient.resolved() {
             if iteration > RUN_ITER_LIMIT {
-                for key in self.transient.triggers.keys() {
+                for key in self.transient.values.keys() {
                     self.values[key].add_issue(ValueIssue::OscillationDetected);
                 }
                 break;
             }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, TriggerState { recalculate }) in std::mem::take(&mut self.transient.triggers) {
+            for (node, PropagationState { recalculate }) in std::mem::take(&mut self.transient.values) {
                 // Remove issues b/c of update
                 self[node].clear_issues();
                 
@@ -167,7 +167,7 @@ impl CircuitState {
                 }
 
                 if propagate_update {
-                    self.transient.frontier.extend({
+                    self.transient.functions.extend({
                         graph[node].links.iter()
                             .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_input())
                             .map(|p| p.gate)
@@ -175,7 +175,7 @@ impl CircuitState {
                 }
             }
             // 2. For all functions to waken, apply function and save triggers for next cycle
-            for gate_idx in std::mem::take(&mut self.transient.frontier) {
+            for gate_idx in std::mem::take(&mut self.transient.functions) {
                 let gate = &graph[gate_idx];
                 let state = &mut self.functions[gate_idx];
 
@@ -208,7 +208,7 @@ impl CircuitState {
                         self[gate_idx].ports[index] = value;
                         
                         if let Some(sink_idx) = graph[gate_idx].links[index] {
-                            self.transient.triggers.insert(sink_idx, TriggerState { recalculate: true });
+                            self.add_transient(sink_idx, true);
                         }
                     }
                 }
@@ -346,16 +346,21 @@ impl FunctionState {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct TriggerState {
+pub(crate) struct PropagationState {
+    /// If true, then this value should be recalculated before being propagated.
     pub(crate) recalculate: bool
 }
+
+/// Temporary propagation state.
 #[derive(Default, Debug)]
 pub(crate) struct TransientState {
-    pub(crate) triggers: SparseSecondaryMap<ValueKey, TriggerState>,
-    pub(crate) frontier: HashSet<FunctionKey>
+    /// Determines which values need to be propagated.
+    pub(crate) values: SparseSecondaryMap<ValueKey, PropagationState>,
+    /// Determines which functions need to recalculate their state and propagate their outputs.
+    pub(crate) functions: HashSet<FunctionKey>
 }
 impl TransientState {
     pub fn resolved(&self) -> bool {
-        self.triggers.is_empty() && self.frontier.is_empty()
+        self.values.is_empty() && self.functions.is_empty()
     }
 }

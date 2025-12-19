@@ -7,7 +7,7 @@ use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::bitarray::BitArray;
 use crate::circuit::graph::{CircuitGraph, FunctionKey, FunctionNode, FunctionPort, ValueKey};
-use crate::circuit::state::{CircuitState, TriggerState};
+use crate::circuit::state::{CircuitState, PropagationState};
 use crate::func::ComponentFn;
 
 new_key_type! {
@@ -136,7 +136,7 @@ impl Circuit<'_> {
     pub fn remove_value_node(&mut self, value: ValueKey) -> bool {
         if let Some(vnode) = circ!(self.graphs).values.get(value) {
             // Update transient state:
-            circ!(self.states).transient.frontier.extend(vnode.links.iter().map(|l| l.gate));
+            circ!(self.states).transient.functions.extend(vnode.links.iter().map(|l| l.gate));
             
             circ!(self.graphs).remove_value(value);
             circ!(self.states).remove_node_value(value);
@@ -188,10 +188,10 @@ impl Circuit<'_> {
     /// 
     /// The provided `input` argument indicates which value nodes were updated.
     pub fn run(&mut self, inputs: &[ValueKey]) {
-        circ!(self.states).transient.triggers = inputs.iter().copied()
-            .map(|k| (k, TriggerState { recalculate: false }))
+        circ!(self.states).transient.values = inputs.iter().copied()
+            .map(|k| (k, PropagationState { recalculate: false }))
             .collect();
-        circ!(self.states).transient.frontier.clear();
+        circ!(self.states).transient.functions.clear();
 
         self.propagate();
     }
@@ -321,7 +321,7 @@ mod tests {
         assert!(circuit.state().values.contains_key(value1));
 
         // Verify transients
-        assert!(circuit.state().transient.triggers.contains_key(value1));
+        assert!(circuit.state().transient.values.contains_key(value1));
     }
     #[test]
     fn test_split_off() {
@@ -350,7 +350,7 @@ mod tests {
         assert!(circuit.state().values.contains_key(value2));
 
         // Verify transients
-        assert!(circuit.state().transient.triggers.contains_key(value1));
-        assert!(circuit.state().transient.triggers.contains_key(value2));
+        assert!(circuit.state().transient.values.contains_key(value1));
+        assert!(circuit.state().transient.values.contains_key(value2));
     }
 }
