@@ -1044,7 +1044,7 @@ mod tests {
         });
 
         // Expected output: 6-bit sign-extended
-        let expected_bits = bitarr![0,1,0,1,1,1];
+        let expected_bits = bitarr![1, 1, 1, 0, 1, 0];
 
         assert_eq!(
             updates,

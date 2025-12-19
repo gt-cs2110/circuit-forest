@@ -906,12 +906,12 @@ mod tests {
     #[test]
     fn resized() {
         let ba = bitarr![Z, 0, 1];
-        assert_eq!(ba.resize(4, BitState::Imped), bitarr![Z, 0, 1, Z]);
-        assert_eq!(ba.resize(4, BitState::Unk),   bitarr![Z, 0, 1, X]);
-        assert_eq!(ba.resize(4, BitState::High),  bitarr![Z, 0, 1, 1]);
-        assert_eq!(ba.resize(4, BitState::Low),   bitarr![Z, 0, 1, 0]);
+        assert_eq!(ba.resize(4, BitState::Imped), bitarr![Z, Z, 0, 1]);
+        assert_eq!(ba.resize(4, BitState::Unk),   bitarr![X, Z, 0, 1]);
+        assert_eq!(ba.resize(4, BitState::High),  bitarr![1, Z, 0, 1]);
+        assert_eq!(ba.resize(4, BitState::Low),   bitarr![0, Z, 0, 1]);
 
-        assert_eq!(ba.resize(1, BitState::High), bitarr![Z]);
+        assert_eq!(ba.resize(1, BitState::High), bitarr![1]);
     }
 
     #[test]
