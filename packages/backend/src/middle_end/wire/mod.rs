@@ -1,3 +1,9 @@
+//! Wire and positional map for components on a middle-end circuit.
+//! 
+//! The main types are:
+//! - [`Wire`]: The basic representation of a wire.
+//! - [`WireSet`]: The set of wires & component ports in the circuit.
+
 mod range_map;
 mod wire_set;
 
@@ -5,7 +11,7 @@ use std::num::NonZero;
 
 use crate::middle_end::{Axis, Coord};
 
-pub use range_map::WireRangeMap;
+use range_map::WireRangeMap;
 pub use wire_set::{WireSet, AddWireResult, RemoveWireResult, MeshKey};
 
 fn minmax<T: Ord>(p: T, q: T) -> [T; 2] {
@@ -63,6 +69,15 @@ impl Wire {
             true  => [(self.x, self.y), (self.x + self.length.get(), self.y)],
             false => [(self.x, self.y), (self.x, self.y + self.length.get())],
         }
+    }
+
+    /// The length of the wire.
+    pub fn length(&self) -> u32 {
+        self.length.get()
+    }
+    /// Whether the wire is horizontal or vertical.
+    pub fn horizontal(&self) -> bool {
+        self.horizontal
     }
 
     /// Detect whether this wire includes the specified coordinate.

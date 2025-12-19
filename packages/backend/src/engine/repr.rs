@@ -1,4 +1,5 @@
-//! Circuit module used to create circuits/sub-circuits.
+//! Module which combines the graph & state structs
+//! to create the main engine circuit representation.
 
 use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
@@ -230,7 +231,9 @@ impl Circuit<'_> {
             circ!(self.states).add_transient(main, true);
         }
     }
-    /// Splits a node into two and returns the newly created node.
+    /// Splits a value node into two.
+    /// This separates all the `off_ports` into a new value node
+    /// and returns a key to the newly created node.
     pub fn split(&mut self, key: ValueKey, off_ports: &[FunctionPort]) -> ValueKey {
         let new_value = circ!(self.graphs).split_off(key, off_ports);
 

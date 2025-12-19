@@ -1,3 +1,5 @@
+//! Logic components for middle-end circuits.
+
 mod wiring;
 mod muxes;
 mod misc;

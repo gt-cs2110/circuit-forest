@@ -1,3 +1,10 @@
+//! The middle end, which keeps track of component types, properties, and positions.
+//! 
+//! The main structs are:
+//! - [`MiddleRepr`]: The main middle-end circuit representation.
+//! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
+//! 
+
 use slotmap::{SecondaryMap, SlotMap};
 
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
@@ -30,7 +37,7 @@ pub struct MiddleRepr {
 /// A circuit's middle-end components and wires,
 ///   including their locations and properties.
 #[derive(Debug, Default)]
-pub struct CircuitArea {
+struct CircuitArea {
     components: SecondaryMap<FunctionKey, ComponentProps>,
     ui_components: SlotMap<UIKey, ComponentProps>,
     wires: WireSet,
@@ -39,7 +46,7 @@ pub struct CircuitArea {
 
 /// Properties of a middle-end component.
 #[derive(Debug)]
-pub struct ComponentProps {
+struct ComponentProps {
     label: String,
 
     // Position
@@ -65,7 +72,7 @@ pub enum ReprEditErr {
 
 /// A mutable view of a middle-end circuit,
 /// which includes its engine component ([`crate::engine::Circuit`])
-/// and its physical properties ([`CircuitArea`]).
+/// and its physical properties.
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,
     key: CircuitKey

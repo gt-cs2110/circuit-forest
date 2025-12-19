@@ -81,9 +81,9 @@ pub struct WireSet {
     ranges: WireRangeMap,
 }
 impl WireSet {
-    /// Find the ValueKey corresponding to a coordinate.
+    /// Find the [`ValueKey`] corresponding to a coordinate.
     /// 
-    /// This is None if the coordinate is not connected to a wire.
+    /// This is `None` if the coordinate is not connected to a wire.
     pub fn find_key<K: Into<MeshKey>>(&self, key: K) -> Option<ValueKey> {
         self.graph.edges(key.into())
             .next()

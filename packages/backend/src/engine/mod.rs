@@ -1,3 +1,13 @@
+//! Underlying simulation/computation engine.
+//! 
+//! The main structs are:
+//! - [`CircuitForest`]: A set of circuits (incl. structure and state) which can reference each other.
+//!   This is the main engine circuit representation.
+//! - [`Circuit`]: A mutable view of one of the circuits.
+//! 
+//! There are also submodules for specific parts of the engine circuit
+//! (structure, state, and allowed components).
+
 pub mod func;
 pub mod graph;
 pub mod state;
