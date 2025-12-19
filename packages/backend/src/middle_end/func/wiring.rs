@@ -92,23 +92,6 @@ impl PhysicalComponent for Ground {
     }
 }
 
-/// A tunnel.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Tunnel;
-impl PhysicalComponent for Tunnel {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        None
-    }
-
-    fn component_name(&self) ->  &'static str {
-        "Tunnel"
-    }
-
-    fn bounds(&self) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
-    }
-}
-
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
@@ -129,6 +112,40 @@ impl PhysicalComponent for Splitter {
             .chain((1..=bitsize).map(|i| (2 * i, 2)));
 
         RelativeComponentBounds::new((bitsize * 2, 2), ports)
+    }
+}
+
+/// A tunnel.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Tunnel;
+impl PhysicalComponent for Tunnel {
+    fn engine_component(&self) -> Option<func::ComponentFn> {
+        None
+    }
+
+    fn component_name(&self) ->  &'static str {
+        "Tunnel"
+    }
+
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
+    }
+}
+
+/// A probe.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Probe;
+impl PhysicalComponent for Probe {
+    fn engine_component(&self) -> Option<func::ComponentFn> {
+        None
+    }
+
+    fn component_name(&self) ->  &'static str {
+        "Probe"
+    }
+
+    fn bounds(&self) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port(2, 2)
     }
 }
 

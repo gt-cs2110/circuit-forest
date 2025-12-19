@@ -1,8 +1,10 @@
 mod wiring;
 mod muxes;
+mod misc;
 
 pub use wiring::*;
 pub use muxes::*;
+pub use misc::*;
 
 use crate::func::ComponentFn;
 use crate::middle_end::{AxisDelta, Coord, CoordDelta};
@@ -120,7 +122,9 @@ impl AbsoluteComponentBounds {
 #[allow(missing_docs)]
 pub enum PhysicalComponentEnum {
     // Wiring
-    Input, Output, Constant, Splitter, Power, Ground, Tunnel,
+    Input, Output, Constant, Splitter, Power, Ground, Tunnel, Probe,
     // Muxes
-    Mux, Demux, Decoder
+    Mux, Demux, Decoder,
+    // Misc
+    Text, Subcircuit,
 }
