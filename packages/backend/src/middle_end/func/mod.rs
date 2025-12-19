@@ -8,22 +8,46 @@ use crate::func::ComponentFn;
 use crate::middle_end::{AxisDelta, Coord, CoordDelta};
 use enum_dispatch::enum_dispatch;
 
+/// A component that can be added in a [middle-end circuit](`crate::middle_end::MiddleRepr`).
 #[enum_dispatch]
 pub trait PhysicalComponent {
+    /// A component which represents the engine logic of this component.
+    /// 
+    /// This can be `None` if this component has no engine logic.
     fn engine_component(&self) -> Option<ComponentFn>;
+
+    /// The name of the component.
     fn component_name(&self) -> &'static str;
+
+    /// The area taken by this component, which includes:
+    ///   - The bounds of the component
+    ///   - The position of the ports
+    /// 
+    /// These components are relative to the origin (0, 0),
+    /// meaning that when placed, the locations are relative
+    /// to the point the component is placed.
     fn bounds(&self) -> RelativeComponentBounds;
 }
 
+/// Struct containing the physical bounds of a component and location of ports.
+/// 
+/// This has two forms:
+/// - [`RelativeComponentBounds`]: Bounds with coordinates relative to the origin (0, 0)
+/// - [`AbsoluteComponentBounds`]: Bounds with physical coordinates
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ComponentBounds<C> {
+    /// The bounds (the left-bottom-most point and the right-top-most point)
     pub bounds: [C; 2],
+    /// The location of each port.
     pub ports: Vec<C>
 }
+/// Component bounds with positions relative to the origin (0, 0).
 pub type RelativeComponentBounds = ComponentBounds<CoordDelta>;
+/// Component bounds with absolute physical positions.
 pub type AbsoluteComponentBounds = ComponentBounds<Coord>;
 
 impl<C: Default> ComponentBounds<C> {
+    /// Creates a new [`ComponentBounds`].
     pub fn new(dims: C, ports: impl IntoIterator<Item = C>) -> Self {
         Self {
             bounds: [Default::default(), dims],

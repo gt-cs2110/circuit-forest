@@ -66,14 +66,20 @@ impl CircuitState {
     }
 
     /// Gets the bit value of a [`ValueNode`].
+    /// 
+    /// [`ValueNode`]: crate::circuit::graph::ValueNode
     pub fn get_node_value(&self, k: ValueKey) -> BitArray {
         self[k].get_value()
     }
     /// Gets the bit value of a port attached to a [`FunctionNode`].
+    /// 
+    /// [`FunctionNode`]: crate::circuit::graph::FunctionNode
     pub fn get_port_value(&self, p: FunctionPort) -> BitArray {
         self[p.gate].get_port(p.index)
     }
     /// Gets all issues associated with a given [`ValueNode`].
+    /// 
+    /// [`ValueNode`]: crate::circuit::graph::ValueNode
     pub fn get_issues(&self, k: ValueKey) -> &HashSet<ValueIssue> {
         &self[k].issues
     }

@@ -11,6 +11,8 @@ mod string_interner;
 pub mod wire;
 pub mod func;
 
+pub use string_interner::TunnelSymbol;
+
 type Axis = u32;
 type Coord = (Axis, Axis);
 
@@ -22,20 +24,24 @@ new_key_type! {
     pub struct UIKey;
 }
 
+/// A group of middle circuits.
 #[derive(Debug, Default)]
 pub struct MiddleRepr {
     engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>
 }
 
+/// A circuit's middle-end components and wires,
+///   including their locations and properties.
 #[derive(Debug, Default)]
 pub struct CircuitArea {
     components: SecondaryMap<FunctionKey, ComponentProps>,
-    wires: WireSet,
     ui_components: SlotMap<UIKey, ComponentProps>,
+    wires: WireSet,
     tunnel_interner: StringInterner
 }
 
+/// Properties of a middle-end component.
 #[derive(Debug)]
 pub struct ComponentProps {
     label: String,
@@ -49,12 +55,21 @@ pub struct ComponentProps {
     extra: PhysicalComponentEnum
 }
 
+/// Errors which can occur when editing a middle-end circuit.
 pub enum ReprEditErr {
+    /// Adding a component fails.
     CannotAddComponent,
+    /// Removing a component fails.
     CannotRemoveComponent,
+    /// Adding a wire fails.
     CannotAddWire,
+    /// Removing a wire fails.
     CannotRemoveWire,
 }
+
+/// A mutable view of a middle-end circuit,
+/// which includes its engine component ([`crate::circuit::Circuit`])
+/// and its physical properties ([`CircuitArea`]).
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,
     key: CircuitKey
@@ -81,6 +96,10 @@ macro_rules! circ {
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
+    /// Adds a component to the circuit.
+    /// 
+    /// This takes the component, label, and location for the component.
+    /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
         let physical = physical.into();
         let ComponentBounds { bounds, ports } = physical.bounds().into_absolute(pos)
@@ -122,6 +141,10 @@ impl MiddleCircuit<'_> {
         
         Ok(())
     }
+
+    /// Removes a component from the circuit.
+    /// 
+    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
     pub fn remove_component(&mut self, gate: FunctionKey) -> Result<(), ReprEditErr> {
         let props = circ!(self.physical).components.remove(gate)
             .ok_or(ReprEditErr::CannotRemoveComponent)?;
@@ -135,18 +158,20 @@ impl MiddleCircuit<'_> {
 
             let result = circ!(self.physical).wires.remove_port(port)
                 .expect("Wire removal should succeed");
-            self.resolve_remove(result);
+            self.handle_remove(result);
         }
 
         Ok(())
     }
 
+    /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
+    /// 
+    /// This function handles multiple cases:
+    /// - If the new wire endpoint connects to the middle of a wire, the wire creates a junction on the intersecting wire.
+    /// - If the new wire overlaps multiple wires, then only wires for the gaps will be created.
+    /// 
+    /// This raises an error if no wire is added.
     pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
-        // Add to wire set if it doesn't overlap with anything.
-        // Cases:
-        // - If a wire endpoint connects to the middle of a wire, the wire needs to be split (ValueKey is same)
-        // - If a wire connects two wire meshes (e.g., two ValueKey sets), the two ValueKeys must be merged
-        
         let result = circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node())
             .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
@@ -159,17 +184,22 @@ impl MiddleCircuit<'_> {
 
         Ok(())
     }
+
+    /// Removes a wire to the circuit and updates the circuit
+    /// to properly accommodate the removed wire.
+    /// 
+    /// This function removes any wires that overlap the wire range defined by the argument.
     pub fn remove_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
         let result = circ!(self.physical).wires.remove_wire(w)
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
-        self.resolve_remove(result);
+        self.handle_remove(result);
 
         Ok(())
     }
 
     /// Updates engine to corresponding `RemoveWireResult`.
-    fn resolve_remove(&mut self, result: wire::RemoveWireResult) {
+    fn handle_remove(&mut self, result: wire::RemoveWireResult) {
         let wire::RemoveWireResult { deleted_keys, split_groups } = result;
 
         for k in deleted_keys {
@@ -199,6 +229,7 @@ impl MiddleCircuit<'_> {
         }
     }
 
+    /// Updates the engine.
     pub fn run(&mut self) {
         circ!(self.engine).propagate();
     }

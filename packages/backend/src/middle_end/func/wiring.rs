@@ -92,6 +92,7 @@ impl PhysicalComponent for Ground {
     }
 }
 
+/// A tunnel.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Tunnel;
 impl PhysicalComponent for Tunnel {

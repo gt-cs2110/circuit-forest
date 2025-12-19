@@ -75,7 +75,8 @@ pub enum ValueIssue {
     OscillationDetected
 }
 
-/// A circuit, which includes its structure ([`CircuitGraph`]) and its state ([`CircuitState`]).
+/// A mutable view of a circuit, 
+/// which includes its structure ([`CircuitGraph`]) and its state ([`CircuitState`]).
 #[derive(Debug)]
 pub struct Circuit<'a> {
     forest: &'a mut CircuitForest,
@@ -209,6 +210,8 @@ impl Circuit<'_> {
     /// Updates a [`ValueNode`] with the specified value, raising `Err` if bitsizes do not match.
     /// 
     /// If [`Circuit::propagate`] is called after this, the update propagates to the rest of the graph.
+    /// 
+    /// [`ValueNode`]: crate::circuit::graph::ValueNode
     pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         circ!(self.states)[key].replace_value(val)?;
 

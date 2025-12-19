@@ -5,7 +5,7 @@
 pub mod bitarray;
 pub mod func;
 pub mod circuit;
-mod middle_end;
+pub mod middle_end;
 
 #[cfg(test)]
 mod tests {

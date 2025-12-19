@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
+/// An identifier for a tunnel. 
+/// All tunnels with the same name have the same associated `TunnelSymbol`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct TunnelSymbol(usize);
+
 #[derive(Default)]
 pub struct StringInterner {
     map: HashMap<String, TunnelSymbol>,
