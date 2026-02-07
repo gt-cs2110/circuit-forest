@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+
+hoistWorkspacePackages: false
+
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - esbuild
+  - vue-demi
