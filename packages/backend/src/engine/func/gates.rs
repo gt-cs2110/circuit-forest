@@ -24,6 +24,14 @@ macro_rules! gates {
                         n_inputs: n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS)
                     }
                 }
+                /// Returns the number of inputs for this gate.
+                pub fn n_inputs(&self) -> u8 {
+                    self.n_inputs
+                }
+                /// Returns the bitsize for this gate.
+                pub fn bitsize(&self) -> u8 {
+                    self.bitsize
+                }
             }
             impl Component for $Id {
                 fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
@@ -46,6 +54,7 @@ macro_rules! gates {
                     }]
                 }
             }
+            
         )*
     }
 }

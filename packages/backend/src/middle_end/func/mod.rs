@@ -3,10 +3,12 @@
 mod wiring;
 mod muxes;
 mod misc;
+mod gates;
 
 pub use wiring::*;
 pub use muxes::*;
 pub use misc::*;
+pub use gates::*;
 
 use crate::engine::func::ComponentFn;
 use crate::middle_end::{AxisDelta, Coord, CoordDelta, MiddleCircuit};
@@ -91,6 +93,13 @@ impl<C: Default> ComponentBounds<C> {
             ports: Vec::from_iter(ports)
         }
     }
+    /// Creates a new [`ComponentBounds`] from the given bounds and ports.
+    pub fn from_bounds(bounds: [C; 2], ports: impl IntoIterator<Item = C>) -> Self {
+        Self {
+            bounds,
+            ports: Vec::from_iter(ports)
+        }
+    }
 }
 impl RelativeComponentBounds {
     fn single_port(width: u32, height: u32) -> Self {
@@ -162,4 +171,6 @@ pub enum PhysicalComponentEnum {
     Mux, Demux, Decoder,
     // Misc
     Text, Subcircuit,
+    //Gates
+    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
 }

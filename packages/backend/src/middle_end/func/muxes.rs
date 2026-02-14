@@ -18,14 +18,14 @@ impl PhysicalComponent for Mux {
     }
 
     fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let n_inputs = self.sim.n_inputs() as u32;
+        let n_inputs: u32 = self.sim.n_inputs() as u32;
         
         let width = PLEXER_WIDTH;
         let height = 2 * n_inputs;
 
         let origin = (width, n_inputs);
         let ports = [(1, height)].into_iter() // selector
-            .chain((0..n_inputs).map(|i| (0, 1 + i))) // inputs
+            .chain((0..n_inputs).map(|i| (0, 1 + 2*i))) // inputs
             .chain([origin]); //output
 
         AbsoluteComponentBounds::new((width, height), ports)
@@ -56,7 +56,7 @@ impl PhysicalComponent for Demux {
         let origin = (0, n_outputs);
         let ports = [(1, height)].into_iter() // selector
             .chain([origin]) // input
-            .chain((0..n_outputs).map(|i| (width, 1 + i))); // outputs
+            .chain((0..n_outputs).map(|i| (width, 1 + 2*i))); // outputs
 
         AbsoluteComponentBounds::new((width, height), ports)
             .into_relative(origin)
@@ -85,7 +85,7 @@ impl PhysicalComponent for Decoder {
 
         let origin = (1, height);
         let ports = [origin].into_iter() // selector
-            .chain((0..n_outputs).map(|i| (width, 1 + i))); // outputs
+            .chain((0..n_outputs).map(|i| (width, 1 + 2*i))); // outputs
 
         AbsoluteComponentBounds::new((width, height), ports)
             .into_relative(origin)
