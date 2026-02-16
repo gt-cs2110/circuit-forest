@@ -127,6 +127,41 @@ impl RelativeComponentBounds {
             _ => Self::single_port(2 * MAX_COLS, height)
         }
     }
+    /// Orients the component bounds and ports according to the given orientation, assuming original orientation is East
+    pub fn orient(self, orientation: Orientation)-> Self {
+        //All Bounds are originaly defined in East Orientation, and with TopLeft Handedness (i.e. the main port is on the left)
+        fn rot((x,y):CoordDelta, orientation: Orientation) -> CoordDelta {
+            match orientation {
+                Orientation::North => (-y, x),//to transform from east to north, we rotate 90 degrees counterclockwise, which transforms (x, y) to (-y, x)
+                Orientation::East => (x, y),
+                Orientation::South => (y, -x),
+                Orientation::West => (-x, -y)
+            }
+        }
+        // Rotate bounds and ports, then get use the max and min of the corners to get new bounds:
+        let Self { bounds: [b0, b1], ports } = self;
+        //The bounds are defined by min and max x and y coordinates, but when we rotate, the new bounds may be defined by different corners, so we need to consider all corners to get the new bounds
+        let corners = [
+            b0,
+            (b0.0, b1.1),
+            (b1.0, b0.1),
+            b1,
+        ].map(|c| rot(c, orientation));
+
+        let min_x = corners.iter().map(|c| c.0).min().unwrap();
+        let max_x = corners.iter().map(|c| c.0).max().unwrap();
+        let min_y = corners.iter().map(|c| c.1).min().unwrap();
+        let max_y = corners.iter().map(|c| c.1).max().unwrap();
+        let bounds = [(min_x, min_y), (max_x, max_y)];
+
+
+        // Rotate ports:
+        let ports = ports.into_iter()
+            .map(|p| rot(p, orientation))
+            
+            .collect(); 
+        Self { bounds, ports }
+    }
 
     pub(crate) fn into_absolute(self, origin: Coord) -> Option<AbsoluteComponentBounds> {
         fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
@@ -173,4 +208,63 @@ pub enum PhysicalComponentEnum {
     Text, Subcircuit,
     //Gates
     And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rotate((x, y): CoordDelta, orientation: Orientation) -> CoordDelta {
+        match orientation {
+            Orientation::North => (-y, x),
+            Orientation::East => (x, y),
+            Orientation::South => (y, -x),
+            Orientation::West => (-x, -y),
+        }
+    }
+
+    #[test]
+    fn orient_ports_by_direction() {
+        let base = RelativeComponentBounds::from_bounds([(-2, -1), (3, 4)], [(-1, 0), (0, 1), (2, -3)]);
+
+        let east = base.clone().orient(Orientation::East);
+        assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
+
+        let north = base.clone().orient(Orientation::North);
+        assert_eq!(north.ports, vec![(0, -1), (-1, 0), (3, 2)]);
+
+        let south = base.clone().orient(Orientation::South);
+        assert_eq!(south.ports, vec![(0, 1), (1, 0), (-3, -2)]);
+
+        let west = base.orient(Orientation::West);
+        assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
+    }
+
+    #[test]
+    fn orient_bounds_accounts_for_all_corners() {
+        let base = RelativeComponentBounds::from_bounds([(-2, -1), (3, 4)], [(-1, 0)]);
+        let [b0, b1] = base.bounds;
+        let corners = [b0, (b0.0, b1.1), (b1.0, b0.1), b1];
+
+        for orientation in [
+            Orientation::North,
+            Orientation::East,
+            Orientation::South,
+            Orientation::West,
+        ] {
+            let oriented = base.clone().orient(orientation);
+            let [lo, hi] = oriented.bounds;
+
+            // Bounds should stay normalized.
+            assert!(lo.0 <= hi.0);
+            assert!(lo.1 <= hi.1);
+
+            // Every rotated corner must lie inside the oriented bounds.
+            for c in corners {
+                let r = rotate(c, orientation);
+                assert!(r.0 >= lo.0 && r.0 <= hi.0);
+                assert!(r.1 >= lo.1 && r.1 <= hi.1);
+            }
+        }
+    }
 }

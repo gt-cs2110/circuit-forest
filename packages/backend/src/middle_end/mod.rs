@@ -8,7 +8,7 @@
 use slotmap::{SecondaryMap, SlotMap};
 
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
-use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{ComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -53,6 +53,8 @@ struct ComponentProps {
     origin: Coord,
     bounds: [Coord; 2],
     ports: Vec<Coord>,
+    orientation: Orientation,
+    handedness:Handedness,
 
     // Extra props
     extra: PhysicalComponentEnum
@@ -85,7 +87,7 @@ impl MiddleRepr {
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
-    }
+    }   
 }
 
 /// Basic macro to pretend Circuit has the "graph" and "state" fields.
@@ -113,6 +115,8 @@ impl MiddleCircuit<'_> {
             origin: pos,
             bounds,
             ports,
+            orientation: Orientation::East,
+            handedness: Handedness::TopLeft,
             extra: physical,
         };
 
@@ -144,6 +148,7 @@ impl MiddleCircuit<'_> {
         
         Ok(())
     }
+
 
     /// Removes a component from the circuit.
     /// 
@@ -208,6 +213,69 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
         self.handle_remove(result);
+
+        Ok(())
+    }
+    /// Sets the orientation of a component, and updates the circuit to accommodate the new orientation.
+    pub fn set_component_orientation(&mut self, key: ComponentKey, orientation: Orientation) -> Result<(), ReprEditErr> {
+        //Extract component properties
+        let props = match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.get_mut(gate)
+                .ok_or(ReprEditErr::CannotRemoveComponent)?,
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get_mut(ui_key)
+                .ok_or(ReprEditErr::CannotRemoveComponent)?,
+        };
+        //extract properties that we will need to update:
+        let (label, origin, old_ports, physical, handedness) = (
+            props.label.clone(),
+            props.origin,
+            props.ports.clone(),
+            props.extra,
+            props.handedness,
+        );
+
+        // Get new bounds and ports: the extra property of props stores the physical component unaffected by orientation, so we can reuse it to get the new bounds and ports for the component with the new orientation.
+        let ComponentBounds { bounds, ports } = physical
+            .bounds(PhysicalInitContext { circuit: self, label: &label })
+            .orient(orientation)
+            .into_absolute(origin)
+            .ok_or(ReprEditErr::CannotAddComponent)?;
+
+        if !matches!(physical, PhysicalComponentEnum::Tunnel(_)) {
+            // Tunnel port is unaffected by orientation changes bc there is only one port, however for both ui and engine componets there are multiple ports whose positions are affected
+            for index in 0..old_ports.len() {
+                    let result = circ!(self.physical).wires.remove_port(key, index)
+                        .expect("Component removal should succeed");
+                    self.handle_remove(result);
+                }
+        } 
+            
+        
+        // Add new ports to wire set:
+        if let ComponentKey::Function(gate) = key {
+            for (index, &coord) in ports.iter().enumerate() {
+                let value = circ!(self.physical).wires.add_port(coord, key, index, || circ!(self.engine).add_value_node())
+                    .expect("Expected port addition to be successful");
+                circ!(self.engine).connect_one(value, FunctionPort { gate, index });
+            }
+        } 
+            // Update component properties:
+        match key {
+            ComponentKey::Function(gate) => {
+                let props = circ!(self.physical).components.get_mut(gate)
+                    .ok_or(ReprEditErr::CannotRemoveComponent)?;
+                props.bounds = bounds;
+                props.ports = ports;
+                props.orientation = orientation;
+            }
+            ComponentKey::UI(ui_key) => {
+                let props = circ!(self.physical).ui_components.get_mut(ui_key)
+                    .ok_or(ReprEditErr::CannotRemoveComponent)?;
+                props.bounds = bounds;
+                props.ports = ports;
+                props.orientation = orientation;
+            }
+        }
 
         Ok(())
     }
