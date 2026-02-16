@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    error::Error as StdError,
     fmt, fs,
     path::{Path, PathBuf},
 };
