@@ -1,15 +1,18 @@
+
 [package]
 edition = "2021"
-name = "circuitsim_core"
+name = "native"
 version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-circuitsim-backend = { path = "../backend" }
 napi = "3.0.0"
 napi-derive = "3.0.0"
+
+[dependencies.circuitsim-engine]
+path = "../backend"
 
 [build-dependencies]
 napi-build = "2"

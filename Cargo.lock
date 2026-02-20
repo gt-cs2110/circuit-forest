@@ -26,15 +26,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "circuitsim_core"
-version = "0.1.0"
-dependencies = [
- "napi",
- "napi-build",
- "napi-derive",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -294,6 +285,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eb602b84d7c1edae45e50bbf1374696548f36ae179dfa667f577e384bb90c2b"
 dependencies = [
  "libloading",
+]
+
+[[package]]
+name = "native"
+version = "0.1.0"
+dependencies = [
+ "circuitsim-engine",
+ "napi",
+ "napi-build",
+ "napi-derive",
 ]
 
 [[package]]
