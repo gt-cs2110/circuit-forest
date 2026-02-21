@@ -54,7 +54,7 @@ struct ComponentProps {
     bounds: [Coord; 2],
     ports: Vec<Coord>,
     orientation: Orientation,
-    handedness:Handedness,
+    handedness: Handedness,
 
     // Extra props
     extra: PhysicalComponentEnum
@@ -115,8 +115,8 @@ impl MiddleCircuit<'_> {
             origin: pos,
             bounds,
             ports,
-            orientation: Orientation::East,
-            handedness: Handedness::TopLeft,
+            orientation: Default::default(),
+            handedness: Default::default(),
             extra: physical,
         };
 
@@ -237,7 +237,7 @@ impl MiddleCircuit<'_> {
         // Get new bounds and ports: the extra property of props stores the physical component unaffected by orientation, so we can reuse it to get the new bounds and ports for the component with the new orientation.
         let ComponentBounds { bounds, ports } = physical
             .bounds(PhysicalInitContext { circuit: self, label: &label })
-            .orient(orientation)
+            .orient(orientation, handedness)
             .into_absolute(origin)
             .ok_or(ReprEditErr::CannotAddComponent)?;
 
