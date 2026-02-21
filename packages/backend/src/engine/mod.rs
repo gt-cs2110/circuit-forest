@@ -37,7 +37,7 @@ mod tests {
         let (_, b_in) = circuit.add_input(BitArray::from(b));
         let (out_g, out) = circuit.add_output(64);
         // Gates
-        let gate = circuit.add_function_node(func::Xor::new(64, 2));
+        let gate = circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 64, 2));
 
         circuit.connect_all(gate, &[a_in, b_in, out]);
         circuit.run(&[a_in, b_in]);
@@ -67,9 +67,9 @@ mod tests {
         let (out_g, out) = circuit.add_output(64);
         // Gates
         let gates = [
-            circuit.add_function_node(func::Xor::new(64, 2)),
-            circuit.add_function_node(func::Xor::new(64, 2)),
-            circuit.add_function_node(func::Xor::new(64, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 64, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 64, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 64, 2)),
         ];
 
         circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);
@@ -149,8 +149,8 @@ mod tests {
         let (out0_g, out0) = circuit.add_output(1);
         let (out1_g, out1) = circuit.add_output(1);
         let gates = [
-            circuit.add_function_node(func::Nand::new(1, 2)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
         ];
 
         circuit.connect_all(gates[0], &[inp, out1, out0]);
@@ -245,8 +245,8 @@ mod tests {
             circuit.add_output(1), // Q'
         ];
         let [rnand, snand] = [
-            circuit.add_function_node(func::Nand::new(1, 2)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
         ];
 
         // R = 1, S = 1
@@ -297,10 +297,10 @@ mod tests {
         // nodes
         let [dnot, dnand, dpnand, rnand, snand] = [
             circuit.add_function_node(func::Not::new(1)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
-            circuit.add_function_node(func::Nand::new(1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
         ];
 
         circuit.connect_all(dnot, &[din, dinp]);
@@ -342,7 +342,7 @@ mod tests {
             sub_circuit.add_input(bitarr![0]),
             sub_circuit.add_output(1),
         ];
-        let gate = sub_circuit.add_function_node(func::Nand::new(1, 2));
+        let gate = sub_circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2));
         sub_circuit.connect_all(gate, &[a, b, out]);
 
         // Using gates
@@ -395,8 +395,8 @@ mod tests {
                 rs_circuit.add_output(1), // Q'
             ];
             let [rnand, snand] = [
-                rs_circuit.add_function_node(func::Nand::new(1, 2)),
-                rs_circuit.add_function_node(func::Nand::new(1, 2)),
+                rs_circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+                rs_circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
             ];
             rs_circuit.connect_all(rnand, &[r, q, qp]);
             rs_circuit.connect_all(snand, &[s, qp, q]);
@@ -417,8 +417,8 @@ mod tests {
         // nodes
         let [dnot, dnand, dpnand, rs] = [
             d_circuit.add_function_node(func::Not::new(1)),
-            d_circuit.add_function_node(func::Nand::new(1, 2)),
-            d_circuit.add_function_node(func::Nand::new(1, 2)),
+            d_circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
+            d_circuit.add_function_node(func::Gate::new(func::GateKind::Nand, 1, 2)),
             d_circuit.add_function_node(func::Subcircuit::new(rs_key))
         ];
 
@@ -461,10 +461,10 @@ mod tests {
         let (out_g, out) = circuit.add_output(1);
         // Gates
         let gates = [
-            circuit.add_function_node(func::Xor::new(1, 2)),
-            circuit.add_function_node(func::Xor::new(1, 2)),
-            circuit.add_function_node(func::Xor::new(1, 2)),
-            circuit.add_function_node(func::Xor::new(1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 1, 2)),
+            circuit.add_function_node(func::Gate::new(func::GateKind::Xor, 1, 2)),
         ];
 
         circuit.connect_all(gates[0], &[a_in, b_in, ab_mid]);

@@ -228,7 +228,7 @@ pub enum PhysicalComponentEnum {
     // Misc
     Text, Subcircuit,
     //Gates
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
+    Gate, Not, TriState,
 }
 
 #[cfg(test)]
