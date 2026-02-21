@@ -22,6 +22,23 @@ use enum_dispatch::enum_dispatch;
 pub enum Orientation {
     North, South, East, West
 }
+/// Helper which rotates a coordinate around the origin to match the provided orientation.
+/// 
+/// By default, components are defined as having east orientation with top-left handedness.
+/// This function assumes this port is on an east-oriented component and
+/// rotates it to match what it should be on a component with specified `orientation`.
+fn rotate(c: CoordDelta, orientation: Orientation) -> CoordDelta {
+    let (x, y) = c;
+    match orientation {
+        // To transform east to north, we rotate 90 deg CCW,
+        // which transforms (x, y) to (-y, x)
+        Orientation::North => (-y, x),
+        Orientation::East => (x, y),
+        Orientation::South => (y, -x),
+        Orientation::West => (-x, -y)
+    }
+}
+
 /// The handedness (or mirror orientation).
 /// 
 /// This is typically used to describe the mirror orientation of a component
@@ -122,24 +139,16 @@ impl RelativeComponentBounds {
     }
     /// Orients the component bounds and ports according to the given orientation, assuming original orientation is East
     pub fn orient(self, orientation: Orientation)-> Self {
-        //All Bounds are originaly defined in East Orientation, and with TopLeft Handedness (i.e. the main port is on the left)
-        fn rot((x,y):CoordDelta, orientation: Orientation) -> CoordDelta {
-            match orientation {
-                Orientation::North => (-y, x),//to transform from east to north, we rotate 90 degrees counterclockwise, which transforms (x, y) to (-y, x)
-                Orientation::East => (x, y),
-                Orientation::South => (y, -x),
-                Orientation::West => (-x, -y)
-            }
-        }
         // Rotate bounds and ports, then get use the max and min of the corners to get new bounds:
         let Self { bounds: [b0, b1], ports } = self;
-        //The bounds are defined by min and max x and y coordinates, but when we rotate, the new bounds may be defined by different corners, so we need to consider all corners to get the new bounds
+        // The bounds are defined by min and max x and y coordinates, but when we rotate,
+        // the new bounds may be defined by different corners, so we need to consider all corners to get the new bounds.
         let corners = [
             b0,
             (b0.0, b1.1),
             (b1.0, b0.1),
             b1,
-        ].map(|c| rot(c, orientation));
+        ].map(|c| rotate(c, orientation));
 
         let min_x = corners.iter().map(|c| c.0).min().unwrap();
         let max_x = corners.iter().map(|c| c.0).max().unwrap();
@@ -150,9 +159,9 @@ impl RelativeComponentBounds {
 
         // Rotate ports:
         let ports = ports.into_iter()
-            .map(|p| rot(p, orientation))
-            
+            .map(|p| rotate(p, orientation))
             .collect(); 
+        
         Self { bounds, ports }
     }
 
@@ -206,15 +215,6 @@ pub enum PhysicalComponentEnum {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn rotate((x, y): CoordDelta, orientation: Orientation) -> CoordDelta {
-        match orientation {
-            Orientation::North => (-y, x),
-            Orientation::East => (x, y),
-            Orientation::South => (y, -x),
-            Orientation::West => (-x, -y),
-        }
-    }
 
     #[test]
     fn orient_ports_by_direction() {
