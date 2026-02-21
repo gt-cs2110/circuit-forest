@@ -93,13 +93,6 @@ impl<C: Default> ComponentBounds<C> {
             ports: Vec::from_iter(ports)
         }
     }
-    /// Creates a new [`ComponentBounds`] from the given bounds and ports.
-    pub fn from_bounds(bounds: [C; 2], ports: impl IntoIterator<Item = C>) -> Self {
-        Self {
-            bounds,
-            ports: Vec::from_iter(ports)
-        }
-    }
 }
 impl RelativeComponentBounds {
     fn single_port(width: u32, height: u32) -> Self {
@@ -225,7 +218,10 @@ mod tests {
 
     #[test]
     fn orient_ports_by_direction() {
-        let base = RelativeComponentBounds::from_bounds([(-2, -1), (3, 4)], [(-1, 0), (0, 1), (2, -3)]);
+        let base = RelativeComponentBounds {
+            bounds: [(-2, -1), (3, 4)],
+            ports: vec![(-1, 0), (0, 1), (2, -3)]
+        };
 
         let east = base.clone().orient(Orientation::East);
         assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
@@ -242,7 +238,10 @@ mod tests {
 
     #[test]
     fn orient_bounds_accounts_for_all_corners() {
-        let base = RelativeComponentBounds::from_bounds([(-2, -1), (3, 4)], [(-1, 0)]);
+        let base = RelativeComponentBounds {
+            bounds: [(-2, -1), (3, 4)],
+            ports: vec![(-1, 0)]
+        };
         let [b0, b1] = base.bounds;
         let corners = [b0, (b0.0, b1.1), (b1.0, b0.1), b1];
 

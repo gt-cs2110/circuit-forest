@@ -1,5 +1,4 @@
 use crate::engine::func;
-use crate::middle_end::CoordDelta;
 use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// A macro to define gate components for AND, OR, XOR, NAND, NOR, and XNOR gates which all have same structure.
@@ -22,13 +21,18 @@ macro_rules! gates {
                 }
 
                 fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-
-                    //The origin is at the output port, which is at (4,2) in absolute coordinates.
-                    let bounds = [(-4,-2),(0,2)];//Bounds of n input componet is always 4x4
+                    // The origin is at the output port, which is at (4,2) in absolute coordinates.
+                    let bounds = [(-4, -2), (0, 2)];
                     let inputs = self.sim.n_inputs() as i32;
-                    //generate input ports
-                    let ports:Vec<CoordDelta> = (0..inputs).map(|i| (-4,2*i-(inputs-1))).chain(std::iter::once((0,0))).collect();
-                    RelativeComponentBounds::from_bounds(bounds, ports)
+                    
+                    let mut ports = vec![];
+                    // Input ports
+                    // For a 4-input gate, you have (-4, -3), (-4, -1), (-4, 1), (-4, 3)
+                    // For a 5-input gate, you have (-4, -4), (-4, -2), (-4, 0), (-4, 2), (-4, 4)
+                    ports.extend((0..inputs).map(|i| (-4, 2 * i - (inputs - 1))));
+                    ports.push((0, 0)); // Output port
+
+                    RelativeComponentBounds { bounds, ports }
                 }
 
 
@@ -57,12 +61,14 @@ impl PhysicalComponent for Not {
     }
 
     fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        AbsoluteComponentBounds::from_bounds([(0, 0), (3, 2)], [(0, 1), (3, 1)]).into_relative((3,1))
+        let origin = (3, 1);
+        AbsoluteComponentBounds::new((3, 2), [(0, 1), origin])
+            .into_relative(origin)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-///
+/// A tri-state buffer.
 pub struct TriState {
     sim: func::TriState,
 }
@@ -77,7 +83,8 @@ impl PhysicalComponent for TriState {
     }
 
     fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-      
-        AbsoluteComponentBounds::from_bounds([(0, 0), (2, 2)], [(0, 1), (1,2),(2,1)]).into_relative((2,1))
+        let origin = (2, 1);
+        AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
+            .into_relative(origin)
     }
 }
