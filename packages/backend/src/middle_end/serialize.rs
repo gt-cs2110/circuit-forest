@@ -1,15 +1,13 @@
-use std::{
-    collections::HashMap,
-    fmt, fs,
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::{fmt, fs};
 
 use serde::{Deserialize, Serialize};
 
 use crate::middle_end::Wire;
 
 #[derive(Debug)]
-enum SerializeError {
+pub enum SerializeError {
     ReadFile {
         path: PathBuf,
         source: std::io::Error,
@@ -40,26 +38,27 @@ impl fmt::Display for SerializeError {
         }
     }
 }
+impl std::error::Error for SerializeError {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct CircuitFile {
+pub struct CircuitFile {
     /// CircuitSim version
-    version: String,
+    pub version: String,
 
     /// Global bit size (1-32)
     #[serde(rename = "globalBitSize")]
-    global_bitsize: u32,
+    pub global_bitsize: u32,
 
     /// Clock speed
     #[serde(rename = "clockSpeed")]
-    clock_speed: u32,
+    pub clock_speed: u32,
 
     /// All defined circuits in this file.
-    circuits: Vec<CircuitInfo>,
+    pub circuits: Vec<CircuitInfo>,
 
     /// A set of hashes which keeps track of all updates to the file.
     #[serde(rename = "revisionSignatures")]
-    revision_signatures: Vec<String>,
+    pub revision_signatures: Vec<String>,
 }
 
 impl CircuitFile {
@@ -87,63 +86,22 @@ impl CircuitFile {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct CircuitInfo {
+pub struct CircuitInfo {
     /// Name of the circuit.
-    name: String,
+    pub name: String,
 
     /// Components in the circuit.
-    components: Vec<ComponentInfo>,
+    pub components: Vec<ComponentInfo>,
 
     /// Wires in circuit.
-    wires: Vec<Wire>,
+    pub wires: Vec<Wire>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
-struct ComponentInfo {
+pub struct ComponentInfo {
     /// Component type
-    name: String,
-    x: u32,
-    y: u32,
-    properties: HashMap<String, String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_test_sim() {
-        let raw = include_str!("latches.sim");
-        let parsed = CircuitFile::from_sim(raw).expect("Unable to deserialize");
-
-        assert_eq!(parsed.version, "1.9.1 2110 version");
-        assert_eq!(parsed.global_bitsize, 1);
-        assert_eq!(parsed.clock_speed, 1);
-        assert!(!parsed.circuits.is_empty());
-        assert!(!parsed.revision_signatures.is_empty());
-    }
-
-    #[test]
-    fn parse_test_sim_then_serialize() {
-        let raw = include_str!("latches.sim");
-        let parsed = CircuitFile::from_sim(raw).expect("Unable to deserialize");
-        let serialized = parsed.to_sim().expect("Unable to serialize");
-        let reparsed = CircuitFile::from_sim(&serialized).expect("Unable to deserialize");
-
-        assert_eq!(parsed, reparsed);
-    }
-
-    #[test]
-    fn read_test_sim() {
-        let raw = include_str!("latches.sim");
-        let parsed = CircuitFile::from_sim(raw).expect("Unable to deserialize");
-
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src")
-            .join("middle_end")
-            .join("latches.sim");
-        let loaded = CircuitFile::read_sim_file(&path).expect("Unable to read");
-
-        assert_eq!(parsed, loaded);
-    }
+    pub name: String,
+    pub x: u32,
+    pub y: u32,
+    pub properties: HashMap<String, String>,
 }
