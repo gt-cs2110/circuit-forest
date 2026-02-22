@@ -109,8 +109,8 @@ impl PhysicalComponent for Splitter {
 
     fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let bitsize = i32::from(self.sim.get_bitsize());
-        let ports = [(0, 0)].into_iter()
-            .chain((1..=bitsize).map(|i| (2 * i, 2)));
+        let mut ports = vec![(0, 0)];
+        ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
 
         RelativeComponentBounds::new((bitsize * 2, 2), ports)
     }
@@ -128,7 +128,7 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
     }
 }
@@ -145,7 +145,7 @@ impl PhysicalComponent for Probe {
         "Probe"
     }
 
-    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port(2, 2)
     }
 }
