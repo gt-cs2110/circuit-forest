@@ -238,7 +238,7 @@ impl IndexMut<FunctionKey> for CircuitGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::func::{And, Not, ComponentFn};
+    use crate::engine::func::{ComponentFn, Gate, GateKind, Not};
 
     #[test]
     fn test_join() {
@@ -250,8 +250,8 @@ mod tests {
         let value2 = graph.add_value();
 
         // Create function nodes (and gate, not gate)
-        let and =  ComponentFn::And(And::new(8, 2));
-        let not= ComponentFn::Not(Not::new(8));
+        let and = ComponentFn::Gate(Gate::new(GateKind::And, 8, 2));
+        let not = ComponentFn::Not(Not::new(8));
 
         let func1 = graph.add_function(FunctionNode::new(and, &graphs));
         let func2 = graph.add_function(FunctionNode::new(not, &graphs));
@@ -285,7 +285,7 @@ mod tests {
         let value1 = graph.add_value();
 
         // Create function nodes (and gate, not gate)
-        let and = ComponentFn::And(And::new(8, 2));
+        let and = ComponentFn::Gate(Gate::new(GateKind::And, 8, 2));
         let not = ComponentFn::Not(Not::new(8));
 
         let func1 = graph.add_function(FunctionNode::new(and, &graphs));

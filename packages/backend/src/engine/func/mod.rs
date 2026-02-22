@@ -129,7 +129,7 @@ pub trait Component {
 #[allow(missing_docs)]
 pub enum ComponentFn {
     // Gates
-    And, Or, Xor, Nand, Nor, Xnor, Not, TriState,
+    Gate, Not, TriState,
     // Wiring
     Input, Output, Constant, Splitter,
     // Muxes

@@ -7,71 +7,92 @@ pub const MIN_GATE_INPUTS: u8 = 2;
 /// Maximum number of inputs for multi-input logic gates.
 pub const MAX_GATE_INPUTS: u8 = 64;
 
-macro_rules! gates {
-    ($($(#[$m:meta])? $Id:ident: $f:expr, $invert:literal),*$(,)?) => {
-        $(
-            $(#[$m])?
-            #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-            pub struct $Id {
-                bitsize: u8,
-                n_inputs: u8
-            }
-            impl $Id {
-                /// Creates a new instance of the gate with specified bitsize and number of inputs.
-                pub fn new(bitsize: u8, n_inputs: u8) -> Self {
-                    Self {
-                        bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
-                        n_inputs: n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS)
-                    }
-                }
-                /// Returns the number of inputs for this gate.
-                pub fn n_inputs(&self) -> u8 {
-                    self.n_inputs
-                }
-                /// Returns the bitsize for this gate.
-                pub fn bitsize(&self) -> u8 {
-                    self.bitsize
-                }
-            }
-            impl Component for $Id {
-                fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
-                    port_list(&[
-                        // inputs
-                        (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, usize::from(self.n_inputs)),
-                        // outputs
-                        (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
-                    ])
-                }
-                fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-                    let value = ctx.new_ports[..usize::from(self.n_inputs)].iter()
-                        .cloned()
-                        .reduce($f)
-                        .unwrap_or_else(|| bitarr![X; self.bitsize]);
-    
-                    vec![PortUpdate {
-                        index: usize::from(self.n_inputs),
-                        value: if $invert { !value } else { value }
-                    }]
-                }
-            }
-            
-        )*
+/// The gate type for [`Gate`].
+/// 
+/// This defines the logic and appearance of the gate.
+#[expect(missing_docs)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum GateKind {
+    And, Or, Xor, Nand, Nor, Xnor
+}
+impl GateKind {
+    /// Takes a sequence of inputs and reduces them to a single value using the kind's operation.
+    /// 
+    /// This returns `None` if the iterator is empty.
+    pub fn reduce(self, it: impl IntoIterator<Item=BitArray>) -> Option<BitArray> {
+        let it = it.into_iter();
+        match self {
+            GateKind::And  => it.reduce(|a, b| a & b),
+            GateKind::Or   => it.reduce(|a, b| a | b),
+            GateKind::Xor  => it.reduce(|a, b| a ^ b),
+            GateKind::Nand => it.reduce(|a, b| a & b).map(|r| !r),
+            GateKind::Nor  => it.reduce(|a, b| a | b).map(|r| !r),
+            GateKind::Xnor => it.reduce(|a, b| a ^ b).map(|r| !r),
+        }
+    }
+
+    /// The name of the gate.
+    pub fn name(self) -> &'static str {
+        match self {
+            GateKind::And  => "And",
+            GateKind::Or   => "Or",
+            GateKind::Xor  => "Xor",
+            GateKind::Nand => "Nand",
+            GateKind::Nor  => "Nor",
+            GateKind::Xnor => "Xnor",
+        }
     }
 }
+/// A multi-input logic gate.
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Gate {
+    kind: GateKind,
+    bitsize: u8,
+    n_inputs: u8
+}
+impl Gate {
+    /// Creates a new instance of the gate with specified bitsize and number of inputs.
+    pub fn new(kind: GateKind, bitsize: u8, n_inputs: u8) -> Self {
+        Self {
+            kind,
+            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            n_inputs: n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS)
+        }
+    }
 
-gates! {
-    /// An AND gate component.
-    And:  |a, b| a & b, false,
-    /// An OR gate component.
-    Or:   |a, b| a | b, false,
-    /// An XOR gate component.
-    Xor:  |a, b| a ^ b, false,
-    /// A NAND gate component.
-    Nand: |a, b| a & b, true,
-    /// A NOR gate component.
-    Nor:  |a, b| a | b, true,
-    /// A XNOR gate component.
-    Xnor: |a, b| a ^ b, true,
+    /// The gate type.
+    pub fn kind(&self) -> GateKind {
+        self.kind
+    }
+    /// Returns the number of inputs for this gate.
+    pub fn n_inputs(&self) -> u8 {
+        self.n_inputs
+    }
+    /// Returns the bitsize for this gate.
+    pub fn bitsize(&self) -> u8 {
+        self.bitsize
+    }
+}
+impl Component for Gate {
+    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
+        port_list(&[
+            // inputs
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, usize::from(self.n_inputs)),
+            // outputs
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+        ])
+    }
+
+    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        let inputs = ctx.new_ports[..usize::from(self.n_inputs)].iter().cloned();
+        let output = self.kind.reduce(inputs)
+            .unwrap_or_else(|| bitarr![X; self.bitsize]);
+        
+        vec![PortUpdate {
+            index: usize::from(self.n_inputs),
+            value: output
+        }]
+    }
 }
 
 /// A NOT gate component.
@@ -144,7 +165,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_and_gate() {
-        let gate = And::new(1, 2);
+        let gate = Gate::new(GateKind::And, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -167,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_and_gate_multi_bit() {
-        let gate = And::new(4, 2);
+        let gate = Gate::new(GateKind::And, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
 
@@ -188,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_and_gate_3input_4bit() {
-        let gate = And::new(4, 3); // 3 inputs, 4-bit each
+        let gate = Gate::new(GateKind::And, 4, 3); // 3 inputs, 4-bit each
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
         let in_c = bitarr![1, 1, 1, 0];
@@ -210,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_or_gate() {
-        let gate = Or::new(1, 2);
+        let gate = Gate::new(GateKind::Or, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -231,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_or_gate_multi_bit() {
-        let gate = Or::new(4, 2);
+        let gate = Gate::new(GateKind::Or, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
 
@@ -252,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_or_gate_3input_4bit() {
-        let gate = Or::new(4, 3);
+        let gate = Gate::new(GateKind::Or, 4, 3);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 0];
         let in_c = bitarr![0, 1, 1, 0];
@@ -274,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_xor_gate() {
-        let gate = Xor::new(1, 2);
+        let gate = Gate::new(GateKind::Xor, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -295,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_xor_gate_multi_bit() {
-        let gate = Xor::new(4, 2);
+        let gate = Gate::new(GateKind::Xor, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
@@ -316,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_xor_gate_3input_4bit() {
-        let gate = Xor::new(4, 3);
+        let gate = Gate::new(GateKind::Xor, 4, 3);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
@@ -338,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_nand_gate() {
-        let gate = Nand::new(1, 2);
+        let gate = Gate::new(GateKind::Nand, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -358,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_nand_gate_multi_bit() {
-        let gate = Nand::new(4, 2);
+        let gate = Gate::new(GateKind::Nand, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
@@ -378,7 +399,7 @@ mod tests {
 
     #[test]
     fn test_nand_gate_3input_4bit() {
-        let gate = Nand::new(4, 3);
+        let gate = Gate::new(GateKind::Nand, 4, 3);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![1, 1, 1, 0];
@@ -400,7 +421,7 @@ mod tests {
 
     #[test]
     fn test_nor_gate() {
-        let gate = Nor::new(1, 2);
+        let gate = Gate::new(GateKind::Nor, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -420,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_nor_gate_multi_bit() {
-        let gate = Nor::new(4, 2);
+        let gate = Gate::new(GateKind::Nor, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
@@ -440,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_nor_gate_3input_4bit() {
-        let gate = Nor::new(4, 3);
+        let gate = Gate::new(GateKind::Nor, 4, 3);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
@@ -462,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_xnor_gate() {
-        let gate = Xnor::new(1, 2);
+        let gate = Gate::new(GateKind::Xnor, 1, 2);
         let in_a = bitarr![0];
         let in_b = bitarr![1];
 
@@ -482,7 +503,7 @@ mod tests {
 
     #[test]
     fn test_xnor_gate_multi_bit() {
-        let gate = Xnor::new(4, 2);
+        let gate = Gate::new(GateKind::Xnor, 4, 2);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
 
@@ -502,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_xnor_gate_3input_4bit() {
-        let gate = Xnor::new(4, 3);
+        let gate = Gate::new(GateKind::Xnor, 4, 3);
         let in_a = bitarr![1, 0, 1, 1];
         let in_b = bitarr![1, 1, 0, 1];
         let in_c = bitarr![0, 1, 1, 0];
@@ -638,7 +659,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_and() {
-            let gate = And::new(4, 2);
+            let gate = Gate::new(GateKind::And, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
@@ -653,7 +674,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_or() {
-            let gate = Or::new(4, 2);
+            let gate = Gate::new(GateKind::Or, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
@@ -668,7 +689,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_xor() {
-            let gate = Xor::new(4, 2);
+            let gate = Gate::new(GateKind::Xor, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
@@ -683,7 +704,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_nand() {
-            let gate = Nand::new(4, 2);
+            let gate = Gate::new(GateKind::Nand, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
@@ -698,7 +719,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_nor() {
-            let gate = Nor::new(4, 2);
+            let gate = Gate::new(GateKind::Nor, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];
@@ -713,7 +734,7 @@ mod tests {
         #[test]
         #[should_panic]
         fn input_validate_xnor() {
-            let gate = Xnor::new(4, 2);
+            let gate = Gate::new(GateKind::Xnor, 4, 2);
             // Should fail input validation
             let bad_in = bitarr![1, 1, 1];
             let good_in = bitarr![1, 0, 1, 0];

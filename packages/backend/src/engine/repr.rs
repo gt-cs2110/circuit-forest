@@ -265,7 +265,7 @@ impl Circuit<'_> {
 mod tests {
     use super::*;
     use crate::bitarr;
-    use func::{And, Not, ComponentFn};
+    use func::{Gate, GateKind, Not, ComponentFn};
 
     #[test]
     fn test_replace() {
@@ -290,7 +290,7 @@ mod tests {
         let value1 = circuit.add_value_node();
         let value2 = circuit.add_value_node();
 
-        let and =  ComponentFn::And(And::new(8, 2));
+        let and =  ComponentFn::Gate(Gate::new(GateKind::And, 8, 2));
         let not= ComponentFn::Not(Not::new(8));
 
         let func1 = circuit.add_function_node(and);
@@ -317,7 +317,7 @@ mod tests {
 
         let value1 = circuit.add_value_node();
 
-        let and =  ComponentFn::And(And::new(8, 2));
+        let and =  ComponentFn::Gate(Gate::new(GateKind::And, 8, 2));
         let not= ComponentFn::Not(Not::new(8));
 
         let func1 = circuit.add_function_node(and);
