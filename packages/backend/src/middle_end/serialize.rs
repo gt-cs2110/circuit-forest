@@ -1,3 +1,6 @@
+//! Package which defines how a middle-end component is serialized (and deserialized)
+//! into the .sim representation.
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
@@ -6,21 +9,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::middle_end::Wire;
 
+/// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug)]
-pub enum SerializeError {
+pub enum SerdeError {
+    /// Error which occurs when reading a file.
     ReadFile {
+        /// The path which was read.
         path: PathBuf,
+        /// The error.
         source: std::io::Error,
     },
+    /// Error which occurs when writing a file.
     WriteFile {
+        /// The path which was written to.
         path: PathBuf,
+        /// The error.
         source: std::io::Error,
     },
+    /// Error which occurs during file deserialization.
     Deserialize(serde_json::Error),
+    /// Error which occurs during file serialization.
     Serialize(serde_json::Error),
 }
 
-impl fmt::Display for SerializeError {
+impl fmt::Display for SerdeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ReadFile { path, source } => {
@@ -38,11 +50,13 @@ impl fmt::Display for SerializeError {
         }
     }
 }
-impl std::error::Error for SerializeError {}
+impl std::error::Error for SerdeError {}
 
+/// A serialized version of the middle-end representation,
+/// which is used when saving and loading from .sim files.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct CircuitFile {
-    /// CircuitSim version
+    /// CircuitSim version.
     pub version: String,
 
     /// Global bit size (1-32)
@@ -62,22 +76,26 @@ pub struct CircuitFile {
 }
 
 impl CircuitFile {
-    pub fn from_sim(s: &str) -> Result<Self, SerializeError> {
-        serde_json::from_str(s).map_err(SerializeError::Deserialize)
+    /// Reads a string into a [`CircuitFile`].
+    pub fn from_sim(s: &str) -> Result<Self, SerdeError> {
+        serde_json::from_str(s).map_err(SerdeError::Deserialize)
     }
-    pub fn to_sim(&self) -> Result<String, SerializeError> {
-        serde_json::to_string_pretty(self).map_err(SerializeError::Serialize)
+    /// Converts a [`CircuitFile`] into a string.
+    pub fn to_sim(&self) -> Result<String, SerdeError> {
+        serde_json::to_string_pretty(self).map_err(SerdeError::Serialize)
     }
-    pub fn read_sim_file(path: &Path) -> Result<Self, SerializeError> {
-        let s = fs::read_to_string(path).map_err(|source| SerializeError::ReadFile {
+    /// Reads code from a `.sim` file into a [`CircuitFile`].
+    pub fn read_sim_file(path: &Path) -> Result<Self, SerdeError> {
+        let s = fs::read_to_string(path).map_err(|source| SerdeError::ReadFile {
             path: path.to_path_buf(),
             source,
         })?;
         Self::from_sim(&s)
     }
-    pub fn write_sim_file(&self, path: &Path) -> Result<(), SerializeError> {
+    /// Writes a [`CircuitFile`] into a `.sim` file.
+    pub fn write_sim_file(&self, path: &Path) -> Result<(), SerdeError> {
         let s = self.to_sim()?;
-        fs::write(path, s).map_err(|source| SerializeError::WriteFile {
+        fs::write(path, s).map_err(|source| SerdeError::WriteFile {
             path: path.to_path_buf(),
             source,
         })?;
@@ -85,6 +103,7 @@ impl CircuitFile {
     }
 }
 
+/// Serialized version of a single circuit.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct CircuitInfo {
     /// Name of the circuit.
@@ -97,11 +116,15 @@ pub struct CircuitInfo {
     pub wires: Vec<Wire>,
 }
 
+/// Serialized version of a component in a circuit.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ComponentInfo {
-    /// Component type
+    /// Component type.
     pub name: String,
+    /// Position x.
     pub x: u32,
+    /// Position y.
     pub y: u32,
+    /// Properties of the component.
     pub properties: HashMap<String, String>,
 }
