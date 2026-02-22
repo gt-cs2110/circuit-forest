@@ -16,7 +16,10 @@ pub enum GateKind {
     And, Or, Xor, Nand, Nor, Xnor
 }
 impl GateKind {
-    fn reduce(self, it: impl IntoIterator<Item=BitArray>) -> Option<BitArray> {
+    /// Takes a sequence of inputs and reduces them to a single value using the kind's operation.
+    /// 
+    /// This returns `None` if the iterator is empty.
+    pub fn reduce(self, it: impl IntoIterator<Item=BitArray>) -> Option<BitArray> {
         let it = it.into_iter();
         match self {
             GateKind::And  => it.reduce(|a, b| a & b),
@@ -28,7 +31,7 @@ impl GateKind {
         }
     }
 
-    /// The name of the gate
+    /// The name of the gate.
     pub fn name(self) -> &'static str {
         match self {
             GateKind::And  => "And",
