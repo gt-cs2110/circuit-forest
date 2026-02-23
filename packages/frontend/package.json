@@ -48,7 +48,7 @@
         "vue-eslint-parser": "^10.2.0"
     },
     "dependencies": {
-        "circuitsim-core": "workspace:../native",
+        "circuitsim-glue": "workspace:../glue",
         "electron-squirrel-startup": "^1.0.1",
         "electron-store": "^11.0.2",
         "lucide-vue-next": "^0.545.0",

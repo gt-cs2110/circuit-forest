@@ -1,5 +1,5 @@
 {
-  "name": "native",
+  "name": "glue",
   "version": "1.1.1",
   "description": "Template project for writing node package with napi-rs",
   "main": "index.js",
@@ -31,7 +31,7 @@
     }
   },
   "napi": {
-    "binaryName": "native",
+    "binaryName": "glue",
     "targets": [
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
