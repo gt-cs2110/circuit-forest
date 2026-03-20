@@ -13,8 +13,8 @@ use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
 mod key;
-mod serialize;
 mod string_interner;
+pub mod serialize;
 pub mod wire;
 pub mod func;
 
