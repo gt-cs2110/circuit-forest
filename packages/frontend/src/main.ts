@@ -1,19 +1,30 @@
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, Menu, app, dialog, ipcMain, screen } from "electron";
 import started from "electron-squirrel-startup";
 import path from "node:path";
+import { API, SyncHandler, Handler } from "./api";
+import Store from "electron-store";
+import fs from "node:fs";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
     app.quit();
 }
 
+// Only allow devTools in development mode:
+const enableDevTools = process.env.NODE_ENV === "development";
+
 const createWindow = () => {
+    const { width, height } = screen.getPrimaryDisplay().size;
+
     // Create the browser window.
     const mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
+        width,
+        height,
+
         webPreferences: {
+            devTools: enableDevTools,
             preload: path.join(__dirname, "preload.js"),
+            sandbox: false,
         },
     });
 
@@ -26,8 +37,16 @@ const createWindow = () => {
         );
     }
 
-    // Open the DevTools.
-    mainWindow.webContents.openDevTools();
+    if (enableDevTools) {
+        // Open the DevTools.
+        mainWindow.webContents.openDevTools();
+    }
+
+    mainWindow.webContents.on("did-finish-load", () => {
+        mainWindow.setTitle("CircuitSim v" + app.getVersion());
+    });
+
+    Menu.setApplicationMenu(createMenu());
 };
 
 // This method will be called when Electron has finished
@@ -52,5 +71,109 @@ app.on("activate", () => {
     }
 });
 
+const createMenu = () => {
+    // Mostly copied from:
+    // https://github.com/electron/electron/blob/1c3a5ba5d17c18cbc1fc096d2a05fc24f2b2ddee/lib/browser/default-menu.ts#L12-L58
+    const isMac = process.platform === "darwin";
+    const macAppMenu: Electron.MenuItemConstructorOptions = { role: "appMenu" };
+
+    const template: Electron.MenuItemConstructorOptions[] = [
+        ...(isMac ? [macAppMenu] : []),
+        {
+            role: "fileMenu",
+            submenu: [
+                // Creates a new window!
+                {
+                    label: "New Window",
+                    accelerator: "CommandOrControl+N",
+                    click: () => createWindow(),
+                },
+                isMac ? { role: "close" } : { role: "quit" },
+            ],
+        },
+        { role: "editMenu" },
+        {
+            role: "viewMenu",
+            submenu: [
+                ...(enableDevTools
+                    ? ([
+                          { role: "toggleDevTools" },
+                          { type: "separator" },
+                      ] satisfies Electron.MenuItemConstructorOptions[])
+                    : []),
+                { role: "resetZoom" },
+                { role: "zoomIn" },
+                { role: "zoomOut" },
+                { type: "separator" },
+                { role: "togglefullscreen" },
+            ],
+        },
+        { role: "windowMenu" },
+    ];
+
+    return Menu.buildFromTemplate(template);
+};
+
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
+
+// modals
+ipcMain.handle("show_modal", (e, kind, config) => {
+    // Note: If new parameters are accepted into this invocation,
+    // the compiler will not indicate so.
+
+    // As such, they have to be added here to be accepted.
+    if (kind === "save") {
+        return dialog.showSaveDialog(config);
+    } else if (kind === "open") {
+        return dialog.showOpenDialog(config);
+    } else if (kind === "box") {
+        return dialog.showMessageBox(config);
+    } else if (kind === "menu") {
+        return new Promise((resolve) => {
+            const template = Array.from(config ?? [], (label, i) => ({
+                label: label.toString(),
+                click: () => resolve(i),
+            }));
+            const menu = Menu.buildFromTemplate(template);
+            menu.popup({ window: BrowserWindow.fromWebContents(e.sender) });
+        });
+    }
+});
+
+// config storage
+const store = new Store();
+
+ipcMain.on("config_get", ((e, key: string) => {
+    e.returnValue = store.get(key);
+}) satisfies SyncHandler<API["storage"]["get"]>);
+
+ipcMain.on("config_set", ((e, key: string, val: any) => {
+    store.set(key, val);
+    e.returnValue = undefined;
+}) satisfies SyncHandler<API["storage"]["set"]>);
+
+ipcMain.on("config_get_all", ((e) => {
+    e.returnValue = store.store;
+}) satisfies SyncHandler<API["storage"]["getAll"]>);
+
+ipcMain.on("config_set_all", ((e, data: object) => {
+    store.set(data);
+    e.returnValue = undefined;
+}) satisfies SyncHandler<API["storage"]["setAll"]>);
+
+// fs
+ipcMain.handle("fs_read", ((e, fp: string) => {
+    return fs.readFileSync(fp, "utf-8");
+}) satisfies Handler<API["fs"]["read"]>);
+
+ipcMain.handle("fs_write", ((e, fp: string, content: string) => {
+    fs.writeFileSync(fp, content);
+}) satisfies Handler<API["fs"]["write"]>);
+
+ipcMain.on("fs_exists", ((e, fp: string) => {
+    e.returnValue = fs.existsSync(fp);
+}) satisfies SyncHandler<API["fs"]["exists"]>);
+ipcMain.on("fs_path_basename", ((e, fp) => {
+    e.returnValue = path.basename(fp);
+}) satisfies SyncHandler<API["fs"]["basename"]>);
