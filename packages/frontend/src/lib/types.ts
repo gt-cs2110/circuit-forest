@@ -40,6 +40,7 @@ export type Wire = Location & {
 };
 
 export type Subcircuit = {
+    id: string;
     name: string;
     components: Map<number, CircuitComponent>;
     wires: Wire[];

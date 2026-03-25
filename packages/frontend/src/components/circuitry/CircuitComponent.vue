@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { componentDrag, selectedComponentId } from "@/lib/store/circuit";
+import { selection, selectComponent, startDrag, deselectComponent } from "@/lib/store/view";
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
@@ -10,16 +10,19 @@ const props = defineProps<{ component: CircuitComponent }>();
 
 function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
-
     e.stopPropagation();
 
-    selectedComponentId.value = props.component.id;
-    componentDrag.componentId = props.component.id;
-    componentDrag.isDragging = true;
-    componentDrag.initialMouse.x = e.clientX;
-    componentDrag.initialMouse.y = e.clientY;
-    componentDrag.initialPosition.x = props.component.x;
-    componentDrag.initialPosition.y = props.component.y;
+    const additive = e.shiftKey || e.metaKey;
+
+    if (additive && selection.value.has(props.component.id)) {
+        deselectComponent(props.component.id);
+        return;
+    }
+
+    if (!selection.value.has(props.component.id)) {
+        selectComponent(props.component.id, additive);
+    }
+    startDrag(e.clientX, e.clientY);
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
@@ -49,7 +52,7 @@ const ports = computed(() => metadata.value.getPorts(props.component));
         />
 
         <rect
-            v-if="selectedComponentId === props.component.id"
+            v-if="selection.has(props.component.id)"
             class="pointer-events-none outline outline-offset-1 outline-blue-500"
             :width="dimensions.width * GRID_SIZE"
             :height="dimensions.height * GRID_SIZE"

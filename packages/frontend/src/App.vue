@@ -3,7 +3,7 @@ import "vue-sonner/style.css";
 
 import CircuitCanvas from "./components/CircuitCanvas.vue";
 import Properties from "./components/Properties.vue";
-import { currentCircuit } from "./lib/store/circuit";
+import { currentSubcircuit } from "./lib/store/circuit";
 import CircuitTabs from "./components/CircuitTabs.vue";
 import ComponentSelector from "./components/ComponentSelector.vue";
 import {
@@ -87,7 +87,7 @@ const rightWidth = ref(72 * 4);
 
             <SplitterPanel class="flex flex-1 flex-col">
                 <CircuitTabs />
-                <CircuitCanvas :state="currentCircuit" />
+                <CircuitCanvas :subcircuit="currentSubcircuit" />
             </SplitterPanel>
 
             <SplitterResizeHandle

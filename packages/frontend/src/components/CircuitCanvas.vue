@@ -1,30 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { GRID_SIZE } from "@/lib/consts";
-import {
-    componentDrag,
-    placeComponent,
-    placingComponent,
-    selectedComponentId,
-    SubcircuitState,
-} from "@/lib/store/circuit";
+import { placeComponent } from "@/lib/store/circuit";
+import { clearSelection, drag, getViewState, placingComponent } from "@/lib/store/view";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { componentMap } from "./circuitry";
 import Wire from "./circuitry/Wire.vue";
 import { scale, settings } from "@/lib/store/settings";
+import { Subcircuit } from "@/lib/types";
 
 const props = defineProps<{
-    state: SubcircuitState;
+    subcircuit: Subcircuit;
 }>();
+const view = computed(() => getViewState(props.subcircuit.id));
 
 const ORIGIN_OFFSET = GRID_SIZE / 2;
 
 const offset = computed({
-    get: () => props.state.offset,
+    get: () => view.value.offset,
     set: (val) => {
-        props.state.offset.x = Math.min(val.x, 0);
-        props.state.offset.y = Math.min(val.y, 0);
+        view.value.offset.x = Math.min(val.x, 0);
+        view.value.offset.y = Math.min(val.y, 0);
     },
 });
 
@@ -64,7 +61,7 @@ const tooltip = reactive({
 function handleMouseDown(e: MouseEvent) {
     if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
         if (e.button === 0) {
-            selectedComponentId.value = null;
+            clearSelection();
         }
 
         return;
@@ -94,15 +91,18 @@ function handleCanvasMove(e: MouseEvent) {
 }
 
 function handleComponentMove(e: MouseEvent) {
-    if (!componentDrag.isDragging) return;
+    if (!drag.active) return;
 
-    const deltaX = Math.round((e.clientX - componentDrag.initialMouse.x) / GRID_SIZE / scale.value);
-    const newX = Math.max(deltaX + componentDrag.initialPosition.x, 0);
-    const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
-    const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
+    for (const [id, initial] of drag.initialPositions) {
+        const comp = props.subcircuit.components.get(id);
+        if (!comp) continue;
 
-    props.state.subcircuit.components.get(componentDrag.componentId).x = newX;
-    props.state.subcircuit.components.get(componentDrag.componentId).y = newY;
+        const deltaX = Math.round((e.clientX - drag.initialMouse.x) / GRID_SIZE / scale.value);
+        const deltaY = Math.round((e.clientY - drag.initialMouse.y) / GRID_SIZE / scale.value);
+
+        comp.x = Math.max(deltaX + initial.x, 0);
+        comp.y = Math.max(deltaY + initial.y, 0);
+    }
 }
 
 function handleTooltip(target: EventTarget) {
@@ -124,7 +124,7 @@ function handleTooltip(target: EventTarget) {
 
 function handleMouseUp() {
     isDragging.value = false;
-    componentDrag.isDragging = false;
+    drag.active = false;
 }
 
 function handleWheel(e: WheelEvent) {
@@ -162,7 +162,7 @@ function handleKeyDown(e: KeyboardEvent) {
         zoom(newScaleLevel);
     } else if (e.key === "Escape") {
         placingComponent.value = null;
-        selectedComponentId.value = null;
+        clearSelection();
     }
 }
 
@@ -234,7 +234,7 @@ function zoom(newScaleLevel: number) {
             }"
         >
             <CircuitComponent
-                v-for="[id, component] in state.subcircuit.components"
+                v-for="[id, component] in subcircuit.components"
                 :key="id"
                 :component="component"
             />
@@ -254,7 +254,7 @@ function zoom(newScaleLevel: number) {
                 <CircuitComponentPreview :type="placingComponent" />
             </g>
 
-            <g v-for="(wire, i) in state.subcircuit.wires" :key="i">
+            <g v-for="(wire, i) in subcircuit.wires" :key="i">
                 <Wire :wire />
             </g>
         </svg>
