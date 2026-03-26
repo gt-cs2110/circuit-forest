@@ -1,11 +1,13 @@
 import { computed, reactive, ref } from "vue";
 
+import { GRID_SIZE, ORIGIN_OFFSET } from "../consts";
 import { ComponentType, Location } from "../types";
-import { currentSubcircuit, currentSubcircuitId } from "./circuit";
+import { currentSubcircuitId } from "./circuit";
+import { scale } from "./settings";
 
 type CircuitViewState = {
     selection: Set<number>;
-    offset: Location;
+    offset: Location; // screen coords
 };
 
 const viewStates = reactive<Map<string, CircuitViewState>>(new Map());
@@ -27,6 +29,26 @@ export function deleteViewState(circuitId: string) {
 export const currentViewState = computed(() => getViewState(currentSubcircuitId.value));
 export const selection = computed(() => currentViewState.value.selection);
 export const currentOffset = computed(() => currentViewState.value.offset);
+
+export function containerToWorld(containerX: number, containerY: number) {
+    return {
+        x:
+            (containerX - currentOffset.value.x - ORIGIN_OFFSET * scale.value) /
+            scale.value /
+            GRID_SIZE,
+        y:
+            (containerY - currentOffset.value.y - ORIGIN_OFFSET * scale.value) /
+            scale.value /
+            GRID_SIZE,
+    };
+}
+
+export function worldToScreen(wx: number, wy: number) {
+    return {
+        x: wx * GRID_SIZE * scale.value + currentOffset.value.x + ORIGIN_OFFSET * scale.value,
+        y: wy * GRID_SIZE * scale.value + currentOffset.value.y + ORIGIN_OFFSET * scale.value,
+    };
+}
 
 // SELECTION
 
@@ -51,19 +73,15 @@ export function isSelected(id: number) {
 
 export const drag = reactive({
     active: false,
-    initialMouse: { x: 0, y: 0 },
+    initialMouse: { x: 0, y: 0 }, // world coords
     initialPositions: new Map<number, Location>(), // snapshot at drag start
 });
 
-export function startDrag(mouseX: number, mouseY: number) {
-    drag.active = true;
-    drag.initialMouse = { x: mouseX, y: mouseY };
-    drag.initialPositions.clear();
-    for (const id of selection.value) {
-        const comp = currentSubcircuit.value.components.get(id);
-        if (comp) drag.initialPositions.set(id, { x: comp.x, y: comp.y });
-    }
-}
+export const marquee = reactive({
+    active: false,
+    start: { x: 0, y: 0 }, // world coords
+    current: { x: 0, y: 0 }, // world coords
+});
 
 // PLACING
 

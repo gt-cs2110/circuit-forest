@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { GRID_SIZE } from "@/lib/consts";
+import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import { placeComponent } from "@/lib/store/circuit";
-import { clearSelection, drag, getViewState, placingComponent } from "@/lib/store/view";
+import {
+    clearSelection,
+    drag,
+    getViewState,
+    marquee,
+    placingComponent,
+    containerToWorld,
+    selection,
+    worldToScreen,
+} from "@/lib/store/view";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import { componentMap } from "./circuitry";
@@ -15,8 +24,9 @@ const props = defineProps<{
 }>();
 const view = computed(() => getViewState(props.subcircuit.id));
 
-const ORIGIN_OFFSET = GRID_SIZE / 2;
-
+// NOTE: offset should always be assigned to by setting offset.value, not by
+// setting offset.value.x/y individually. this is so that the value is always
+// clamped. there are probably better ways to ensure this.
 const offset = computed({
     get: () => view.value.offset,
     set: (val) => {
@@ -25,8 +35,8 @@ const offset = computed({
     },
 });
 
-const isDragging = ref(false);
-const dragStart = reactive({ x: 0, y: 0 });
+const isPanning = ref(false);
+const panningStart = reactive({ x: 0, y: 0 });
 
 const mousePosition = reactive({
     x: 0,
@@ -59,17 +69,24 @@ const tooltip = reactive({
 });
 
 function handleMouseDown(e: MouseEvent) {
-    if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
-        if (e.button === 0) {
-            clearSelection();
-        }
-
+    if (e.button === 0 && e.metaKey) {
+        isPanning.value = true;
+        panningStart.x = e.clientX - offset.value.x;
+        panningStart.y = e.clientY - offset.value.y;
         return;
     }
+    if (e.button !== 0) return;
 
-    isDragging.value = true;
-    dragStart.x = e.clientX - offset.value.x;
-    dragStart.y = e.clientY - offset.value.y;
+    if (!e.shiftKey && !e.metaKey) {
+        clearSelection();
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const world = containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    marquee.active = true;
+    marquee.start.x = world.x;
+    marquee.start.y = world.y;
+    marquee.current.x = world.x;
+    marquee.current.y = world.y;
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -79,30 +96,42 @@ function handleMouseMove(e: MouseEvent) {
 
     handleCanvasMove(e);
     handleComponentMove(e);
+    handleMarqueeMove(e);
     handleTooltip(e.target);
 }
 
 function handleCanvasMove(e: MouseEvent) {
-    if (!isDragging.value) return;
+    if (!isPanning.value) return;
     offset.value = {
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
+        x: e.clientX - panningStart.x,
+        y: e.clientY - panningStart.y,
     };
 }
 
 function handleComponentMove(e: MouseEvent) {
     if (!drag.active) return;
 
+    const containerRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const world = containerToWorld(e.clientX - containerRect.left, e.clientY - containerRect.top);
+
+    const deltaX = Math.round(world.x - drag.initialMouse.x);
+    const deltaY = Math.round(world.y - drag.initialMouse.y);
+
     for (const [id, initial] of drag.initialPositions) {
         const comp = props.subcircuit.components.get(id);
         if (!comp) continue;
 
-        const deltaX = Math.round((e.clientX - drag.initialMouse.x) / GRID_SIZE / scale.value);
-        const deltaY = Math.round((e.clientY - drag.initialMouse.y) / GRID_SIZE / scale.value);
-
-        comp.x = Math.max(deltaX + initial.x, 0);
-        comp.y = Math.max(deltaY + initial.y, 0);
+        comp.x = Math.max(initial.x + deltaX, 0);
+        comp.y = Math.max(initial.y + deltaY, 0);
     }
+}
+
+function handleMarqueeMove(e: MouseEvent) {
+    if (!marquee.active) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const world = containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    marquee.current.x = world.x;
+    marquee.current.y = world.y;
 }
 
 function handleTooltip(target: EventTarget) {
@@ -122,10 +151,65 @@ function handleTooltip(target: EventTarget) {
     }
 }
 
-function handleMouseUp() {
-    isDragging.value = false;
+function handleMouseUp(e: MouseEvent) {
+    isPanning.value = false;
     drag.active = false;
+    if (marquee.active) {
+        finalizeMarquee(e);
+        marquee.active = false;
+    }
 }
+
+function finalizeMarquee(e: MouseEvent) {
+    const additive = e.shiftKey || e.metaKey;
+
+    const left = Math.min(marquee.start.x, marquee.current.x);
+    const top = Math.min(marquee.start.y, marquee.current.y);
+    const right = Math.max(marquee.start.x, marquee.current.x);
+    const bottom = Math.max(marquee.start.y, marquee.current.y);
+
+    if (right - left < 1 && bottom - top < 1 && !additive) {
+        clearSelection();
+        return;
+    }
+
+    for (const [id, comp] of props.subcircuit.components) {
+        const meta = componentMap[comp.type];
+        const dims = meta.getDimensions(comp);
+
+        if (
+            rectsIntersect(
+                { left, top, right, bottom },
+                {
+                    left: comp.x,
+                    top: comp.y,
+                    right: comp.x + dims.width,
+                    bottom: comp.y + dims.height,
+                },
+            )
+        ) {
+            selection.value.add(id);
+        }
+    }
+}
+
+function rectsIntersect(
+    a: { left: number; top: number; right: number; bottom: number },
+    b: { left: number; top: number; right: number; bottom: number },
+) {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+const marqueeStyle = computed(() => {
+    const a = worldToScreen(marquee.start.x, marquee.start.y);
+    const b = worldToScreen(marquee.current.x, marquee.current.y);
+    return {
+        left: Math.min(a.x, b.x) + "px",
+        top: Math.min(a.y, b.y) + "px",
+        width: Math.abs(a.x - b.x) + "px",
+        height: Math.abs(a.y - b.y) + "px",
+    };
+});
 
 function handleWheel(e: WheelEvent) {
     const isTrackpad = Math.abs(e.deltaY) < 50 && e.deltaMode === 0;
@@ -166,6 +250,20 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
+function handleComponentDragStart(e: MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement)
+        .closest("#circuit-canvas")!
+        .getBoundingClientRect();
+    const world = containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    drag.active = true;
+    drag.initialMouse = { x: world.x, y: world.y };
+    drag.initialPositions.clear();
+    for (const id of selection.value) {
+        const comp = props.subcircuit.components.get(id);
+        if (comp) drag.initialPositions.set(id, { x: comp.x, y: comp.y });
+    }
+}
+
 onMounted(() => {
     document.addEventListener("keydown", handleKeyDown);
 });
@@ -193,8 +291,9 @@ function zoom(newScaleLevel: number) {
 
 <template>
     <div
+        id="circuit-canvas"
         class="relative flex-1 overflow-hidden bg-canvas-background"
-        :style="{ cursor: isDragging ? 'grabbing' : 'default' }"
+        :style="{ cursor: isPanning ? 'grabbing' : 'default' }"
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
@@ -237,6 +336,7 @@ function zoom(newScaleLevel: number) {
                 v-for="[id, component] in subcircuit.components"
                 :key="id"
                 :component="component"
+                @dragstart="handleComponentDragStart"
             />
 
             <g
@@ -258,6 +358,12 @@ function zoom(newScaleLevel: number) {
                 <Wire :wire />
             </g>
         </svg>
+
+        <div
+            v-if="marquee.active"
+            class="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
+            :style="marqueeStyle"
+        />
 
         <div
             v-if="tooltip.value"

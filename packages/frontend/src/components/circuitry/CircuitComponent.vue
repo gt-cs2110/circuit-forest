@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { selection, selectComponent, startDrag, deselectComponent } from "@/lib/store/view";
+import { selection, selectComponent, deselectComponent } from "@/lib/store/view";
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
 import { computed } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();
+const emit = defineEmits<{
+    dragstart: [e: MouseEvent];
+}>();
 
 function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
@@ -22,7 +25,7 @@ function handleMouseDown(e: MouseEvent) {
     if (!selection.value.has(props.component.id)) {
         selectComponent(props.component.id, additive);
     }
-    startDrag(e.clientX, e.clientY);
+    emit("dragstart", e);
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
