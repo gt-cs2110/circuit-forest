@@ -11,7 +11,7 @@ pub const MAX_GATE_INPUTS: u8 = 64;
 /// 
 /// This defines the logic and appearance of the gate.
 #[expect(missing_docs)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::IntoStaticStr)]
 pub enum GateKind {
     And, Or, Xor, Nand, Nor, Xnor
 }
@@ -28,18 +28,6 @@ impl GateKind {
             GateKind::Nand => it.reduce(|a, b| a & b).map(|r| !r),
             GateKind::Nor  => it.reduce(|a, b| a | b).map(|r| !r),
             GateKind::Xnor => it.reduce(|a, b| a ^ b).map(|r| !r),
-        }
-    }
-
-    /// The name of the gate.
-    pub fn name(self) -> &'static str {
-        match self {
-            GateKind::And  => "And",
-            GateKind::Or   => "Or",
-            GateKind::Xor  => "Xor",
-            GateKind::Nand => "Nand",
-            GateKind::Nor  => "Nor",
-            GateKind::Xnor => "Xnor",
         }
     }
 }
