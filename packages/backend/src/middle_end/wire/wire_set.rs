@@ -75,7 +75,7 @@ pub struct RemoveWireResult {
 
 type WireGraph = UnGraphMap<MeshKey, ValueKey>;
 /// The connection of wires in a circuit.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WireSet {
     graph: WireGraph,
     ranges: WireRangeMap,

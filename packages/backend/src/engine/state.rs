@@ -31,7 +31,7 @@ pub enum ValueIssue {
 /// The state of the circuit.
 /// 
 /// This includes all wire values, all port values, and internal function state.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CircuitState {
     pub(crate) values: SecondaryMap<ValueKey, ValueState>,
     pub(crate) functions: SecondaryMap<FunctionKey, FunctionState>,
@@ -263,7 +263,7 @@ impl IndexMut<FunctionKey> for CircuitState {
 /// The state of a [`ValueNode`].
 /// 
 /// [`ValueNode`]: super::graph::ValueNode
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValueState {
     pub(crate) value: BitArray,
     issues: HashSet<ValueIssue>
@@ -316,7 +316,7 @@ impl ValueState {
 /// 
 /// This isn't needed if all the information can be pulled from port data,
 /// but is useful for when larger state is needed (e.g., subcircuits, RAM).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InnerFunctionState {
     /// Subcircuit data.
     Subcircuit(CircuitState),
@@ -326,7 +326,7 @@ pub enum InnerFunctionState {
 /// The state of a [`FunctionNode`].
 /// 
 /// [`FunctionNode`]: super::graph::FunctionNode
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionState {
     pub(crate) ports: Vec<BitArray>,
     pub(crate) inner: Option<InnerFunctionState>
@@ -368,7 +368,7 @@ pub(crate) struct PropagationState {
 }
 
 /// Temporary propagation state.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub(crate) struct TransientState {
     /// Determines which values need to be propagated.
     pub(crate) values: SparseSecondaryMap<ValueKey, PropagationState>,

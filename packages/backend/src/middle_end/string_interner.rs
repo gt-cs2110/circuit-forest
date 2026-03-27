@@ -8,7 +8,7 @@ pub struct TunnelSymbol(usize);
 /// Struct which creates a fixed symbol for each string value.
 /// 
 /// This struct also maintains a basic reference counter to free unused strings.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct StringInterner {
     map: HashMap<String, (TunnelSymbol, usize)>,
     sym_counter: usize

@@ -21,7 +21,7 @@ pub(super) type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// Circuits within this CircuitForest 
 /// can use any circuit within the forest
 /// as a subcircuit.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CircuitForest {
     graphs: CircuitGraphMap,
     states: SecondaryMap<CircuitKey, CircuitState>,

@@ -29,7 +29,7 @@ type AxisDelta = i32;
 type CoordDelta = (AxisDelta, AxisDelta);
 
 /// A group of middle circuits.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MiddleRepr {
     engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>
@@ -37,7 +37,7 @@ pub struct MiddleRepr {
 
 /// A circuit's middle-end components and wires,
 ///   including their locations and properties.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct CircuitArea {
     components: SecondaryMap<FunctionKey, ComponentProps>,
     ui_components: SlotMap<UIKey, ComponentProps>,
@@ -46,7 +46,7 @@ struct CircuitArea {
 }
 
 /// Properties of a middle-end component.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ComponentProps {
     label: String,
     label_location: Orientation,
