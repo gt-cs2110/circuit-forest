@@ -9,7 +9,7 @@ use slotmap::{SecondaryMap, SlotMap};
 use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
-use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -49,14 +49,15 @@ struct CircuitArea {
 #[derive(Debug)]
 struct ComponentProps {
     label: String,
+    label_location: Orientation,
 
     // Position
     origin: Coord,
     bounds: [Coord; 2],
     ports: Vec<Coord>,
 
-    // Extra props
-    extra: PhysicalComponentEnum
+    // Component-specific props
+    inner: PhysicalComponentEnum
 }
 
 #[derive(Debug, Error)]
@@ -90,6 +91,12 @@ impl MiddleRepr {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Creates a new subcircuit.
+    pub fn add_circuit(&mut self) -> CircuitKey {
+        let ck = self.engine.add_circuit();
+        self.physical.insert(ck, CircuitArea::default());
+        ck
+    }
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
@@ -119,10 +126,11 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::ComponentOutOfBounds)?;
         let props = ComponentProps {
             label: label.to_string(),
+            label_location: Orientation::North,
             origin: pos,
             bounds,
             ports,
-            extra: physical,
+            inner: physical,
         };
 
         if let Some(component) = physical.init_engine() {
@@ -142,7 +150,7 @@ impl MiddleCircuit<'_> {
             // ~~~ UI component ~~~
 
             // Add tunnel to wire set:
-            if !props.label.is_empty() && matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
+            if !props.label.is_empty() && matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = circ!(self.physical).tunnel_interner.add_ref(&props.label);
                 circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
@@ -171,7 +179,7 @@ impl MiddleCircuit<'_> {
         }
         
         // Handle tunnels specially:
-        if matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
+        if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
             let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                 .expect("Tunnel should have an assigned symbol");
             circ!(self.physical).wires.remove_tunnel(props.origin, sym)

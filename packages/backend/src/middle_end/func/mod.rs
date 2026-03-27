@@ -73,8 +73,6 @@ pub enum Handedness {
     DownRight
 }
 
-
-
 /// Context available during [`PhysicalComponent`] initialization.
 pub struct PhysicalInitContext<'a> {
     /// The circuit this component is being placed in.
@@ -226,8 +224,13 @@ impl AbsoluteComponentBounds {
 }
 
 #[enum_dispatch(PhysicalComponent)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::EnumDiscriminants, strum::IntoStaticStr)]
 #[expect(missing_docs)]
+#[strum_discriminants(
+    name(PhysicalComponentKind),
+    expect(missing_docs),
+    derive(strum::IntoStaticStr)
+)]
 pub enum PhysicalComponentEnum {
     // Wiring
     Pin, Constant, Splitter, Power, Ground, Tunnel, Probe,
