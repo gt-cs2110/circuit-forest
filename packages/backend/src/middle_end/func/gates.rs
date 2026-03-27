@@ -1,26 +1,29 @@
 use crate::engine::func;
-use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 pub use func::GateKind;
 
 /// A gate component with a variable number of inputs.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Gate {
-    sim: func::Gate
+    kind: GateKind,
+    bitsize: u8,
+    n_inputs: u8,
+    orientation: Orientation
 }
 impl PhysicalComponent for Gate {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::Gate::new(self.kind, self.bitsize, self.n_inputs).into())
     }
 
     fn component_name(&self) -> &'static str {
-        self.sim.kind().into()
+        self.kind.into()
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         // The origin is at the output port, which is at (4,2) in absolute coordinates.
         let bounds = [(-4, -2), (0, 2)];
-        let inputs = self.sim.n_inputs() as i32;
+        let inputs = i32::from(self.n_inputs);
         
         let mut ports = vec![];
         // Input ports
@@ -30,49 +33,54 @@ impl PhysicalComponent for Gate {
         ports.push((0, 0)); // Output port
 
         RelativeComponentBounds { bounds, ports }
+            .orient(self.orientation, Default::default())
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 /// A NOT gate component.
 pub struct Not {
-    sim: func::Not,
+    bitsize: u8,
+    orientation: Orientation
 }
 
 impl PhysicalComponent for Not {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::Not::new(self.bitsize).into())
     }
 
     fn component_name(&self) -> &'static str {
         "Not"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (3, 1);
         AbsoluteComponentBounds::new((3, 2), [(0, 1), origin])
             .into_relative(origin)
+            .orient(self.orientation, Default::default())
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 /// A tri-state buffer.
 pub struct TriState {
-    sim: func::TriState,
+    bitsize: u8,
+    orientation: Orientation
 }
 
 impl PhysicalComponent for TriState {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::TriState::new(self.bitsize).into())
     }
 
     fn component_name(&self) -> &'static str {
         "TriState"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (2, 1);
         AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
             .into_relative(origin)
+            .orient(self.orientation, Default::default())
     }
 }
