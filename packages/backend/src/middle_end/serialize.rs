@@ -3,16 +3,18 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::{fmt, fs};
+use std::fs;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::middle_end::Wire;
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SerdeError {
     /// Error which occurs when reading a file.
+    #[error("failed to read .sim file '{}': {source}", path.display())]
     ReadFile {
         /// The path which was read.
         path: PathBuf,
@@ -20,37 +22,20 @@ pub enum SerdeError {
         source: std::io::Error,
     },
     /// Error which occurs when writing a file.
+    #[error("failed to write .sim file '{}': {source}", path.display())]
     WriteFile {
         /// The path which was written to.
         path: PathBuf,
         /// The error.
         source: std::io::Error,
     },
-    /// Error which occurs during file deserialization.
+    /// Error which occurs during file deserialization
+    #[error("failed to deserialize .sim JSON: {0}")]
     Deserialize(serde_json::Error),
     /// Error which occurs during file serialization.
+    #[error("failed to serialize .sim JSON: {0}")]
     Serialize(serde_json::Error),
 }
-
-impl fmt::Display for SerdeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ReadFile { path, source } => {
-                write!(f, "failed to read .sim file '{}': {source}", path.display())
-            }
-            Self::WriteFile { path, source } => {
-                write!(
-                    f,
-                    "failed to write .sim file '{}': {source}",
-                    path.display()
-                )
-            }
-            Self::Deserialize(source) => write!(f, "failed to deserialize .sim JSON: {source}"),
-            Self::Serialize(source) => write!(f, "failed to serialize .sim JSON: {source}"),
-        }
-    }
-}
-impl std::error::Error for SerdeError {}
 
 /// A serialized version of the middle-end representation,
 /// which is used when saving and loading from .sim files.
