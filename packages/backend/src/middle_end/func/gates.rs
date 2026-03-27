@@ -14,7 +14,7 @@ impl PhysicalComponent for Gate {
     }
 
     fn component_name(&self) -> &'static str {
-        self.sim.kind().name()
+        self.sim.kind().into()
     }
 
     fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
