@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::middle_end::Wire;
+use crate::middle_end::func::{Orientation, PhysicalComponentEnum};
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug, Error)]
@@ -110,7 +111,21 @@ pub struct ComponentInfo {
     /// Position y.
     pub y: u32,
     /// Properties of the component.
-    pub properties: super::PhysicalComponentEnum,
+    pub properties: ComponentPropertiesInfo,
+}
+
+/// Serialized version of the properties of a component.
+/// 
+/// This is stored in the "properties" field of a [`ComponentInfo`].
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct ComponentPropertiesInfo {
+    /// Label.
+    pub label: String,
+    /// Location of label.
+    pub label_location: Orientation,
+    /// Internal properties of component.
+    #[serde(flatten)]
+    pub inner: PhysicalComponentEnum,
 }
 
 impl From<super::MiddleRepr> for CircuitFile {
@@ -126,19 +141,19 @@ impl From<super::MiddleRepr> for CircuitFile {
             clock_speed: 64,
             //
             circuits: value.physical.into_iter()
-                .map(|(_, v)| v.into())
+                .map(|pair| pair.into())
                 .collect(),
             // TODO: compute these
             revision_signatures: vec![],
         }
     }
 }
-impl From<super::CircuitArea> for CircuitInfo {
-    fn from(value: super::CircuitArea) -> Self {
-        let super::CircuitArea { components, ui_components, wires: wire_set, .. } = value;
+impl From<(super::CircuitKey, super::CircuitArea)> for CircuitInfo {
+    fn from(value: (super::CircuitKey, super::CircuitArea)) -> Self {
+        let (key, super::CircuitArea { components, ui_components, wires: wire_set, .. }) = value;
 
         Self {
-            name: String::from("Circuit"), // TODO: assign name
+            name: key.to_string(), // TODO: assign name
             components: std::iter::chain(
                 components.into_iter().map(|(_, v)| v),
                 ui_components.into_iter().map(|(_, v)| v)
@@ -149,12 +164,18 @@ impl From<super::CircuitArea> for CircuitInfo {
 }
 impl From<super::ComponentProps> for ComponentInfo {
     fn from(value: super::ComponentProps) -> Self {
-        let component_name = <&str>::from(&value.inner).to_string();
-        let (x, y) = value.origin;
+        let super::ComponentProps { label, label_location, origin, bounds: _, ports: _, inner } = value;
+
+        let component_name = <&str>::from(&inner).to_string();
+        let (x, y) = origin;
         Self {
             name: component_name,
             x, y,
-            properties: value.inner,
+            properties: ComponentPropertiesInfo {
+                label,
+                label_location,
+                inner,
+            },
         }
     }
 }

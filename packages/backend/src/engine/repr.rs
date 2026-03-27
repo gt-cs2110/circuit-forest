@@ -12,6 +12,72 @@ new_key_type! {
     /// Key type for maps to circuits.
     pub struct CircuitKey;
 }
+#[cfg(feature="serde")]
+mod serde {
+    use serde::de::Visitor;
+    use serde::{Deserialize, Serialize};
+
+    // TODO: Key values are a little unfriendly, so
+    // we can probably replace CircuitKey's implementation with a string, at some point
+    use crate::engine::CircuitKey;
+
+    impl std::fmt::Display for CircuitKey {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.as_ffi().fmt(f)
+        }
+    }
+    impl std::str::FromStr for CircuitKey {
+        type Err = std::num::ParseIntError;
+    
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            s.parse()
+                .map(slotmap::KeyData::from_ffi)
+                .map(CircuitKey::from)
+        }
+    }
+
+    impl Serialize for CircuitKey {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where S: serde::Serializer
+        {
+            serializer.collect_str(self)
+        }
+    }
+    impl<'de> Deserialize<'de> for CircuitKey {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where D: serde::Deserializer<'de> 
+        {
+            struct KeyVisitor;
+            impl<'de> Visitor<'de> for KeyVisitor {
+                type Value = CircuitKey;
+            
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(formatter, " a circuit key")
+                }
+
+                fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    Ok(CircuitKey::from(slotmap::KeyData::from_ffi(v)))
+                }
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    let n = v.parse().map_err(|e| E::custom(e))?;
+                    self.visit_u64(n)
+                }
+
+                fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    self.visit_str(std::str::from_utf8(v).map_err(|e| E::custom(e))?)
+                }
+            }
+            
+            deserializer.deserialize_any(KeyVisitor)
+        }
+    }
+}
 
 /// The map of circuit graphs.
 pub(super) type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;

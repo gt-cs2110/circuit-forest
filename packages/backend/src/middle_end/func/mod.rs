@@ -42,6 +42,7 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
 /// This is typically used to describe the orientation of a component which can be rotated.
 #[expect(missing_docs)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Default)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Orientation {
     North, South, #[default] East, West
 }
@@ -58,6 +59,7 @@ pub enum Orientation {
 /// 
 /// We will refer to this as the "chiral" port.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Default)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Handedness {
     /// Left-handedness.
     /// 
@@ -225,6 +227,7 @@ impl AbsoluteComponentBounds {
 
 #[enum_dispatch(PhysicalComponent)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::EnumDiscriminants, strum::IntoStaticStr)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize), serde(untagged))]
 #[expect(missing_docs)]
 #[strum_discriminants(
     name(PhysicalComponentKind),

@@ -3,6 +3,7 @@ use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeCo
 
 /// A subcircuit component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Subcircuit {
     key: CircuitKey
 }
@@ -22,6 +23,7 @@ impl PhysicalComponent for Subcircuit {
 
 /// Text.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text;
 impl PhysicalComponent for Text {
     fn init_engine(&self) -> Option<func::ComponentFn> {
