@@ -124,6 +124,8 @@ pub struct ComponentPropertiesInfo {
     /// Location of label.
     pub label_location: Orientation,
     /// Internal properties of component.
+    // FIXME: The component's identifier is located in [`ComponentInfo::name`],
+    // and should be deserialized by using that
     #[serde(flatten)]
     pub inner: PhysicalComponentEnum,
 }
@@ -177,5 +179,30 @@ impl From<super::ComponentProps> for ComponentInfo {
                 inner,
             },
         }
+    }
+}
+
+impl TryFrom<CircuitFile> for super::MiddleRepr {
+    type Error = super::ReprEditErr;
+
+    fn try_from(value: CircuitFile) -> Result<Self, Self::Error> {
+        // TODO: Validate version, global_bitsize, clock_speed, each component
+
+        let mut repr = super::MiddleRepr::new();
+        for CircuitInfo { name, components, wires } in value.circuits {
+            let key = repr.add_circuit();
+            let mut circuit = repr.circuit(key);
+
+            for c in components {
+                let ComponentInfo { name, x, y, properties } = c;
+                let ComponentPropertiesInfo { label, label_location, inner } = properties;
+
+                circuit.add_component(inner, &label, (x, y))?;
+            }
+
+            wires.into_iter()
+                .try_for_each(|w| circuit.add_wire(w))?;
+        }
+        Ok(repr)
     }
 }
