@@ -6,6 +6,7 @@
 //! 
 
 use slotmap::{SecondaryMap, SlotMap};
+use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
@@ -58,15 +59,22 @@ struct ComponentProps {
     extra: PhysicalComponentEnum
 }
 
+#[derive(Debug, Error)]
 /// Errors which can occur when editing a middle-end circuit.
 pub enum ReprEditErr {
-    /// Adding a component fails.
-    CannotAddComponent,
-    /// Removing a component fails.
-    CannotRemoveComponent,
+    /// Component is out of bounds (so it cannot be added).
+    #[error("component is out of bounds")]
+    ComponentOutOfBounds,
+    
+    /// Component being specified doesn't exist (so it cannot be removed).
+    #[error("component does not exist")]
+    ComponentDoesNotExist,
+
     /// Adding a wire fails.
+    #[error("cannot add wire")]
     CannotAddWire,
     /// Removing a wire fails.
+    #[error("cannot remove wire")]
     CannotRemoveWire,
 }
 
@@ -102,13 +110,13 @@ impl MiddleCircuit<'_> {
     /// Adds a component to the circuit.
     /// 
     /// This takes the component, label, and location for the component.
-    /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
+    /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
         let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
             .into_absolute(pos)
-            .ok_or(ReprEditErr::CannotAddComponent)?;
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
         let props = ComponentProps {
             label: label.to_string(),
             origin: pos,
@@ -149,12 +157,12 @@ impl MiddleCircuit<'_> {
 
     /// Removes a component from the circuit.
     /// 
-    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
+    /// This returns [`ReprEditErr::ComponentDoesNotExist`] if the component does not exist.
     pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
         let props = match key {
             ComponentKey::Function(gate) => circ!(self.physical).components.remove(gate),
             ComponentKey::UI(key) => circ!(self.physical).ui_components.remove(key),
-        }.ok_or(ReprEditErr::CannotRemoveComponent)?;
+        }.ok_or(ReprEditErr::ComponentDoesNotExist)?;
 
         // Remove from engine (if applicable):
         if let ComponentKey::Function(gate) = key {
