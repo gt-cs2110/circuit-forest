@@ -440,6 +440,11 @@ impl WireSet {
     pub fn wires_at_coord(&self, c: Coord) -> impl Iterator<Item = Wire> {
         self.ranges.wires_at_coord(c)
     }
+
+    /// Gets all of the wires defined in the set.
+    pub fn wires(&self) -> impl Iterator<Item=Wire> {
+        self.ranges.wires()
+    }
 }
 
 #[cfg(test)]
