@@ -15,6 +15,7 @@ use crate::middle_end::wire::{Wire, WireSet};
 
 mod key;
 mod string_interner;
+#[cfg(feature="serde")]
 pub mod serialize;
 pub mod wire;
 pub mod func;

@@ -1,7 +1,6 @@
 //! Package which defines how a middle-end component is serialized (and deserialized)
 //! into the .sim representation.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -111,5 +110,51 @@ pub struct ComponentInfo {
     /// Position y.
     pub y: u32,
     /// Properties of the component.
-    pub properties: HashMap<String, String>,
+    pub properties: super::PhysicalComponentEnum,
+}
+
+impl From<super::MiddleRepr> for CircuitFile {
+    fn from(value: super::MiddleRepr) -> Self {
+        let version = format!("foret-{}", {
+            option_env!("CARGO_PKG_VERSION")
+                .unwrap_or("unknown")
+        });
+        Self {
+            version,
+            // TODO: these fields aren't currently tracked anywhere
+            global_bitsize: 1,
+            clock_speed: 64,
+            //
+            circuits: value.physical.into_iter()
+                .map(|(_, v)| v.into())
+                .collect(),
+            // TODO: compute these
+            revision_signatures: vec![],
+        }
+    }
+}
+impl From<super::CircuitArea> for CircuitInfo {
+    fn from(value: super::CircuitArea) -> Self {
+        let super::CircuitArea { components, ui_components, wires: wire_set, .. } = value;
+
+        Self {
+            name: String::from("Circuit"), // TODO: assign name
+            components: std::iter::chain(
+                components.into_iter().map(|(_, v)| v),
+                ui_components.into_iter().map(|(_, v)| v)
+            ).map(Into::into).collect(),
+            wires: wire_set.wires().collect()
+        }
+    }
+}
+impl From<super::ComponentProps> for ComponentInfo {
+    fn from(value: super::ComponentProps) -> Self {
+        let component_name = <&str>::from(&value.inner).to_string();
+        let (x, y) = value.origin;
+        Self {
+            name: component_name,
+            x, y,
+            properties: value.inner,
+        }
+    }
 }
