@@ -232,7 +232,7 @@ impl AbsoluteComponentBounds {
 #[strum_discriminants(
     name(PhysicalComponentKind),
     expect(missing_docs),
-    derive(strum::IntoStaticStr)
+    derive(strum::IntoStaticStr, serde::Serialize, serde::Deserialize)
 )]
 pub enum PhysicalComponentEnum {
     // Wiring

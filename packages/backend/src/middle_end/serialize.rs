@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use std::fs;
 
 use serde::{Deserialize, Serialize};
+use strum::IntoDiscriminant;
 use thiserror::Error;
 
 use crate::middle_end::Wire;
-use crate::middle_end::func::{Orientation, PhysicalComponentEnum};
+use crate::middle_end::func::{Orientation, PhysicalComponentEnum, PhysicalComponentKind};
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug, Error)]
@@ -105,7 +106,7 @@ pub struct CircuitInfo {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ComponentInfo {
     /// Component type.
-    pub name: String,
+    pub name: PhysicalComponentKind,
     /// Position x.
     pub x: u32,
     /// Position y.
@@ -168,10 +169,9 @@ impl From<super::ComponentProps> for ComponentInfo {
     fn from(value: super::ComponentProps) -> Self {
         let super::ComponentProps { label, label_location, origin, bounds: _, ports: _, inner } = value;
 
-        let component_name = <&str>::from(&inner).to_string();
         let (x, y) = origin;
         Self {
-            name: component_name,
+            name: inner.discriminant(),
             x, y,
             properties: ComponentPropertiesInfo {
                 label,
