@@ -1,15 +1,17 @@
 //! Package which defines how a middle-end component is serialized (and deserialized)
 //! into the .sim representation.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 
+use serde::de::{DeserializeSeed, IntoDeserializer};
 use serde::{Deserialize, Serialize};
 use strum::IntoDiscriminant;
 use thiserror::Error;
 
 use crate::middle_end::Wire;
-use crate::middle_end::func::{Orientation, PhysicalComponentEnum, PhysicalComponentKind};
+use crate::middle_end::func::{Orientation, PComDeserializer, PhysicalComponentEnum, PhysicalComponentKind};
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug, Error)]
@@ -103,7 +105,7 @@ pub struct CircuitInfo {
 }
 
 /// Serialized version of a component in a circuit.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Debug, PartialEq, Eq)]
 pub struct ComponentInfo {
     /// Component type.
     pub name: PhysicalComponentKind,
@@ -115,20 +117,59 @@ pub struct ComponentInfo {
     pub properties: ComponentPropertiesInfo,
 }
 
+impl<'de> Deserialize<'de> for ComponentInfo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        #[derive(Deserialize)]
+        struct _CIX {
+            name: PhysicalComponentKind,
+            x: u32,
+            y: u32,
+            properties: serde_json::Value
+        }
+        
+        let _CIX { name, x, y, properties } = _CIX::deserialize(deserializer)?;
+        let properties = CPInfoDeserializer(name).deserialize(properties.into_deserializer())
+            .map_err(serde::de::Error::custom)?;
+
+        Ok(Self { name, x, y, properties })
+    }
+}
 /// Serialized version of the properties of a component.
 /// 
 /// This is stored in the "properties" field of a [`ComponentInfo`].
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Debug, PartialEq, Eq)]
 pub struct ComponentPropertiesInfo {
     /// Label.
     pub label: String,
     /// Location of label.
     pub label_location: Orientation,
     /// Internal properties of component.
-    // FIXME: The component's identifier is located in [`ComponentInfo::name`],
-    // and should be deserialized by using that
     #[serde(flatten)]
     pub inner: PhysicalComponentEnum,
+}
+struct CPInfoDeserializer(PhysicalComponentKind);
+impl<'de> DeserializeSeed<'de> for CPInfoDeserializer {
+    type Value = ComponentPropertiesInfo;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        #[derive(Deserialize)]
+        struct _CPX {
+            label: String,
+            label_location: Orientation,
+            #[serde(flatten)]
+            inner: HashMap<String, serde_json::Value>
+        }
+
+        let _CPX { label, label_location, inner } = _CPX::deserialize(deserializer)?;
+        let inner = PComDeserializer(self.0).deserialize(inner.into_deserializer())
+            .map_err(serde::de::Error::custom)?;
+        
+        Ok(Self::Value { label, label_location, inner })
+    }
 }
 
 impl From<super::MiddleRepr> for CircuitFile {
@@ -194,8 +235,12 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
             let mut circuit = repr.circuit(key);
 
             for c in components {
-                let ComponentInfo { name, x, y, properties } = c;
+                let ComponentInfo { name: ci_kind, x, y, properties } = c;
                 let ComponentPropertiesInfo { label, label_location, inner } = properties;
+                
+                // This is required by construction by Deserialize.
+                // This can't panic unless the structs were manually created.
+                assert_eq!(ci_kind, inner.discriminant(), "properties should have matched component's kind");
 
                 circuit.add_component(inner, &label, (x, y))?;
             }

@@ -227,12 +227,13 @@ impl AbsoluteComponentBounds {
 
 #[enum_dispatch(PhysicalComponent)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::EnumDiscriminants, strum::IntoStaticStr)]
-#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize), serde(untagged))]
+#[cfg_attr(feature="serde", derive(serde::Serialize), serde(untagged))]
 #[expect(missing_docs)]
 #[strum_discriminants(
     name(PhysicalComponentKind),
     expect(missing_docs),
-    derive(strum::IntoStaticStr, serde::Serialize, serde::Deserialize)
+    derive(strum::IntoStaticStr),
+    cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))
 )]
 pub enum PhysicalComponentEnum {
     // Wiring
@@ -244,6 +245,42 @@ pub enum PhysicalComponentEnum {
     //Gates
     Gate, Not, TriState,
 }
+#[cfg(feature="serde")]
+mod pcom_deser {
+    use serde::Deserialize;
+    use serde::de::DeserializeSeed;
+
+    use crate::middle_end::func::{self, PhysicalComponentEnum, PhysicalComponentKind};
+
+    pub struct PComDeserializer(pub PhysicalComponentKind);
+    impl<'de> DeserializeSeed<'de> for PComDeserializer {
+        type Value = PhysicalComponentEnum;
+    
+        fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where D: serde::Deserializer<'de>
+        {
+            match self.0 {
+                // FIXME: Make this automatically generated
+                PhysicalComponentKind::Pin => func::Pin::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Constant => func::Constant::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Splitter => func::Splitter::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Power => func::Power::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Ground => func::Ground::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Tunnel => func::Tunnel::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Probe => func::Probe::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Mux => func::Mux::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Demux => func::Demux::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Decoder => func::Decoder::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Text => func::Text::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Subcircuit => func::Subcircuit::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Gate => func::Gate::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::Not => func::Not::deserialize(deserializer).map(Into::into),
+                PhysicalComponentKind::TriState => func::TriState::deserialize(deserializer).map(Into::into),
+            }
+        }
+    }
+}
+pub(crate) use pcom_deser::PComDeserializer;
 
 #[cfg(test)]
 mod tests {
