@@ -39,6 +39,7 @@ pub struct MiddleRepr {
 ///   including their locations and properties.
 #[derive(Debug, Default, Clone)]
 struct CircuitArea {
+    name: String,
     components: SecondaryMap<FunctionKey, ComponentProps>,
     ui_components: SlotMap<UIKey, ComponentProps>,
     wires: WireSet,
@@ -92,11 +93,18 @@ impl MiddleRepr {
         Self::default()
     }
     /// Creates a new subcircuit.
-    pub fn add_circuit(&mut self) -> CircuitKey {
+    pub fn add_circuit(&mut self, name: &str) -> CircuitKey {
         let ck = self.engine.add_circuit();
-        self.physical.insert(ck, CircuitArea::default());
+
+        let area = CircuitArea {
+            name: name.to_string(),
+            ..Default::default()
+        };
+        self.physical.insert(ck, area);
+
         ck
     }
+
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
