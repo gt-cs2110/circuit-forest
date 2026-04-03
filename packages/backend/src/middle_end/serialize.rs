@@ -1,7 +1,6 @@
 //! Package which defines how a middle-end component is serialized (and deserialized)
 //! into the .sim representation.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -10,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use strum::IntoDiscriminant;
 use thiserror::Error;
 
-use crate::middle_end::Wire;
-use crate::middle_end::func::{Orientation, PComDeserializer, PhysicalComponentEnum, PhysicalComponentKind};
+use crate::middle_end::{ReprEditErr, Wire};
+use crate::middle_end::func::{Orientation, PComDeserializer, PhysicalComponentKind};
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug, Error)]
@@ -38,6 +37,14 @@ pub enum SerdeError {
     /// Error which occurs during file serialization.
     #[error("failed to serialize .sim JSON: {0}")]
     Serialize(serde_json::Error),
+    /// Error which occurs when constructing the middle representation.
+    #[error("failed to create repr: {0}")]
+    ReprCreation(ReprEditErr),
+}
+impl From<ReprEditErr> for SerdeError {
+    fn from(value: ReprEditErr) -> Self {
+        Self::ReprCreation(value)
+    }
 }
 
 /// A serialized version of the middle-end representation,
@@ -105,7 +112,7 @@ pub struct CircuitInfo {
 }
 
 /// Serialized version of a component in a circuit.
-#[derive(Serialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ComponentInfo {
     /// Component type.
     pub name: PhysicalComponentKind,
@@ -117,29 +124,10 @@ pub struct ComponentInfo {
     pub properties: ComponentPropertiesInfo,
 }
 
-impl<'de> Deserialize<'de> for ComponentInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: serde::Deserializer<'de>
-    {
-        #[derive(Deserialize)]
-        struct _CIX {
-            name: PhysicalComponentKind,
-            x: u32,
-            y: u32,
-            properties: serde_json::Value
-        }
-        
-        let _CIX { name, x, y, properties } = _CIX::deserialize(deserializer)?;
-        let properties = CPInfoDeserializer(name).deserialize(properties.into_deserializer())
-            .map_err(serde::de::Error::custom)?;
-
-        Ok(Self { name, x, y, properties })
-    }
-}
 /// Serialized version of the properties of a component.
 /// 
 /// This is stored in the "properties" field of a [`ComponentInfo`].
-#[derive(Serialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct ComponentPropertiesInfo {
     /// Label.
     pub label: String,
@@ -147,84 +135,79 @@ pub struct ComponentPropertiesInfo {
     pub label_location: Orientation,
     /// Internal properties of component.
     #[serde(flatten)]
-    pub inner: PhysicalComponentEnum,
+    pub inner: serde_json::Value,
 }
-struct CPInfoDeserializer(PhysicalComponentKind);
-impl<'de> DeserializeSeed<'de> for CPInfoDeserializer {
-    type Value = ComponentPropertiesInfo;
 
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: serde::Deserializer<'de>
+impl Serialize for super::MiddleRepr {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
     {
-        #[derive(Deserialize)]
-        struct _CPX {
-            label: String,
-            label_location: Orientation,
-            #[serde(flatten)]
-            inner: HashMap<String, serde_json::Value>
-        }
-
-        let _CPX { label, label_location, inner } = _CPX::deserialize(deserializer)?;
-        let inner = PComDeserializer(self.0).deserialize(inner.into_deserializer())
-            .map_err(serde::de::Error::custom)?;
-        
-        Ok(Self::Value { label, label_location, inner })
+        CircuitFile::try_from(self.clone())
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
     }
 }
-
-impl From<super::MiddleRepr> for CircuitFile {
-    fn from(value: super::MiddleRepr) -> Self {
+impl TryFrom<super::MiddleRepr> for CircuitFile {
+    type Error = SerdeError;
+    
+    fn try_from(value: super::MiddleRepr) -> Result<Self, Self::Error> {
         let version = format!("foret-{}", {
             option_env!("CARGO_PKG_VERSION")
                 .unwrap_or("unknown")
         });
-        Self {
+        Ok(Self {
             version,
             // TODO: these fields aren't currently tracked anywhere
             global_bitsize: 1,
             clock_speed: 64,
             //
             circuits: value.physical.into_iter()
-                .map(|pair| pair.into())
-                .collect(),
+                .map(|pair| pair.try_into())
+                .collect::<Result<_, _>>()?,
             // TODO: compute these
             revision_signatures: vec![],
-        }
+        })
     }
 }
-impl From<(super::CircuitKey, super::CircuitArea)> for CircuitInfo {
-    fn from(value: (super::CircuitKey, super::CircuitArea)) -> Self {
+impl TryFrom<(super::CircuitKey, super::CircuitArea)> for CircuitInfo {
+    type Error = SerdeError;
+
+    fn try_from(value: (super::CircuitKey, super::CircuitArea)) -> Result<Self, Self::Error> {
         let (key, super::CircuitArea { components, ui_components, wires: wire_set, .. }) = value;
 
-        Self {
+        Ok(Self {
             name: key.to_string(), // TODO: assign name
             components: std::iter::chain(
                 components.into_iter().map(|(_, v)| v),
                 ui_components.into_iter().map(|(_, v)| v)
-            ).map(Into::into).collect(),
+            )
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
             wires: wire_set.wires().collect()
-        }
+        })
     }
 }
-impl From<super::ComponentProps> for ComponentInfo {
-    fn from(value: super::ComponentProps) -> Self {
+impl TryFrom<super::ComponentProps> for ComponentInfo {
+    type Error = SerdeError;
+
+    fn try_from(value: super::ComponentProps) -> Result<Self, Self::Error> {
         let super::ComponentProps { label, label_location, origin, bounds: _, ports: _, inner } = value;
 
         let (x, y) = origin;
-        Self {
+        Ok(Self {
             name: inner.discriminant(),
             x, y,
             properties: ComponentPropertiesInfo {
                 label,
                 label_location,
-                inner,
+                inner: inner.serialize(serde_json::value::Serializer).map_err(SerdeError::Serialize)?,
             },
-        }
+        })
     }
 }
 
 impl TryFrom<CircuitFile> for super::MiddleRepr {
-    type Error = super::ReprEditErr;
+    type Error = SerdeError;
 
     fn try_from(value: CircuitFile) -> Result<Self, Self::Error> {
         // TODO: Validate version, global_bitsize, clock_speed, each component
@@ -235,13 +218,11 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
             let mut circuit = repr.circuit(key);
 
             for c in components {
-                let ComponentInfo { name: ci_kind, x, y, properties } = c;
+                let ComponentInfo { name: kind, x, y, properties } = c;
                 let ComponentPropertiesInfo { label, label_location, inner } = properties;
                 
-                // This is required by construction by Deserialize.
-                // This can't panic unless the structs were manually created.
-                assert_eq!(ci_kind, inner.discriminant(), "properties should have matched component's kind");
-
+                let inner = PComDeserializer(kind).deserialize(inner.into_deserializer())
+                    .map_err(SerdeError::Deserialize)?;
                 circuit.add_component(inner, &label, label_location, (x, y))?;
             }
 
