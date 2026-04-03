@@ -44,6 +44,7 @@ pub struct MiddleRepr {
 ///   including their locations and properties.
 #[derive(Debug, Default, Clone)]
 struct CircuitArea {
+    name: String,
     components: SecondaryMap<FunctionKey, ComponentProps>,
     ui_components: SlotMap<UIKey, ComponentProps>,
     wires: WireSet,
@@ -97,11 +98,18 @@ impl MiddleRepr {
         Self::default()
     }
     /// Creates a new subcircuit.
-    pub fn add_circuit(&mut self) -> CircuitKey {
+    pub fn add_circuit(&mut self, name: &str) -> CircuitKey {
         let ck = self.engine.add_circuit();
-        self.physical.insert(ck, CircuitArea::default());
+
+        let area = CircuitArea {
+            name: name.to_string(),
+            ..Default::default()
+        };
+        self.physical.insert(ck, area);
+
         ck
     }
+
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
@@ -123,7 +131,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds.
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<(), ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
         let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
@@ -131,7 +139,7 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::ComponentOutOfBounds)?;
         let props = ComponentProps {
             label: label.to_string(),
-            label_location: Orientation::North,
+            label_location,
             origin: pos,
             bounds,
             ports,

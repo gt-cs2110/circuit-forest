@@ -231,7 +231,7 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
 
         let mut repr = super::MiddleRepr::new();
         for CircuitInfo { name, components, wires } in value.circuits {
-            let key = repr.add_circuit();
+            let key = repr.add_circuit(&name);
             let mut circuit = repr.circuit(key);
 
             for c in components {
@@ -242,7 +242,7 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
                 // This can't panic unless the structs were manually created.
                 assert_eq!(ci_kind, inner.discriminant(), "properties should have matched component's kind");
 
-                circuit.add_component(inner, &label, (x, y))?;
+                circuit.add_component(inner, &label, label_location, (x, y))?;
             }
 
             wires.into_iter()
