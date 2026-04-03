@@ -126,7 +126,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds.
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<(), ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
         let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
@@ -134,7 +134,7 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::ComponentOutOfBounds)?;
         let props = ComponentProps {
             label: label.to_string(),
-            label_location: Orientation::North,
+            label_location,
             origin: pos,
             bounds,
             ports,
