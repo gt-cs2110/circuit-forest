@@ -1,16 +1,17 @@
 //! Package which defines how a middle-end component is serialized (and deserialized)
 //! into the .sim representation.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 
-use serde::de::{DeserializeSeed, IntoDeserializer};
-use serde::{Deserialize, Serialize};
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Serialize, Serializer};
 use strum::IntoDiscriminant;
 use thiserror::Error;
 
 use crate::middle_end::{ReprEditErr, Wire};
-use crate::middle_end::func::{Orientation, PComDeserializer, PhysicalComponentKind};
+use crate::middle_end::func::{Orientation, PComDeserCtx, PhysicalComponentEnum, PhysicalComponentKind};
 
 /// An error which can occur when serializing or deserializing a `.sim` file.
 #[derive(Debug, Error)]
@@ -142,66 +143,52 @@ impl Serialize for super::MiddleRepr {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: Serializer
     {
-        CircuitFile::try_from(self.clone())
+        self.to_circuit_file()
             .map_err(serde::ser::Error::custom)?
             .serialize(serializer)
     }
 }
-impl TryFrom<super::MiddleRepr> for CircuitFile {
-    type Error = SerdeError;
-    
-    fn try_from(value: super::MiddleRepr) -> Result<Self, Self::Error> {
+impl super::MiddleRepr {
+    fn to_circuit_file(&self) -> Result<CircuitFile, SerdeError> {
         let version = format!("foret-{}", {
             option_env!("CARGO_PKG_VERSION")
                 .unwrap_or("unknown")
         });
-        Ok(Self {
+        
+        let circuits = self.physical.values()
+            .map(|area| Ok(CircuitInfo {
+                name: area.name.to_string(),
+                components: {
+                    area.components.values()
+                        .chain(area.ui_components.values())
+                        .map(|props| {
+                            let (x, y) = props.origin;
+                            Ok(ComponentInfo {
+                                name: props.inner.discriminant(),
+                                x, y,
+                                properties: ComponentPropertiesInfo {
+                                    label: props.label.to_string(),
+                                    label_location: props.label_location,
+                                    inner: props.inner.serialize_with_ctx(self, serde_json::value::Serializer)?,
+                                },
+                            })
+                        })
+                        .collect::<Result<_, _>>()
+                        .map_err(SerdeError::Serialize)?
+                },
+                wires: area.wires.wires().collect()
+            }))
+            .collect::<Result<_, SerdeError>>()?;
+
+        Ok(CircuitFile {
             version,
             // TODO: these fields aren't currently tracked anywhere
             global_bitsize: 1,
             clock_speed: 64,
             //
-            circuits: value.physical.into_iter()
-                .map(|pair| pair.try_into())
-                .collect::<Result<_, _>>()?,
+            circuits,
             // TODO: compute these
             revision_signatures: vec![],
-        })
-    }
-}
-impl TryFrom<(super::CircuitKey, super::CircuitArea)> for CircuitInfo {
-    type Error = SerdeError;
-
-    fn try_from(value: (super::CircuitKey, super::CircuitArea)) -> Result<Self, Self::Error> {
-        let (key, super::CircuitArea { components, ui_components, wires: wire_set, .. }) = value;
-
-        Ok(Self {
-            name: key.to_string(), // TODO: assign name
-            components: std::iter::chain(
-                components.into_iter().map(|(_, v)| v),
-                ui_components.into_iter().map(|(_, v)| v)
-            )
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-            wires: wire_set.wires().collect()
-        })
-    }
-}
-impl TryFrom<super::ComponentProps> for ComponentInfo {
-    type Error = SerdeError;
-
-    fn try_from(value: super::ComponentProps) -> Result<Self, Self::Error> {
-        let super::ComponentProps { label, label_location, origin, bounds: _, ports: _, inner } = value;
-
-        let (x, y) = origin;
-        Ok(Self {
-            name: inner.discriminant(),
-            x, y,
-            properties: ComponentPropertiesInfo {
-                label,
-                label_location,
-                inner: inner.serialize(serde_json::value::Serializer).map_err(SerdeError::Serialize)?,
-            },
         })
     }
 }
@@ -213,16 +200,22 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
         // TODO: Validate version, global_bitsize, clock_speed, each component
 
         let mut repr = super::MiddleRepr::new();
+        let circuit_map: HashMap<_, _> = value.circuits.iter()
+            .map(|c| (c.name.to_string(), repr.add_circuit(&c.name)))
+            .collect();
+        
         for CircuitInfo { name, components, wires } in value.circuits {
-            let key = repr.add_circuit(&name);
-            let mut circuit = repr.circuit(key);
+            let mut circuit = repr.circuit(circuit_map[&name]);
 
             for c in components {
                 let ComponentInfo { name: kind, x, y, properties } = c;
                 let ComponentPropertiesInfo { label, label_location, inner } = properties;
                 
-                let inner = PComDeserializer(kind).deserialize(inner.into_deserializer())
-                    .map_err(SerdeError::Deserialize)?;
+                let inner = PhysicalComponentEnum::deserialize_with_ctx(
+                    PComDeserCtx { kind, circuit_map: &circuit_map },
+                    inner.into_deserializer()
+                ).map_err(SerdeError::Deserialize)?;
+                
                 circuit.add_component(inner, &label, label_location, (x, y))?;
             }
 
@@ -230,5 +223,38 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
                 .try_for_each(|w| circuit.add_wire(w))?;
         }
         Ok(repr)
+    }
+}
+
+/// Applies serialization with state (context).
+pub trait SerializeWithCtx<Ctx> {
+    /// Serializes with the provided serializer, using the given context.
+    fn serialize_with_ctx<S>(&self, ctx: &Ctx, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer;
+}
+impl<Ctx, T: Serialize> SerializeWithCtx<Ctx> for T {
+    fn serialize_with_ctx<S>(&self, _: &Ctx, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        self.serialize(serializer)
+    }
+}
+
+/// Applies deserialization with state (context).
+/// 
+/// Note that [`serde::DeserializeSeed`] also does deserialization with state.
+/// The difference is that this trait automatically implements deserialization for all contexts
+///     if the type implements [`Deserialize`],
+///     which is useful for making uniform calls.
+pub trait DeserializeWithCtx<'de, Ctx>: Sized {
+    /// Deserializes with the provided desiralizer, using the given context.
+    fn deserialize_with_ctx<D>(ctx: Ctx, deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de>;
+}
+impl<'de, Ctx, T: Deserialize<'de>> DeserializeWithCtx<'de, Ctx> for T {
+    fn deserialize_with_ctx<D>(_: Ctx, deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de>
+    {
+        Self::deserialize(deserializer)
     }
 }
