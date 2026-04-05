@@ -342,6 +342,11 @@ impl FunctionState {
         let inner = func.initialize_inner_state(graphs);
         Self { ports, inner }
     }
+    
+    /// Gets the number of ports this function has
+    pub fn get_num_ports(&self) -> usize {
+        self.ports.len()
+    }
 
     /// Gets the bit value of a port.
     pub fn get_port(&self, index: usize) -> BitArray {

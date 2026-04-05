@@ -39,6 +39,12 @@ pub struct Constant {
     value: BitArray,
     orientation: Orientation
 }
+impl Constant {
+    /// Creates a new instance of the constant with specified value.
+    pub fn new(value: BitArray, orientation:Orientation) -> Self {
+        Self { value, orientation }
+    }
+}
 impl PhysicalComponent for Constant {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(self.value).into())
@@ -58,6 +64,12 @@ impl PhysicalComponent for Constant {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Power;
+impl Power {
+    /// Creates a new instance of power.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Power {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![1]).into())
@@ -76,6 +88,12 @@ impl PhysicalComponent for Power {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ground;
+impl Ground {
+    /// Creates a new instance of ground.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Ground {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![0]).into())
@@ -97,6 +115,12 @@ pub struct Splitter {
     bitsize: BitSize,
     orientation: Orientation,
     handedness: Handedness
+}
+impl Splitter {
+    /// Creates a new instance of the splitter with specified bitsize.
+    pub fn new(bitsize: BitSize, orientation:Orientation, handedness:Handedness) -> Self {
+        Self { bitsize, orientation, handedness }
+    }
 }
 impl PhysicalComponent for Splitter {
     fn init_engine(&self) -> Option<func::ComponentFn> {

@@ -12,6 +12,12 @@ pub struct Gate {
     n_inputs: GateInputs,
     orientation: Orientation
 }
+impl Gate {
+    /// Creates a new instance of the gate with specified kind, bitsize, and input count.
+    pub fn new(kind: GateKind, bitsize: BitSize, inputs: GateInputs,orientation: Orientation) -> Self {
+        Self { kind, bitsize: bitsize, n_inputs: inputs, orientation: orientation }
+    }
+}
 impl PhysicalComponent for Gate {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Gate::new(self.kind, self.bitsize.get(), self.n_inputs.get()).into())
@@ -45,6 +51,12 @@ pub struct Not {
     bitsize: BitSize,
     orientation: Orientation
 }
+impl Not {
+    /// Creates a new instance of the NOT gate with specified bitsize.
+    pub fn new(bitsize: BitSize, orientation:Orientation) -> Self {
+        Self { bitsize, orientation }
+    }
+}
 
 impl PhysicalComponent for Not {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -69,6 +81,12 @@ impl PhysicalComponent for Not {
 pub struct TriState {
     bitsize: BitSize,
     orientation: Orientation
+}
+impl TriState {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(bitsize: BitSize, orientation:Orientation) -> Self {
+        Self { bitsize, orientation }
+    }
 }
 
 impl PhysicalComponent for TriState {

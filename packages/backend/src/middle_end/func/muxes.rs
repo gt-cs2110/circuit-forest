@@ -12,6 +12,12 @@ pub struct Mux {
     orientation: Orientation,
     handedness: Handedness
 }
+impl Mux {
+    /// Creates a new instance of the mux with specified bitsize and selector size.
+    pub fn new(bitsize: BitSize, selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
+        Self { bitsize, selsize, orientation, handedness }
+    }
+}
 impl PhysicalComponent for Mux {
     fn init_engine(&self) -> Option<ComponentFn> {
         Some(func::Mux::new(self.bitsize.get(), self.selsize.get()).into())
@@ -48,6 +54,12 @@ pub struct Demux {
     orientation: Orientation,
     handedness: Handedness
 }
+impl Demux {
+    /// Creates a new instance of the demux with specified bitsize and selector size.
+    pub fn new(bitsize: BitSize, selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
+        Self { bitsize, selsize, orientation, handedness}
+    }
+}
 impl PhysicalComponent for Demux {
     fn init_engine(&self) -> Option<ComponentFn> {
         Some(func::Demux::new(self.bitsize.get(), self.selsize.get()).into())
@@ -80,6 +92,12 @@ pub struct Decoder {
     selsize: SelSize,
     orientation: Orientation,
     handedness: Handedness
+}
+impl Decoder {
+    /// Creates a new instance of the decoder with specified selector size.
+    pub fn new(selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
+        Self { selsize, orientation, handedness }
+    }
 }
 impl PhysicalComponent for Decoder {
     fn init_engine(&self) -> Option<ComponentFn> {

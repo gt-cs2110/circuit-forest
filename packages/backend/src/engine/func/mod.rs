@@ -241,3 +241,11 @@ fn floating_ports(properties: &[PortProperties]) -> Vec<BitArray> {
 }
 
 pub(crate) type BitSize = RangedByte<{ BitArray::MIN_BITSIZE }, { BitArray::MAX_BITSIZE }>;
+/// Public Helper function to convert a u8 to a GateInputs
+pub fn gateinputs_from_u8(inputs: u8) -> Option<GateInputs> {
+    GateInputs::new(inputs)
+}
+/// Public Helper function to convert a u8 to a BitSize
+pub fn bitsize_from_u8(bitsize: u8) -> Option<BitSize> {
+    BitSize::new(bitsize)
+}
