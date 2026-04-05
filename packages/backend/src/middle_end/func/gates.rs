@@ -8,6 +8,12 @@ pub use func::GateKind;
 pub struct Gate {
     sim: func::Gate
 }
+impl Gate {
+    /// Creates a new instance of the gate with specified kind, bitsize, and input count.
+    pub fn new(kind: GateKind, bitsize: u8, inputs: u8) -> Self {
+        Self { sim: func::Gate::new(kind, bitsize, inputs) }
+    }
+}
 impl PhysicalComponent for Gate {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         Some(self.sim.into())
@@ -38,6 +44,12 @@ impl PhysicalComponent for Gate {
 pub struct Not {
     sim: func::Not,
 }
+impl Not {
+    /// Creates a new instance of the NOT gate with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self { sim: func::Not::new(bitsize) }
+    }
+}
 
 impl PhysicalComponent for Not {
     fn engine_component(&self) -> Option<func::ComponentFn> {
@@ -59,6 +71,12 @@ impl PhysicalComponent for Not {
 /// A tri-state buffer.
 pub struct TriState {
     sim: func::TriState,
+}
+impl TriState {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self { sim: func::TriState::new(bitsize) }
+    }
 }
 
 impl PhysicalComponent for TriState {

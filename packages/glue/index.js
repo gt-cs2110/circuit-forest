@@ -576,4 +576,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.bitwiseAnd = nativeBinding.bitwiseAnd
+module.exports.addComponent = nativeBinding.addComponent
+module.exports.createCircuit = nativeBinding.createCircuit
+module.exports.debugCircuit = nativeBinding.debugCircuit
+module.exports.printCircuit = nativeBinding.printCircuit

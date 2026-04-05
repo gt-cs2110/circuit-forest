@@ -87,7 +87,25 @@ impl MiddleRepr {
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
-    }   
+    }  
+    /// Create a new circuit and return its key.
+    pub fn add_circuit(&mut self) -> CircuitKey {
+        let key = self.engine.add_circuit();
+        self.physical.insert(key, CircuitArea::default());
+        key
+    }
+
+    /// Returns a debug string describing the circuit (engine + physical) for testing.
+    pub fn debug_circuit(&self, key: CircuitKey) -> String {
+        let graph = self.engine.graph(key);
+        let state = self.engine.top_level_state(key);
+        let physical = &self.physical[key];
+        format!(
+            "CircuitKey({:?})\n\nGraph:\n{:#?}\n\nState:\n{:#?}\n\nPhysical:\n{:#?}",
+            key, graph, state, physical
+        )
+    }
+    
 }
 
 /// Basic macro to pretend Circuit has the "graph" and "state" fields.
@@ -105,7 +123,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
         let ComponentBounds { bounds, ports } = physical.bounds(ctx).into_absolute(pos)
@@ -133,6 +151,7 @@ impl MiddleCircuit<'_> {
             }
 
             circ!(self.physical).components.insert(gate, props);
+            Ok(ComponentKey::Function(gate))
         } else {
             // ~~~ UI component ~~~
 
@@ -143,10 +162,9 @@ impl MiddleCircuit<'_> {
                 circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
             }
 
-            circ!(self.physical).ui_components.insert(props);
+            let ui_key = circ!(self.physical).ui_components.insert(props);
+            Ok(ComponentKey::UI(ui_key))
         }
-        
-        Ok(())
     }
 
 
