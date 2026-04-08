@@ -73,8 +73,6 @@ pub enum Handedness {
     DownRight
 }
 
-
-
 /// Context available during [`PhysicalComponent`] initialization.
 pub struct PhysicalInitContext<'a> {
     /// The circuit this component is being placed in.
@@ -86,22 +84,27 @@ pub struct PhysicalInitContext<'a> {
 /// A component that can be added in a [middle-end circuit](`crate::middle_end::MiddleRepr`).
 #[enum_dispatch]
 pub trait PhysicalComponent {
-    /// A component which represents the engine logic of this component.
+    /// Initializes the component which represents the engine logic of this physical component,
+    /// based on the properties of the physical component.
     /// 
     /// This can be `None` if this component has no engine logic.
-    fn engine_component(&self) -> Option<ComponentFn>;
+    fn init_engine(&self) -> Option<ComponentFn>;
 
     /// The name of the component.
     fn component_name(&self) -> &'static str;
 
-    /// The area taken by this component, which includes:
-    ///   - The bounds of the component
+    /// Initializes the bounds of the physical component,
+    /// based on its properties.
+    /// 
+    /// The bounds are defined as:
+    ///   - The area encompassed of the component
+    ///     (defined by the top-leftmost point and the bottom-rightmost point)
     ///   - The position of the ports
     /// 
     /// These components are relative to the origin (0, 0),
     /// meaning that when placed, the locations are relative
     /// to the point the component is placed.
-    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds;
+    fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds;
 }
 
 /// Struct containing the physical bounds of a component and location of ports.
@@ -156,7 +159,10 @@ impl RelativeComponentBounds {
             _ => Self::single_port(2 * MAX_COLS, height)
         }
     }
-    /// Orients the component bounds and ports according to the given orientation, assuming original orientation is East
+
+    /// Orients the component bounds and ports around the origin
+    /// in accordance to the specified orientation and handedness,
+    /// assuming the coordinates were originally oriented eastwards with down-right handedness.
     pub fn orient(self, orientation: Orientation, handedness: Handedness) -> Self {
         // Rotate bounds and ports, then get use the max and min of the corners to get new bounds:
         let Self { bounds: [b0, b1], ports } = self;
@@ -218,11 +224,16 @@ impl AbsoluteComponentBounds {
 }
 
 #[enum_dispatch(PhysicalComponent)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[allow(missing_docs)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::EnumDiscriminants, strum::IntoStaticStr)]
+#[expect(missing_docs)]
+#[strum_discriminants(
+    name(PhysicalComponentKind),
+    expect(missing_docs),
+    derive(strum::IntoStaticStr)
+)]
 pub enum PhysicalComponentEnum {
     // Wiring
-    Input, Output, Constant, Splitter, Power, Ground, Tunnel, Probe,
+    Pin, Constant, Splitter, Power, Ground, Tunnel, Probe,
     // Muxes
     Mux, Demux, Decoder,
     // Misc

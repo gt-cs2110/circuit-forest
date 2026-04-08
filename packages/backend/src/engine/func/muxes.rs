@@ -23,9 +23,12 @@ impl Mux {
         }
     }
 
+    pub(crate) fn n_inputs_from(selsize: u8) -> usize {
+        1 << selsize
+    }
     /// The number of inputs.
     pub fn n_inputs(self) -> usize {
-        1 << self.selsize
+        Mux::n_inputs_from(self.selsize)
     }
 }
 impl Component for Mux {
@@ -65,9 +68,12 @@ impl Demux {
         }
     }
 
+    pub(crate) fn n_outputs_from(selsize: u8) -> usize {
+        1 << selsize
+    }
     /// The number of outputs.
     pub fn n_outputs(self) -> usize {
-        1 << self.selsize
+        Demux::n_outputs_from(self.selsize)
     }
 }
 impl Component for Demux {
@@ -112,9 +118,12 @@ impl Decoder {
         }
     }
 
+    pub(crate) fn n_outputs_from(selsize: u8) -> usize {
+        1 << selsize
+    }
     /// The number of outputs
     pub fn n_outputs(self) -> usize {
-        1 << self.selsize
+        Self::n_outputs_from(self.selsize)
     }
 }
 impl Component for Decoder {

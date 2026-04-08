@@ -6,9 +6,10 @@
 //! 
 
 use slotmap::{SecondaryMap, SlotMap};
+use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
-use crate::middle_end::func::{ComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -38,6 +39,7 @@ pub struct MiddleRepr {
 ///   including their locations and properties.
 #[derive(Debug, Default)]
 struct CircuitArea {
+    name: String,
     components: SecondaryMap<FunctionKey, ComponentProps>,
     ui_components: SlotMap<UIKey, ComponentProps>,
     wires: WireSet,
@@ -48,27 +50,33 @@ struct CircuitArea {
 #[derive(Debug)]
 struct ComponentProps {
     label: String,
+    label_location: Orientation,
 
     // Position
     origin: Coord,
     bounds: [Coord; 2],
     ports: Vec<Coord>,
-    orientation: Orientation,
-    handedness: Handedness,
 
-    // Extra props
-    extra: PhysicalComponentEnum
+    // Component-specific props
+    inner: PhysicalComponentEnum
 }
 
+#[derive(Debug, Error)]
 /// Errors which can occur when editing a middle-end circuit.
 pub enum ReprEditErr {
-    /// Adding a component fails.
-    CannotAddComponent,
-    /// Removing a component fails.
-    CannotRemoveComponent,
+    /// Component is out of bounds (so it cannot be added).
+    #[error("component is out of bounds")]
+    ComponentOutOfBounds,
+    
+    /// Component being specified doesn't exist (so it cannot be removed).
+    #[error("component does not exist")]
+    ComponentDoesNotExist,
+
     /// Adding a wire fails.
+    #[error("cannot add wire")]
     CannotAddWire,
     /// Removing a wire fails.
+    #[error("cannot remove wire")]
     CannotRemoveWire,
 }
 
@@ -84,6 +92,19 @@ impl MiddleRepr {
     pub fn new() -> Self {
         Self::default()
     }
+    /// Creates a new subcircuit.
+    pub fn add_circuit(&mut self, name: &str) -> CircuitKey {
+        let ck = self.engine.add_circuit();
+
+        let area = CircuitArea {
+            name: name.to_string(),
+            ..Default::default()
+        };
+        self.physical.insert(ck, area);
+
+        ck
+    }
+
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
@@ -104,23 +125,23 @@ impl MiddleCircuit<'_> {
     /// Adds a component to the circuit.
     /// 
     /// This takes the component, label, and location for the component.
-    /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<(), ReprEditErr> {
+    /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds.
+    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<(), ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
-        let ComponentBounds { bounds, ports } = physical.bounds(ctx).into_absolute(pos)
-            .ok_or(ReprEditErr::CannotAddComponent)?;
+        let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
+            .into_absolute(pos)
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
         let props = ComponentProps {
             label: label.to_string(),
+            label_location,
             origin: pos,
             bounds,
             ports,
-            orientation: Default::default(),
-            handedness: Default::default(),
-            extra: physical,
+            inner: physical,
         };
 
-        if let Some(component) = physical.engine_component() {
+        if let Some(component) = physical.init_engine() {
             // ~~~ Engine component ~~~
             let gate = circ!(self.engine).add_function_node(component);
             
@@ -137,7 +158,7 @@ impl MiddleCircuit<'_> {
             // ~~~ UI component ~~~
 
             // Add tunnel to wire set:
-            if !props.label.is_empty() && matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
+            if !props.label.is_empty() && matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = circ!(self.physical).tunnel_interner.add_ref(&props.label);
                 circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
@@ -152,12 +173,12 @@ impl MiddleCircuit<'_> {
 
     /// Removes a component from the circuit.
     /// 
-    /// This returns [`ReprEditErr::CannotRemoveComponent`] if the component does not exist.
+    /// This returns [`ReprEditErr::ComponentDoesNotExist`] if the component does not exist.
     pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
         let props = match key {
             ComponentKey::Function(gate) => circ!(self.physical).components.remove(gate),
             ComponentKey::UI(key) => circ!(self.physical).ui_components.remove(key),
-        }.ok_or(ReprEditErr::CannotRemoveComponent)?;
+        }.ok_or(ReprEditErr::ComponentDoesNotExist)?;
 
         // Remove from engine (if applicable):
         if let ComponentKey::Function(gate) = key {
@@ -166,7 +187,7 @@ impl MiddleCircuit<'_> {
         }
         
         // Handle tunnels specially:
-        if matches!(props.extra, PhysicalComponentEnum::Tunnel(_)) {
+        if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
             let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                 .expect("Tunnel should have an assigned symbol");
             circ!(self.physical).wires.remove_tunnel(props.origin, sym)
@@ -213,69 +234,6 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotRemoveWire)?;
 
         self.handle_remove(result);
-
-        Ok(())
-    }
-    /// Sets the orientation of a component, and updates the circuit to accommodate the new orientation.
-    pub fn set_component_orientation(&mut self, key: ComponentKey, orientation: Orientation) -> Result<(), ReprEditErr> {
-        //Extract component properties
-        let props = match key {
-            ComponentKey::Function(gate) => circ!(self.physical).components.get_mut(gate)
-                .ok_or(ReprEditErr::CannotRemoveComponent)?,
-            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get_mut(ui_key)
-                .ok_or(ReprEditErr::CannotRemoveComponent)?,
-        };
-        //extract properties that we will need to update:
-        let (label, origin, old_ports, physical, handedness) = (
-            props.label.clone(),
-            props.origin,
-            props.ports.clone(),
-            props.extra,
-            props.handedness,
-        );
-
-        // Get new bounds and ports: the extra property of props stores the physical component unaffected by orientation, so we can reuse it to get the new bounds and ports for the component with the new orientation.
-        let ComponentBounds { bounds, ports } = physical
-            .bounds(PhysicalInitContext { circuit: self, label: &label })
-            .orient(orientation, handedness)
-            .into_absolute(origin)
-            .ok_or(ReprEditErr::CannotAddComponent)?;
-
-        if !matches!(physical, PhysicalComponentEnum::Tunnel(_)) {
-            // Tunnel port is unaffected by orientation changes bc there is only one port, however for both ui and engine componets there are multiple ports whose positions are affected
-            for index in 0..old_ports.len() {
-                    let result = circ!(self.physical).wires.remove_port(key, index)
-                        .expect("Component removal should succeed");
-                    self.handle_remove(result);
-                }
-        } 
-            
-        
-        // Add new ports to wire set:
-        if let ComponentKey::Function(gate) = key {
-            for (index, &coord) in ports.iter().enumerate() {
-                let value = circ!(self.physical).wires.add_port(coord, key, index, || circ!(self.engine).add_value_node())
-                    .expect("Expected port addition to be successful");
-                circ!(self.engine).connect_one(value, FunctionPort { gate, index });
-            }
-        } 
-            // Update component properties:
-        match key {
-            ComponentKey::Function(gate) => {
-                let props = circ!(self.physical).components.get_mut(gate)
-                    .ok_or(ReprEditErr::CannotRemoveComponent)?;
-                props.bounds = bounds;
-                props.ports = ports;
-                props.orientation = orientation;
-            }
-            ComponentKey::UI(ui_key) => {
-                let props = circ!(self.physical).ui_components.get_mut(ui_key)
-                    .ok_or(ReprEditErr::CannotRemoveComponent)?;
-                props.bounds = bounds;
-                props.ports = ports;
-                props.orientation = orientation;
-            }
-        }
 
         Ok(())
     }

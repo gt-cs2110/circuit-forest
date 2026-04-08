@@ -1,21 +1,21 @@
-use crate::engine::func;
+use crate::engine::{CircuitKey, func};
 use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// A subcircuit component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Subcircuit {
-    sim: func::Subcircuit
+    key: CircuitKey
 }
 impl PhysicalComponent for Subcircuit {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::Subcircuit::new(self.key).into())
     }
 
     fn component_name(&self) ->  &'static str {
         "Subcircuit"
     }
 
-    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         todo!()
     }
 }
@@ -24,7 +24,7 @@ impl PhysicalComponent for Subcircuit {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Text;
 impl PhysicalComponent for Text {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
         None
     }
 
@@ -32,7 +32,7 @@ impl PhysicalComponent for Text {
         "Text"
     }
 
-    fn bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         todo!()
     }
 }
