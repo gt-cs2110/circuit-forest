@@ -42,6 +42,7 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
 /// This is typically used to describe the orientation of a component which can be rotated.
 #[expect(missing_docs)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Default)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Orientation {
     North, South, #[default] East, West
 }
@@ -58,6 +59,7 @@ pub enum Orientation {
 /// 
 /// We will refer to this as the "chiral" port.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Default)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Handedness {
     /// Left-handedness.
     /// 
@@ -229,7 +231,8 @@ impl AbsoluteComponentBounds {
 #[strum_discriminants(
     name(PhysicalComponentKind),
     expect(missing_docs),
-    derive(strum::IntoStaticStr)
+    derive(strum::IntoStaticStr),
+    cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))
 )]
 pub enum PhysicalComponentEnum {
     // Wiring
@@ -241,6 +244,70 @@ pub enum PhysicalComponentEnum {
     //Gates
     Gate, Not, TriState,
 }
+#[cfg(feature="serde")]
+mod pcom_serde {
+    use std::collections::HashMap;
+
+    use crate::engine::CircuitKey;
+    use crate::middle_end::MiddleRepr;
+    use crate::middle_end::func::{self, PhysicalComponentEnum, PhysicalComponentKind};
+    use crate::middle_end::serialize::{DeserializeWithCtx, SerializeWithCtx};
+
+    impl SerializeWithCtx<MiddleRepr> for PhysicalComponentEnum {
+        fn serialize_with_ctx<S>(&self, ctx: &MiddleRepr, serializer: S) -> Result<S::Ok, S::Error>
+            where S: serde::Serializer
+        {
+            // Equivalent to an untagged serialization
+            match self {
+                PhysicalComponentEnum::Pin(pin) => pin.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Constant(constant) => constant.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Splitter(splitter) => splitter.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Power(power) => power.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Ground(ground) => ground.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Tunnel(tunnel) => tunnel.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Probe(probe) => probe.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Mux(mux) => mux.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Demux(demux) => demux.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Decoder(decoder) => decoder.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Text(text) => text.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Subcircuit(subcircuit) => subcircuit.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Gate(gate) => gate.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::Not(not) => not.serialize_with_ctx(ctx, serializer),
+                PhysicalComponentEnum::TriState(tri_state) => tri_state.serialize_with_ctx(ctx, serializer),
+            }
+        }
+    }
+
+    pub struct PComDeserCtx<'a> {
+        pub kind: PhysicalComponentKind,
+        pub circuit_map: &'a HashMap<String, CircuitKey>
+    }
+    impl<'de> DeserializeWithCtx<'de, PComDeserCtx<'de>> for PhysicalComponentEnum {
+        fn deserialize_with_ctx<D>(ctx: PComDeserCtx<'de>, deserializer: D) -> Result<Self, D::Error>
+            where D: serde::Deserializer<'de>
+        {
+            match ctx.kind {
+                // FIXME: Make this automatically generated
+                PhysicalComponentKind::Pin => func::Pin::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Constant => func::Constant::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Splitter => func::Splitter::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Power => func::Power::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Ground => func::Ground::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Tunnel => func::Tunnel::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Probe => func::Probe::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Mux => func::Mux::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Demux => func::Demux::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Decoder => func::Decoder::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Text => func::Text::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Subcircuit => func::Subcircuit::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Gate => func::Gate::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::Not => func::Not::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+                PhysicalComponentKind::TriState => func::TriState::deserialize_with_ctx(ctx, deserializer).map(Into::into),
+            }
+        }
+    }
+}
+pub(crate) use pcom_serde::PComDeserCtx;
 
 #[cfg(test)]
 mod tests {

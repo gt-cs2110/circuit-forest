@@ -12,6 +12,7 @@ pub const MAX_GATE_INPUTS: u8 = 64;
 /// This defines the logic and appearance of the gate.
 #[expect(missing_docs)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, strum::IntoStaticStr)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum GateKind {
     And, Or, Xor, Nand, Nor, Xnor
 }

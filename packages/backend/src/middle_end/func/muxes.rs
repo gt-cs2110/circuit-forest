@@ -5,6 +5,7 @@ const PLEXER_WIDTH: u32 = 3;
 
 /// A multiplexer (mux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mux {
     bitsize: u8,
     selsize: u8,
@@ -40,6 +41,7 @@ impl PhysicalComponent for Mux {
 
 /// A demultiplexer (demux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Demux {
     bitsize: u8,
     selsize: u8,
@@ -73,6 +75,7 @@ impl PhysicalComponent for Demux {
 
 /// A decoder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Decoder {
     selsize: u8,
     orientation: Orientation,

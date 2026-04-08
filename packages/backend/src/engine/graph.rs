@@ -32,7 +32,7 @@ pub struct FunctionPort {
 /// A node which represents a wire (which can hold some value).
 /// 
 /// This node may only connect to function node ports.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ValueNode {
     /// The current bitsize.
     /// 
@@ -55,7 +55,7 @@ impl ValueNode {
 /// A node which represents a function or component.
 /// 
 /// This node has ports which may only connect to value nodes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionNode {
     /// The actual function that is applied.
     pub(crate) func: ComponentFn,
@@ -75,7 +75,7 @@ impl FunctionNode {
 }
 
 /// A circuit structure.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct CircuitGraph {
     /// All value nodes of the circuit.
     pub(crate) values: SlotMap<ValueKey, ValueNode>,

@@ -736,6 +736,61 @@ impl std::ops::Not for BitArray {
     }
 }
 
+#[cfg(feature="serde")]
+mod serde {
+    use serde::de::{Unexpected, Visitor};
+    use serde::{Deserialize, Serialize};
+
+    use crate::bitarray::{BitArray, BitState};
+
+    impl Serialize for BitArray {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where S: serde::Serializer
+        {
+            serializer.collect_str(self)
+        }
+    }
+    impl<'de> Deserialize<'de> for BitArray {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where D: serde::Deserializer<'de>
+        {
+            struct BaVisitor;
+            impl<'de> Visitor<'de> for BaVisitor {
+                type Value = BitArray;
+            
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(formatter, " a string")
+                }
+
+                fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    Ok(BitArray::from(BitState::from(v)))
+                }
+                fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    Ok(BitArray::from(v))
+                }
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    v.parse()
+                        .map_err(|_| E::invalid_value(Unexpected::Str(v), &"valid bitarray"))
+                }
+
+                fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                    where E: serde::de::Error
+                {
+                    self.visit_str(std::str::from_utf8(v).map_err(|e| E::custom(e))?)
+                }
+            }
+            
+            deserializer.deserialize_any(BaVisitor)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,6 +5,7 @@ use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, Physic
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pin {
     bitsize: u8,
     is_input: bool,
@@ -33,6 +34,7 @@ impl PhysicalComponent for Pin {
 
 /// A constant.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Constant {
     value: BitArray,
     orientation: Orientation
@@ -54,6 +56,7 @@ impl PhysicalComponent for Constant {
 
 /// Power (essentially a constant 1).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Power;
 impl PhysicalComponent for Power {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -71,6 +74,7 @@ impl PhysicalComponent for Power {
 
 /// Ground (essentially a constant 0).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ground;
 impl PhysicalComponent for Ground {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -88,6 +92,7 @@ impl PhysicalComponent for Ground {
 
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Splitter {
     bitsize: u8,
     orientation: Orientation,
@@ -114,6 +119,7 @@ impl PhysicalComponent for Splitter {
 
 /// A tunnel.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tunnel {
     orientation: Orientation
 }
@@ -134,6 +140,7 @@ impl PhysicalComponent for Tunnel {
 
 /// A probe.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Probe {
     orientation: Orientation
 }

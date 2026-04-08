@@ -15,6 +15,7 @@ use crate::middle_end::wire::{Wire, WireSet};
 
 mod key;
 mod string_interner;
+#[cfg(feature="serde")]
 pub mod serialize;
 pub mod wire;
 pub mod func;
@@ -29,7 +30,8 @@ type AxisDelta = i32;
 type CoordDelta = (AxisDelta, AxisDelta);
 
 /// A group of middle circuits.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature="serde", derive(serde::Deserialize), serde(try_from = "serialize::CircuitFile"))]
 pub struct MiddleRepr {
     engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>
@@ -37,7 +39,7 @@ pub struct MiddleRepr {
 
 /// A circuit's middle-end components and wires,
 ///   including their locations and properties.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct CircuitArea {
     name: String,
     components: SecondaryMap<FunctionKey, ComponentProps>,
@@ -47,7 +49,7 @@ struct CircuitArea {
 }
 
 /// Properties of a middle-end component.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ComponentProps {
     label: String,
     label_location: Orientation,

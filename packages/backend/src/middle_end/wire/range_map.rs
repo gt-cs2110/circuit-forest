@@ -278,7 +278,7 @@ fn wires_all_iter(map: &WR1DSet, horizontal: bool) -> impl Iterator<Item=Wire> {
 }
 type WR1DSet = HashMap<Axis, WireRangeMap1D>;
 /// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct WireRangeMap {
     /// All horizontal wires. This is Map<y, Map<start x, length>>.
     horiz_wires: WR1DSet,
