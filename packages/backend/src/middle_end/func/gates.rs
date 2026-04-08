@@ -1,4 +1,4 @@
-use crate::engine::func;
+use crate::engine::func::{self, BitSize, GateInputs};
 use crate::middle_end::func::{AbsoluteComponentBounds, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 pub use func::GateKind;
@@ -8,13 +8,13 @@ pub use func::GateKind;
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Gate {
     kind: GateKind,
-    bitsize: u8,
-    n_inputs: u8,
+    bitsize: BitSize,
+    n_inputs: GateInputs,
     orientation: Orientation
 }
 impl PhysicalComponent for Gate {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Gate::new(self.kind, self.bitsize, self.n_inputs).into())
+        Some(func::Gate::new(self.kind, self.bitsize.get(), self.n_inputs.get()).into())
     }
 
     fn component_name(&self) -> &'static str {
@@ -24,7 +24,7 @@ impl PhysicalComponent for Gate {
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         // The origin is at the output port, which is at (4,2) in absolute coordinates.
         let bounds = [(-4, -2), (0, 2)];
-        let inputs = i32::from(self.n_inputs);
+        let inputs = i32::from(self.n_inputs.get());
         
         let mut ports = vec![];
         // Input ports
@@ -42,13 +42,13 @@ impl PhysicalComponent for Gate {
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 /// A NOT gate component.
 pub struct Not {
-    bitsize: u8,
+    bitsize: BitSize,
     orientation: Orientation
 }
 
 impl PhysicalComponent for Not {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Not::new(self.bitsize).into())
+        Some(func::Not::new(self.bitsize.get()).into())
     }
 
     fn component_name(&self) -> &'static str {
@@ -67,13 +67,13 @@ impl PhysicalComponent for Not {
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 /// A tri-state buffer.
 pub struct TriState {
-    bitsize: u8,
+    bitsize: BitSize,
     orientation: Orientation
 }
 
 impl PhysicalComponent for TriState {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::TriState::new(self.bitsize).into())
+        Some(func::TriState::new(self.bitsize.get()).into())
     }
 
     fn component_name(&self) -> &'static str {
