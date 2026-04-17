@@ -1,9 +1,7 @@
 import { computed, reactive, ref } from "vue";
 
-import { GRID_SIZE, ORIGIN_OFFSET } from "../consts";
 import { ComponentType, Location } from "../types";
 import { currentSubcircuitId } from "./circuit";
-import { scale } from "./settings";
 
 type CircuitViewState = {
     selection: Set<number>;
@@ -28,27 +26,6 @@ export function deleteViewState(circuitId: string) {
 
 export const currentViewState = computed(() => getViewState(currentSubcircuitId.value));
 export const selection = computed(() => currentViewState.value.selection);
-export const currentOffset = computed(() => currentViewState.value.offset);
-
-export function containerToWorld(containerX: number, containerY: number) {
-    return {
-        x:
-            (containerX - currentOffset.value.x - ORIGIN_OFFSET * scale.value) /
-            scale.value /
-            GRID_SIZE,
-        y:
-            (containerY - currentOffset.value.y - ORIGIN_OFFSET * scale.value) /
-            scale.value /
-            GRID_SIZE,
-    };
-}
-
-export function worldToScreen(wx: number, wy: number) {
-    return {
-        x: wx * GRID_SIZE * scale.value + currentOffset.value.x + ORIGIN_OFFSET * scale.value,
-        y: wy * GRID_SIZE * scale.value + currentOffset.value.y + ORIGIN_OFFSET * scale.value,
-    };
-}
 
 // SELECTION
 
@@ -68,20 +45,6 @@ export function clearSelection() {
 export function isSelected(id: number) {
     return selection.value.has(id);
 }
-
-// DRAG
-
-export const drag = reactive({
-    active: false,
-    initialMouse: { x: 0, y: 0 }, // world coords
-    initialPositions: new Map<number, Location>(), // snapshot at drag start
-});
-
-export const marquee = reactive({
-    active: false,
-    start: { x: 0, y: 0 }, // world coords
-    current: { x: 0, y: 0 }, // world coords
-});
 
 // PLACING
 

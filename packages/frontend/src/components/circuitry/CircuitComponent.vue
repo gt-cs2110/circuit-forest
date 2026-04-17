@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { selection, selectComponent, deselectComponent } from "@/lib/store/view";
+import { selectComponent, deselectComponent, isSelected } from "@/lib/store/view";
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
@@ -17,12 +17,12 @@ function handleMouseDown(e: MouseEvent) {
 
     const additive = e.shiftKey || e.metaKey;
 
-    if (additive && selection.value.has(props.component.id)) {
+    if (additive && isSelected(props.component.id)) {
         deselectComponent(props.component.id);
         return;
     }
 
-    if (!selection.value.has(props.component.id)) {
+    if (!isSelected(props.component.id)) {
         selectComponent(props.component.id, additive);
     }
     emit("dragstart", e);
@@ -55,7 +55,7 @@ const ports = computed(() => metadata.value.getPorts(props.component));
         />
 
         <rect
-            v-if="selection.has(props.component.id)"
+            v-if="isSelected(props.component.id)"
             class="pointer-events-none outline outline-offset-1 outline-blue-500"
             :width="dimensions.width * GRID_SIZE"
             :height="dimensions.height * GRID_SIZE"
