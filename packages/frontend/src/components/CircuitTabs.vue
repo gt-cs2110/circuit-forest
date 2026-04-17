@@ -10,12 +10,12 @@ const scroller = useTemplateRef("scroller");
 async function createNew() {
     newSubcircuit();
     await nextTick();
-    scroller.value.scrollToEnd();
+    scroller.value?.scrollToEnd();
 }
 
 async function selectTab() {
     await nextTick();
-    const tab = scroller.value.parent.querySelector(`[data-state=active]`);
+    const tab = scroller.value?.parent?.querySelector(`[data-state=active]`);
     if (tab) {
         tab.scrollIntoView();
     }

@@ -66,11 +66,11 @@ const marqueeStyle = computed(() => {
 });
 
 function toWorld(e: MouseEvent) {
-    const rect = containerRef.value.getBoundingClientRect();
+    const rect = containerRef.value!.getBoundingClientRect();
     return containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
 }
 
-const placingComponentPosition = reactive({ x: 0, y: 0 });
+const placingComponentPosition = reactive({ x: 0 as number | null, y: 0 as number | null });
 
 watch(placingComponent, () => {
     placingComponentPosition.x = null;
@@ -78,6 +78,9 @@ watch(placingComponent, () => {
 });
 
 watch(mousePosition, (mouse) => {
+    if (!placingComponent.value) {
+        return;
+    }
     const metadata = componentMap[placingComponent.value];
     const dimensions = metadata?.getDimensions() || { width: 1, height: 1 };
     placingComponentPosition.x = Math.floor(
@@ -100,7 +103,7 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
-    const rect = containerRef.value.getBoundingClientRect();
+    const rect = containerRef.value!.getBoundingClientRect();
     mousePosition.x = e.clientX - rect.left;
     mousePosition.y = e.clientY - rect.top;
 
@@ -108,7 +111,7 @@ function handleMouseMove(e: MouseEvent) {
     updatePan(e.clientX, e.clientY);
     updateDrag(world.x, world.y);
     updateMarquee(world.x, world.y);
-    updateTooltip(e.target);
+    updateTooltip(e.target!);
 }
 
 function handleMouseUp() {
@@ -124,7 +127,7 @@ function handleComponentDragStart(e: MouseEvent) {
 
 function handleWheel(e: WheelEvent) {
     wheelZoom(e);
-    nextTick().then(() => updateTooltip(e.target));
+    nextTick().then(() => updateTooltip(e.target!));
 }
 
 function handleKeyDown(e: KeyboardEvent) {
@@ -191,7 +194,11 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
             />
 
             <g
-                v-if="placingComponent && placingComponentPosition.x !== null"
+                v-if="
+                    placingComponent &&
+                    placingComponentPosition.x !== null &&
+                    placingComponentPosition.y !== null
+                "
                 opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="
