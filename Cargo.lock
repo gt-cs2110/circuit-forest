@@ -191,7 +191,6 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "once_cell",
  "slotmap",
 ]
 
