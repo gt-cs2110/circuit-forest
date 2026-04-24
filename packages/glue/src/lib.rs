@@ -1,13 +1,15 @@
 #![deny(clippy::all)]
 
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
-use circuitsim_engine::middle_end::{ComponentKey, MiddleRepr, func::{self, PhysicalComponentEnum}};
+use std::sync::LazyLock;
+use circuitsim_engine::middle_end::{ComponentKey, MiddleRepr, UIKey, func::{self, PhysicalComponentEnum}};
 use circuitsim_engine::engine::func::GateKind;
+use circuitsim_engine::engine::FunctionKey;
+use napi::JsNumber;
 use napi_derive::napi;
 use slotmap::KeyData;
 use napi::bindgen_prelude::BigInt;
-static REPR: Lazy<Mutex<MiddleRepr>> = Lazy::new(|| Mutex::new(MiddleRepr::new()));
+static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
 
 
 /// Creates a new circuit and returns its key as an i64 for JS.
@@ -21,7 +23,7 @@ pub fn create_circuit()-> Result<BigInt, napi::Error> {
 #[napi]
 pub fn add_component(circuit_key: BigInt, properties:CircuitComponent) -> Result<BigInt, napi::Error>{
   let mut rep = REPR.lock().unwrap();
-  let mut circuit = rep.circuit(bigint_to_key(circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?);
+  let mut circuit = rep.circuit(bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?);
    let c:PhysicalComponentEnum = match properties.component_type.as_str() {
     "AND" => PhysicalComponentEnum::Gate(func::Gate::new(GateKind::And, properties.bitsize,  properties.inputs)),
     "OR" => PhysicalComponentEnum::Gate(func::Gate::new(GateKind::Or, properties.bitsize,  properties.inputs)),
@@ -40,19 +42,75 @@ pub fn add_component(circuit_key: BigInt, properties:CircuitComponent) -> Result
 };  Ok(big)
 }
 
-/// Returns a debug string describing the circuit for testing.
 #[napi]
-pub fn debug_circuit(circuit_key: BigInt) -> Result<String, napi::Error> {
-  let repr = REPR.lock().unwrap();
-  let key = bigint_to_key(circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?;
-  Ok(repr.debug_circuit(key))
+pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<(), napi::Error> {
+  let mut rep = REPR.lock().unwrap();
+  let mut circuit = rep.circuit(bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?);
+
+  if let Some(fk) = bigint_to_key::<FunctionKey>(&component_key) {
+    if circuit.remove_component(ComponentKey::Function(fk)).is_ok() {
+      return Ok(());
+    }
+  }
+
+  if let Some(uk) = bigint_to_key::<UIKey>(&component_key) {
+    return circuit.remove_component(ComponentKey::UI(uk))
+      .map_err(|_| napi::Error::from_reason("Component removal failed"));
+  }
+
+  Err(napi::Error::from_reason("Invalid component key"))
 }
 
+
+
+
+/**
+ * add/remove wire
+ * set input value
+ * propogate
+ * get circuit state
+ * 
+ */
+
+ #[napi]
+ pub fn get_circuit_state(circuit_key: BigInt) -> Result<CircuitState, napi::Error>{
+  //Get the circuit
+  let mut rep = REPR.lock().unwrap();
+  let mut circuit = rep.circuit(bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("invalid circut key"))?);
+
+  //iterate through all components and get their state
+  let mut component_states = Vec::new();
+  for (key, state) in circuit.get_component_states() {
+    let big_int = key_to_bigint(key);
+
+    //get num ports and iterate through them to get values and states
+    let num_ports = state.get_num_ports();
+    let port_values = (0..num_ports).map(|i| state.get_port(i).to_string()).collect();
+    component_states.push(ComponentState { key: big_int, port_values });
+  }
+
+
+
+  return Ok(CircuitState { components: component_states })
+ }
+
+ #[napi]
+ pub fn propagate(circuit_key: BigInt) -> Result<(), napi::Error>{
+  let mut rep = REPR.lock().unwrap();
+  let mut circuit = rep.circuit(bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("invalid circut key"))?);
+  circuit.propagate();
+  Ok(())
+ }
+
+
+
+
+
 #[napi]
-pub fn print_circuit(circuit_key: BigInt) -> Result<(String), napi::Error> {
+pub fn print_circuit(circuit_key: BigInt) -> Result<String, napi::Error> {
   let mut repr = REPR.lock().unwrap();
-  let key = bigint_to_key(circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?;
-  Ok(repr.debug_circuit(key))
+  let key = bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?;
+  Ok(format!("Circuit:{:?}", repr.circuit(key)))
   
 }
 
@@ -69,13 +127,27 @@ pub struct CircuitComponent {
   pub y:u32
 
 }
+#[napi(object)]
+pub struct CircuitState {
+  pub components: Vec<ComponentState>
+  //wires
+
+
+}
+
+#[napi(object)]
+pub struct ComponentState{
+  pub key:BigInt,
+  pub port_values: Vec<String>,//0,1,Z,X low, high, impedence, unkown
+
+}
 
 pub fn key_to_bigint<K: slotmap::Key>(k: K) -> BigInt {
   let raw = k.data().as_ffi(); // u64
   BigInt::from(raw)
 }
 
-fn bigint_to_key<K: slotmap::Key>(b: BigInt) -> Option<K> {
+fn bigint_to_key<K: slotmap::Key>(b: &BigInt) -> Option<K> {
   let (sign, raw, lossless) = b.get_u64();
   if sign || !lossless {
     return None;

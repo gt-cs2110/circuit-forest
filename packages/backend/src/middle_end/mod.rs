@@ -5,8 +5,10 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
+
 use slotmap::{SecondaryMap, SlotMap};
 
+use crate::engine::state::{self, FunctionState};
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
@@ -75,6 +77,7 @@ pub enum ReprEditErr {
 /// A mutable view of a middle-end circuit,
 /// which includes its engine component ([`crate::engine::Circuit`])
 /// and its physical properties.
+#[derive(Debug)]
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,
     key: CircuitKey
@@ -95,16 +98,7 @@ impl MiddleRepr {
         key
     }
 
-    /// Returns a debug string describing the circuit (engine + physical) for testing.
-    pub fn debug_circuit(&self, key: CircuitKey) -> String {
-        let graph = self.engine.graph(key);
-        let state = self.engine.top_level_state(key);
-        let physical = &self.physical[key];
-        format!(
-            "CircuitKey({:?})\n\nGraph:\n{:#?}\n\nState:\n{:#?}\n\nPhysical:\n{:#?}",
-            key, graph, state, physical
-        )
-    }
+    
     
 }
 
@@ -114,8 +108,8 @@ impl MiddleRepr {
 /// because this is returning a place rather than a value.
 macro_rules! circ {
     ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
-    ($self:ident.state)    => { $self.repr.engine.state[$self.key] };
+    ($self:ident.graph)    => { $self.repr.engine.graph($self.key) };
+    ($self:ident.state)    => { $self.repr.engine.state($self.key) };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
@@ -332,5 +326,13 @@ impl MiddleCircuit<'_> {
     /// Updates the engine.
     pub fn propagate(&mut self) {
         circ!(self.engine).propagate();
+    }
+
+    /// Gets the states of all components in the circuit
+    pub fn get_component_states<'a>(&'a self) -> Vec<(FunctionKey, &'a FunctionState)> {
+        circ!(self.state)
+            .functions
+            .iter()
+            .collect() 
     }
 }

@@ -11,10 +11,26 @@ export interface CircuitComponent {
   y: number
 }
 
+export interface CircuitState {
+  components: Array<ComponentState>
+}
+
+export interface ComponentState {
+  key: bigint
+  portValues: Array<string>
+}
+
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(): bigint
 
-/** Returns a debug string describing the circuit for testing. */
-export declare function debugCircuit(circuitKey: bigint): string
+/** * add/remove wire
+ * set input value
+ * propogate
+ * get circuit state
+ *
+ */
+export declare function getCircuitState(circuitKey: bigint): CircuitState
 
 export declare function printCircuit(circuitKey: bigint): string
+
+export declare function removeComponent(circuitKey: bigint, componentKey: bigint): void

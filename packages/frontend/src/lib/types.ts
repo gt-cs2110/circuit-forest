@@ -28,6 +28,7 @@ export type ComponentMap = Record<ComponentType, ComponentMetadata>;
 
 export type CircuitComponent = Location & {
     id: number;
+    backendkey: bigint;
     type: ComponentType;
     label: string;
     bitsize: number;
@@ -41,6 +42,7 @@ export type Wire = Location & {
 
 export type Subcircuit = {
     name: string;
+    backendkey: bigint;
     components: Map<number, CircuitComponent>;
     wires: Wire[];
 };

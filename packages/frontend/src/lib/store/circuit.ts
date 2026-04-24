@@ -10,8 +10,15 @@ export type SubcircuitState = {
 };
 
 export const circuits = reactive<Map<string, SubcircuitState>>(
-    new Map([
-        [
+    new Map([createSubcircuit("Circuit 1")]
+    ),
+
+);
+
+
+
+/**
+ * [
             "circuit1",
             {
                 subcircuit: {
@@ -103,8 +110,7 @@ export const circuits = reactive<Map<string, SubcircuitState>>(
                 offset: { x: 0, y: 0 },
             },
         ],
-    ]),
-);
+ */
 
 export const currentCircuitId = ref(circuits.keys().next().value);
 export const currentCircuit = computed(() => {
@@ -149,10 +155,16 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         placingComponent.value = null;
         return;
     }
+    console.log(`Placing component of type ${type} at (${x}, ${y})`);
+    //when we place a component we remove the old component if it exists and create the new component
+    console.log(circuits);
+    const backendKey = window.api.glue.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:type.toUpperCase(), label:"",bitsize:settings.globalBitsize, inputs: 2, x:x, y:y} );
+    
 
     const id = randomId();
     currentCircuit.value.subcircuit.components.set(id, {
         id,
+        backendkey: backendKey,
         bitsize: settings.globalBitsize,
         label: "",
         type,
@@ -163,17 +175,26 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     placingComponent.value = null;
 }
-
-export function newSubcircuit() {
+function createSubcircuit(name: string) {
     const id = randomId().toString();
-    circuits.set(id, {
-        subcircuit: {
-            name: "New subcircuit",
-            components: new Map(),
-            wires: [],
-        },
-        offset: { x: 0, y: 0 },
-        selectedComponentId: null,
-    });
+    const key:bigint = window.api.glue.createCircuit();
+    return [
+    id,
+    {
+      subcircuit: {
+        name:name,
+        backendkey:key,
+        components: new Map(),
+        wires: [],
+      },
+      selectedComponentId: null,
+      offset: { x: 0, y: 0 },
+    },
+  ] as [string, SubcircuitState];
+}
+export function newSubcircuit() {
+    const [id,circuit] = createSubcircuit("New Subcircuit");
+    circuits.set(id, circuit);
     currentCircuitId.value = id;
+
 }
