@@ -158,7 +158,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     console.log(`Placing component of type ${type} at (${x}, ${y})`);
     //when we place a component we remove the old component if it exists and create the new component
     console.log(circuits);
-    const backendKey = window.api.glue.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:type.toUpperCase(), label:"",bitsize:settings.globalBitsize, inputs: 2, x:x, y:y} );
+    const backendKey = window.api.core.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:type.toUpperCase(), label:"",bitsize:settings.globalBitsize, inputs: 2, x:x, y:y} );
     
 
     const id = randomId();
@@ -177,7 +177,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 }
 function createSubcircuit(name: string) {
     const id = randomId().toString();
-    const key:bigint = window.api.glue.createCircuit();
+    const key:bigint = window.api.core.createCircuit();
     return [
     id,
     {

@@ -580,4 +580,5 @@ module.exports.addComponent = nativeBinding.addComponent
 module.exports.createCircuit = nativeBinding.createCircuit
 module.exports.getCircuitState = nativeBinding.getCircuitState
 module.exports.printCircuit = nativeBinding.printCircuit
+module.exports.propagate = nativeBinding.propagate
 module.exports.removeComponent = nativeBinding.removeComponent

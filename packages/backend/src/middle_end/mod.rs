@@ -97,6 +97,10 @@ impl MiddleRepr {
         self.physical.insert(key, CircuitArea::default());
         key
     }
+    //checks to see if a circuit with the given key exists in the middle end
+    pub fn has_circuit(&self, key: CircuitKey) -> bool {
+        self.physical.contains_key(key)
+    }
 
     
     
@@ -334,5 +338,13 @@ impl MiddleCircuit<'_> {
             .functions
             .iter()
             .collect() 
+    }
+
+    /// Checks to see if circuit has a component with the given key
+    pub fn has_component(&self, key: ComponentKey) -> bool {
+        match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.contains_key(gate),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
+        }
     }
 }

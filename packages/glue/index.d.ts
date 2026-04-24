@@ -33,4 +33,6 @@ export declare function getCircuitState(circuitKey: bigint): CircuitState
 
 export declare function printCircuit(circuitKey: bigint): string
 
+export declare function propagate(circuitKey: bigint): void
+
 export declare function removeComponent(circuitKey: bigint, componentKey: bigint): void
