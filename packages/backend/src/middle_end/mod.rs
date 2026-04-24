@@ -120,7 +120,7 @@ impl MiddleCircuit<'_> {
     /// Adds a component to the circuit.
     /// 
     /// This takes the component, label, and location for the component.
-    /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds.
+    /// This returns [`ReprEditErr::CannotAddComponent`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
         let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
@@ -149,6 +149,7 @@ impl MiddleCircuit<'_> {
             }
 
             circ!(self.physical).components.insert(gate, props);
+
             Ok(ComponentKey::Function(gate))
         } else {
             // ~~~ UI component ~~~
