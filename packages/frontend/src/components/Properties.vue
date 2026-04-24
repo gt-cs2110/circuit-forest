@@ -1,32 +1,33 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { circuits, currentCircuit, selectedComponentId } from "@/lib/store/circuit";
+import { circuits, currentSubcircuit } from "@/lib/store/circuit";
 import { componentMap } from "./circuitry";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
+import { selection } from "@/lib/store/view";
 
 const nameReset = ref(0);
 const subcircuitName = computed({
     get() {
-        return currentCircuit.value.subcircuit.name;
+        return currentSubcircuit.value.name;
     },
     set(name) {
         if (name === "") {
             toast.error("Subcircuit name is required!");
             nameReset.value++;
             return;
-        } else if ([...circuits.values()].some(({ subcircuit }) => subcircuit.name === name)) {
+        } else if ([...circuits.values()].some((subcircuit) => subcircuit.name === name)) {
             toast.error("A subcircuit with this name already exists!");
             nameReset.value++;
             return;
         }
-        currentCircuit.value.subcircuit.name = name;
+        currentSubcircuit.value.name = name;
     },
 });
 
 const selectedComponent = computed(() =>
-    currentCircuit.value.subcircuit.components.get(selectedComponentId.value),
+    currentSubcircuit.value.components.get(selection.value.values().next().value),
 );
 
 const sections = ["global", "circuit", "component"] as const;
@@ -60,7 +61,7 @@ const sections = ["global", "circuit", "component"] as const;
         </AccordionItem>
 
         <AccordionItem value="circuit">
-            <AccordionHeader> {{ currentCircuit.subcircuit.name }} </AccordionHeader>
+            <AccordionHeader> {{ currentSubcircuit.name }} </AccordionHeader>
 
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
@@ -78,7 +79,7 @@ const sections = ["global", "circuit", "component"] as const;
             </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem v-if="selectedComponentId !== null" value="component">
+        <AccordionItem v-if="selectedComponent" value="component">
             <AccordionHeader>
                 {{ componentMap[selectedComponent.type].displayName }}
             </AccordionHeader>

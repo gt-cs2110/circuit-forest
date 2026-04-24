@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { circuits, currentCircuitId, newSubcircuit } from "@/lib/store/circuit";
+import { circuits, currentSubcircuitId, newSubcircuit } from "@/lib/store/circuit";
 import { Plus } from "lucide-vue-next";
 import { TabsList, TabsRoot, TabsTrigger } from "reka-ui";
 import { nextTick, useTemplateRef } from "vue";
@@ -10,12 +10,12 @@ const scroller = useTemplateRef("scroller");
 async function createNew() {
     newSubcircuit();
     await nextTick();
-    scroller.value.scrollToEnd();
+    scroller.value?.scrollToEnd();
 }
 
 async function selectTab() {
     await nextTick();
-    const tab = scroller.value.parent.querySelector(`[data-state=active]`);
+    const tab = scroller.value?.parent?.querySelector(`[data-state=active]`);
     if (tab) {
         tab.scrollIntoView();
     }
@@ -23,7 +23,7 @@ async function selectTab() {
 </script>
 
 <template>
-    <TabsRoot v-model="currentCircuitId" @update:model-value="selectTab">
+    <TabsRoot v-model="currentSubcircuitId" @update:model-value="selectTab">
         <HorizontalScroll ref="scroller">
             <TabsList class="flex border-b bg-panel-dark text-sm">
                 <TabsTrigger
@@ -32,15 +32,15 @@ async function selectTab() {
                     :value="id"
                     class="relative cursor-pointer items-stretch border-r px-4 py-3 font-medium"
                     :class="[
-                        currentCircuitId === id
+                        currentSubcircuitId === id
                             ? 'bg-panel-light text-foreground-highlight'
                             : 'bg-panel-dark text-foreground-muted hover:bg-panel-light',
                     ]"
                 >
-                    {{ circuit.subcircuit.name }}
+                    {{ circuit.name }}
 
                     <div
-                        v-if="currentCircuitId === id"
+                        v-if="currentSubcircuitId === id"
                         class="absolute inset-x-0 top-full h-0.5 bg-panel-light"
                     ></div>
                 </TabsTrigger>

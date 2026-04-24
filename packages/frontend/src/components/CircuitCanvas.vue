@@ -1,52 +1,88 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { GRID_SIZE } from "@/lib/consts";
-import {
-    componentDrag,
-    placeComponent,
-    placingComponent,
-    selectedComponentId,
-    SubcircuitState,
-} from "@/lib/store/circuit";
+import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
+import { placeComponent } from "@/lib/store/circuit";
+import { clearSelection, getViewState, placingComponent, selection } from "@/lib/store/view";
+import { scale, settings } from "@/lib/store/settings";
+import { Subcircuit } from "@/lib/types";
+import { componentMap } from "./circuitry";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
-import { componentMap } from "./circuitry";
 import Wire from "./circuitry/Wire.vue";
-import { scale, settings } from "@/lib/store/settings";
+
+import { useCoordinates } from "@/composables/useCoordinates";
+import { usePan } from "@/composables/usePan";
+import { useDrag } from "@/composables/useDrag";
+import { useMarquee } from "@/composables/useMarquee";
+import { useZoom } from "@/composables/useZoom";
+import { useTooltip } from "@/composables/useTooltip";
 
 const props = defineProps<{
-    state: SubcircuitState;
+    subcircuit: Subcircuit;
 }>();
 
-const ORIGIN_OFFSET = GRID_SIZE / 2;
+const containerRef = ref<HTMLDivElement>();
+const view = computed(() => getViewState(props.subcircuit.id));
 
+// NOTE: offset should always be assigned to by setting offset.value, not by
+// setting offset.value.x/y individually. this is so that the value is always
+// clamped. there are probably better ways to ensure this.
 const offset = computed({
-    get: () => props.state.offset,
+    get: () => view.value.offset,
     set: (val) => {
-        props.state.offset.x = Math.min(val.x, 0);
-        props.state.offset.y = Math.min(val.y, 0);
+        view.value.offset.x = Math.min(val.x, 0);
+        view.value.offset.y = Math.min(val.y, 0);
     },
 });
 
-const isDragging = ref(false);
-const dragStart = reactive({ x: 0, y: 0 });
+// container coordinates
+const mousePosition = reactive({ x: 0, y: 0 });
 
-const mousePosition = reactive({
-    x: 0,
-    y: 0,
+const { containerToWorld, worldToContainer } = useCoordinates(offset, scale);
+const { isPanning, startPan, updatePan, stopPan } = usePan(offset);
+const { wheelZoom, keyboardZoom } = useZoom(
+    offset,
+    mousePosition,
+    () => settings.scaleLevel,
+    (level) => (settings.scaleLevel = level),
+    scale,
+);
+const { startDrag, updateDrag, stopDrag } = useDrag(props.subcircuit, selection);
+const { marquee, startMarquee, updateMarquee, finalizeMarquee } = useMarquee(
+    props.subcircuit,
+    selection,
+);
+const { tooltip, updateTooltip } = useTooltip();
+
+const marqueeStyle = computed(() => {
+    const a = worldToContainer(marquee.start.x, marquee.start.y);
+    const b = worldToContainer(marquee.current.x, marquee.current.y);
+    return {
+        left: Math.min(a.x, b.x) + "px",
+        top: Math.min(a.y, b.y) + "px",
+        width: Math.abs(a.x - b.x) + "px",
+        height: Math.abs(a.y - b.y) + "px",
+    };
 });
-const placingComponentPosition = reactive({
-    x: 0,
-    y: 0,
-});
+
+function toWorld(e: MouseEvent) {
+    const rect = containerRef.value!.getBoundingClientRect();
+    return containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
+}
+
+const placingComponentPosition = reactive({ x: 0 as number | null, y: 0 as number | null });
+
 watch(placingComponent, () => {
     placingComponentPosition.x = null;
     placingComponentPosition.y = null;
 });
+
 watch(mousePosition, (mouse) => {
+    if (!placingComponent.value) {
+        return;
+    }
     const metadata = componentMap[placingComponent.value];
     const dimensions = metadata?.getDimensions() || { width: 1, height: 1 };
-
     placingComponentPosition.x = Math.floor(
         (mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
     );
@@ -55,146 +91,63 @@ watch(mousePosition, (mouse) => {
     );
 });
 
-const tooltip = reactive({
-    value: null as null | string,
-    x: 0,
-    y: 0,
-});
-
 function handleMouseDown(e: MouseEvent) {
-    if (!((e.button === 0 && (e.shiftKey || e.metaKey)) || e.button === 1)) {
-        if (e.button === 0) {
-            selectedComponentId.value = null;
-        }
-
+    if ((e.button === 0 && e.metaKey) || e.button === 1) {
+        startPan(e.clientX, e.clientY);
         return;
     }
+    if (e.button !== 0) return;
 
-    isDragging.value = true;
-    dragStart.x = e.clientX - offset.value.x;
-    dragStart.y = e.clientY - offset.value.y;
+    const world = toWorld(e);
+    startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
 }
 
 function handleMouseMove(e: MouseEvent) {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const rect = containerRef.value!.getBoundingClientRect();
     mousePosition.x = e.clientX - rect.left;
     mousePosition.y = e.clientY - rect.top;
 
-    handleCanvasMove(e);
-    handleComponentMove(e);
-    handleTooltip(e.target);
-}
-
-function handleCanvasMove(e: MouseEvent) {
-    if (!isDragging.value) return;
-    offset.value = {
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
-    };
-}
-
-function handleComponentMove(e: MouseEvent) {
-    if (!componentDrag.isDragging) return;
-
-    const deltaX = Math.round((e.clientX - componentDrag.initialMouse.x) / GRID_SIZE / scale.value);
-    const newX = Math.max(deltaX + componentDrag.initialPosition.x, 0);
-    const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
-    const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
-
-    props.state.subcircuit.components.get(componentDrag.componentId).x = newX;
-    props.state.subcircuit.components.get(componentDrag.componentId).y = newY;
-}
-
-function handleTooltip(target: EventTarget) {
-    if (!("dataset" in target) || !target.dataset || typeof target.dataset !== "object") {
-        return;
-    }
-
-    const element = target as SVGCircleElement;
-
-    if (element.dataset.tooltip) {
-        const rect = element.getBoundingClientRect();
-        tooltip.x = rect.x + rect.width / 2;
-        tooltip.y = rect.y + rect.height / 2;
-        tooltip.value = element.dataset.tooltip;
-    } else {
-        tooltip.value = null;
-    }
+    const world = toWorld(e);
+    updatePan(e.clientX, e.clientY);
+    updateDrag(world.x, world.y);
+    updateMarquee(world.x, world.y);
+    updateTooltip(e.target!);
 }
 
 function handleMouseUp() {
-    isDragging.value = false;
-    componentDrag.isDragging = false;
+    stopPan();
+    stopDrag();
+    finalizeMarquee();
+}
+
+function handleComponentDragStart(e: MouseEvent) {
+    const world = toWorld(e);
+    startDrag(world.x, world.y);
 }
 
 function handleWheel(e: WheelEvent) {
-    const isTrackpad = Math.abs(e.deltaY) < 50 && e.deltaMode === 0;
-    const isPinchZoom = e.ctrlKey || e.metaKey;
-
-    if (isPinchZoom) {
-        // trackpad pinch sends larger deltaY values, normalize them
-        const delta = isTrackpad ? e.deltaY * -0.03 : e.deltaY * -0.002;
-        zoom(settings.scaleLevel + delta);
-    } else {
-        offset.value = {
-            x: offset.value.x - e.deltaX,
-            y: offset.value.y - e.deltaY,
-        };
-    }
-
-    nextTick().then(() => {
-        handleTooltip(e.target);
-    });
+    wheelZoom(e);
+    nextTick().then(() => updateTooltip(e.target!));
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-    if (e.metaKey && (e.key === "-" || e.key === "=" || e.key === "+" || e.key === "0")) {
-        e.preventDefault();
+    if (keyboardZoom(e)) return;
 
-        const newScaleLevel = Math.round(
-            e.key === "=" || e.key === "+"
-                ? settings.scaleLevel + 1
-                : e.key === "-"
-                  ? settings.scaleLevel - 1
-                  : 0,
-        );
-
-        zoom(newScaleLevel);
-    } else if (e.key === "Escape") {
+    if (e.key === "Escape") {
         placingComponent.value = null;
-        selectedComponentId.value = null;
+        clearSelection();
     }
 }
 
-onMounted(() => {
-    document.addEventListener("keydown", handleKeyDown);
-});
-
-onUnmounted(() => {
-    document.removeEventListener("keydown", handleKeyDown);
-});
-
-function zoom(newScaleLevel: number) {
-    newScaleLevel = Math.min(Math.max(-5, newScaleLevel), 10);
-
-    const oldScale = scale.value;
-    const newScale = Math.pow(1.2, newScaleLevel);
-
-    const worldX = (mousePosition.x - offset.value.x) / oldScale;
-    const worldY = (mousePosition.y - offset.value.y) / oldScale;
-
-    settings.scaleLevel = newScaleLevel;
-    offset.value = {
-        x: mousePosition.x - worldX * newScale,
-        y: mousePosition.y - worldY * newScale,
-    };
-}
+onMounted(() => document.addEventListener("keydown", handleKeyDown));
+onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 </script>
 
 <template>
     <div
+        ref="containerRef"
         class="relative flex-1 overflow-hidden bg-canvas-background"
-        :style="{ cursor: isDragging ? 'grabbing' : 'default' }"
+        :style="{ cursor: isPanning ? 'grabbing' : 'default' }"
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
@@ -234,13 +187,18 @@ function zoom(newScaleLevel: number) {
             }"
         >
             <CircuitComponent
-                v-for="[id, component] in state.subcircuit.components"
+                v-for="[id, component] in subcircuit.components"
                 :key="id"
                 :component="component"
+                @dragstart="handleComponentDragStart"
             />
 
             <g
-                v-if="placingComponent && placingComponentPosition.x !== null"
+                v-if="
+                    placingComponent &&
+                    placingComponentPosition.x !== null &&
+                    placingComponentPosition.y !== null
+                "
                 opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="
@@ -254,18 +212,21 @@ function zoom(newScaleLevel: number) {
                 <CircuitComponentPreview :type="placingComponent" />
             </g>
 
-            <g v-for="(wire, i) in state.subcircuit.wires" :key="i">
+            <g v-for="(wire, i) in subcircuit.wires" :key="i">
                 <Wire :wire />
             </g>
         </svg>
 
         <div
+            v-if="marquee.active"
+            class="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
+            :style="marqueeStyle"
+        />
+
+        <div
             v-if="tooltip.value"
             class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
-            :style="{
-                left: tooltip.x + 'px',
-                top: tooltip.y + 'px',
-            }"
+            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
         >
             {{ tooltip.value }}
         </div>
