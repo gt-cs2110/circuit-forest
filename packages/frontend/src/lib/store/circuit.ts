@@ -129,7 +129,7 @@ export const selectedComponentId = computed({
 // place selected components at end of map so that they appear on top
 watch(selectedComponentId, (id) => {
     if (id === null) return;
-
+    console.log(`Selected component with id ${id}`);
     const component = currentCircuit.value.subcircuit.components.get(id);
     if (!component) return;
 
@@ -174,6 +174,16 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     selectedComponentId.value = id;
 
     placingComponent.value = null;
+}
+export function moveComponent(id: number, x: number, y: number) {
+    const component = currentCircuit.value.subcircuit.components.get(id);
+    if (!component) return;
+    console.log(`Moving component with id ${id} to (${x}, ${y})`);
+    component.x = x;
+    component.y = y;
+    window.api.core.removeComponent( currentCircuit.value.subcircuit.backendkey,component.backendkey);
+    const backendKey = window.api.core.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:component.type.toUpperCase(), label:component.label,bitsize:component.bitsize, inputs: 2, x:x, y:y} );
+    component.backendkey = backendKey;
 }
 function createSubcircuit(name: string) {
     const id = randomId().toString();
