@@ -255,16 +255,16 @@ mod tests {
         assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
 
         let east = base.clone().orient(Orientation::East, Handedness::TopLeft);
-        assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
+        assert_eq!(east.ports, vec![(-1, 0), (0, -1), (2, 3)]);
 
         let north = base.clone().orient(Orientation::North, Handedness::TopLeft);
-        assert_eq!(north.ports, vec![(0, -1), (-1, 0), (3, 2)]);
+        assert_eq!(north.ports, vec![(0, -1), (1, 0), (-3, 2)]);
 
         let south = base.clone().orient(Orientation::South, Handedness::TopLeft);
-        assert_eq!(south.ports, vec![(0, 1), (1, 0), (-3, -2)]);
+        assert_eq!(south.ports, vec![(0, 1), (-1, 0), (3, -2)]);
 
         let west = base.orient(Orientation::West, Handedness::TopLeft);
-        assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
+        assert_eq!(west.ports, vec![(1, 0), (0, 1), (-2, -3)]);
     }
 
     #[test]
