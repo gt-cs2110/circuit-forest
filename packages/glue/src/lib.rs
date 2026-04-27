@@ -94,11 +94,12 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
   let mut component_states = Vec::new();
   for (key, state) in circuit.get_component_states() {
     let big_int = key_to_bigint(key);
+    let component = circuit.get_component(ComponentKey::Function(key)).map_err(|_| napi::Error::from_reason("Component not found"))?;
 
     //get num ports and iterate through them to get values and states
     let num_ports = state.get_num_ports();
     let port_values = (0..num_ports).map(|i| state.get_port(i).to_string()).collect();
-    component_states.push(ComponentState { key: big_int, port_values });
+    component_states.push(ComponentState { backend_key: big_int, port_values, bounds: vec![component.bounds()[0], component.bounds()[1]], port_locations: component.ports().iter().map(|(x,y)| vec![*x, *y]).collect() });
   }
 
 
@@ -154,8 +155,10 @@ pub struct CircuitState {
 
 #[napi(object)]
 pub struct ComponentState{
-  pub key:BigInt,
+  pub backend_key:BigInt,
   pub port_values: Vec<String>,//0,1,Z,X low, high, impedence, unkown
+  pub bounds: Vec<(u32, u32)>,//vector of (x,y) for each port
+  pub port_locations: Vec<Vec<u32>>//vector of (x,y) for each port
 
 }
 

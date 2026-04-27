@@ -16,8 +16,10 @@ export interface CircuitState {
 }
 
 export interface ComponentState {
-  key: bigint
+  backendKey: bigint
   portValues: Array<string>
+  bounds: Array<[number, number]>
+  portLocations: Array<Array<number>>
 }
 
 /** Creates a new circuit and returns its key as an i64 for JS. */

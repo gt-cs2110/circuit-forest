@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { GRID_SIZE } from "@/lib/consts";
 import {
     componentDrag,
-    moveComponent,
+    updateComponent,
     placeComponent,
     placingComponent,
     selectedComponentId,
@@ -101,7 +101,7 @@ function handleComponentMove(e: MouseEvent) {
     const newX = Math.max(deltaX + componentDrag.initialPosition.x, 0);
     const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
     const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
-    moveComponent(componentDrag.componentId, newX, newY);
+    updateComponent(componentDrag.componentId, { x: newX, y: newY });
     
 }
 
@@ -240,6 +240,7 @@ function zoom(newScaleLevel: number) {
                 v-for="[id, component] in state.subcircuit.components"
                 :key="id"
                 :component="component"
+                :state="state.subcircuit.componentStates.get(id)"
             />
 
             <g

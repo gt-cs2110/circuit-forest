@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { circuits, currentCircuit, selectedComponentId } from "@/lib/store/circuit";
+import { circuits, currentCircuit, selectedComponentId, updateCircuitState, updateComponent } from "@/lib/store/circuit";
 import { componentMap } from "./circuitry";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
@@ -90,11 +90,31 @@ const sections = ["global", "circuit", "component"] as const;
                         <span>{{ selectedComponent.bitsize }}</span>
                     </span>
                     <input
-                        v-model="selectedComponent.bitsize"
+                        v-model.number="selectedComponent.bitsize"
                         type="range"
                         min="1"
                         step="1"
                         max="16"
+                        @change = "updateComponent(selectedComponent?.id, { bitsize: selectedComponent.bitsize })"
+
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                    />
+                </label>
+            </AccordionContent>
+            <AccordionContent class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between">
+                        <span class="font-medium"> Num Inputs</span>
+                        <span>{{ selectedComponent.inputs }}</span>
+                    </span>
+                    <input
+                        v-model.number="selectedComponent.inputs"
+                        type="range"
+                        min="1"
+                        step="1"
+                        max="8"
+                        @change = "updateComponent(selectedComponent.id, { inputs: selectedComponent.inputs })"
+
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>

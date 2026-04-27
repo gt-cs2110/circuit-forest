@@ -48,7 +48,7 @@ struct CircuitArea {
 
 /// Properties of a middle-end component.
 #[derive(Debug)]
-struct ComponentProps {
+pub struct ComponentProps {
     label: String,
 
     // Position
@@ -60,6 +60,36 @@ struct ComponentProps {
 
     // Extra props
     extra: PhysicalComponentEnum
+}
+impl ComponentProps {
+    /// Getter for label
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+    /// Getter for origin
+    pub fn origin(&self) -> Coord {
+        self.origin
+    }
+    /// Getter for bounds   
+    pub fn bounds(&self) -> [Coord; 2] {
+        self.bounds
+    }
+    /// Getter for ports
+    pub fn ports(&self) -> &[Coord] {
+        &self.ports
+    }
+    /// Getter for orientation
+    pub fn orientation(&self) -> Orientation {
+        self.orientation
+    }
+        /// Getter for handedness
+    pub fn handedness(&self) -> Handedness {
+        self.handedness
+    }
+        /// Getter for extra properties
+    pub fn extra(&self) -> &PhysicalComponentEnum {
+        &self.extra
+    }
 }
 
 /// Errors which can occur when editing a middle-end circuit.
@@ -339,6 +369,15 @@ impl MiddleCircuit<'_> {
             .functions
             .iter()
             .collect() 
+    }
+    /// get the component properties for a given component key, returns an error if the component does not exist
+    pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
+        match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.get(gate)
+                .ok_or(ReprEditErr::CannotRemoveComponent),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key)
+                .ok_or(ReprEditErr::CannotRemoveComponent),
+        }
     }
 
     /// Checks to see if circuit has a component with the given key
