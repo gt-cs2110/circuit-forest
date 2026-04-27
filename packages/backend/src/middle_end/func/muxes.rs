@@ -8,6 +8,12 @@ const PLEXER_WIDTH: u32 = 3;
 pub struct Mux {
     sim: func::Mux
 }
+impl Mux {
+    /// Creates a new instance of the mux with specified bitsize and selector size.
+    pub fn new(bitsize: u8, selsize: u8) -> Self {
+        Self { sim: func::Mux::new(bitsize, selsize) }
+    }
+}
 impl PhysicalComponent for Mux {
     fn engine_component(&self) -> Option<ComponentFn> {
         Some(self.sim.into())
@@ -39,6 +45,12 @@ impl PhysicalComponent for Mux {
 pub struct Demux {
     sim: func::Demux
 }
+impl Demux {
+    /// Creates a new instance of the demux with specified bitsize and selector size.
+    pub fn new(bitsize: u8, selsize: u8) -> Self {
+        Self { sim: func::Demux::new(bitsize, selsize) }
+    }
+}
 impl PhysicalComponent for Demux {
     fn engine_component(&self) -> Option<ComponentFn> {
         Some(self.sim.into())
@@ -67,6 +79,12 @@ impl PhysicalComponent for Demux {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Decoder {
     sim: func::Decoder
+}
+impl Decoder {
+    /// Creates a new instance of the decoder with specified selector size.
+    pub fn new(selsize: u8) -> Self {
+        Self { sim: func::Decoder::new(selsize) }
+    }
 }
 impl PhysicalComponent for Decoder {
     fn engine_component(&self) -> Option<ComponentFn> {

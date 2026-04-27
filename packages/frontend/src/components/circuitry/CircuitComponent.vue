@@ -2,11 +2,11 @@
 import { GRID_SIZE } from "@/lib/consts";
 import { componentDrag, selectedComponentId } from "@/lib/store/circuit";
 import { CircuitComponent } from "@/lib/types";
-
+import {  ComponentState } from "circuitsim-glue";
 import { componentMap } from ".";
 import { computed } from "vue";
 
-const props = defineProps<{ component: CircuitComponent }>();
+const props = defineProps<{ component: CircuitComponent, state: ComponentState }>();
 
 function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
@@ -23,30 +23,24 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
-const dimensions = computed(() => metadata.value.getDimensions(props.component));
-const ports = computed(() => metadata.value.getPorts(props.component));
+const dimensions = computed(() => ({
+  width: props.state.bounds[1][0] - props.state.bounds[0][0],
+  height: props.state.bounds[1][1] - props.state.bounds[0][1],
+}));const topLeft = computed(() => props.state.bounds[0]);
+
+const ports = computed(() =>props.state.portLocations);
 </script>
 
 <template>
     <g
-        :transform="`translate(${props.component.x * GRID_SIZE}, ${props.component.y * GRID_SIZE})`"
+        :transform="`translate(${topLeft[0] * GRID_SIZE}, ${topLeft[1] * GRID_SIZE})`"
         @mousedown="handleMouseDown"
     >
         <component :is="metadata.component" :component="props.component" />
 
-        <!-- transparent stroke enlarges hitbox -->
-        <circle
-            v-for="(port, i) in ports"
-            :key="i"
-            :cx="port.x * GRID_SIZE"
-            :cy="port.y * GRID_SIZE"
-            r="2"
-            fill="currentColor"
-            stroke="transparent"
-            stroke-width="4"
-            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
-            :data-tooltip="port.label"
-        />
+        
+                    <!-- :data-tooltip="port.label" -->
+
 
         <rect
             v-if="selectedComponentId === props.component.id"
@@ -56,4 +50,16 @@ const ports = computed(() => metadata.value.getPorts(props.component));
             fill="transparent"
         ></rect>
     </g>
+    <!-- transparent stroke enlarges hitbox -->
+        <circle
+            v-for="(point,index) in ports"
+            :key="`${index}`"
+            :cx="point[0] * GRID_SIZE"
+            :cy="point[1] * GRID_SIZE"
+            r="2"
+            fill="currentColor"
+            stroke="transparent"
+            stroke-width="4"
+            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+        />
 </template>

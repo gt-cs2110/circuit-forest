@@ -5,8 +5,10 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
+
 use slotmap::{SecondaryMap, SlotMap};
 
+use crate::engine::state::{self, FunctionState};
 use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
@@ -46,7 +48,7 @@ struct CircuitArea {
 
 /// Properties of a middle-end component.
 #[derive(Debug)]
-struct ComponentProps {
+pub struct ComponentProps {
     label: String,
 
     // Position
@@ -58,6 +60,36 @@ struct ComponentProps {
 
     // Extra props
     extra: PhysicalComponentEnum
+}
+impl ComponentProps {
+    /// Getter for label
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+    /// Getter for origin
+    pub fn origin(&self) -> Coord {
+        self.origin
+    }
+    /// Getter for bounds   
+    pub fn bounds(&self) -> [Coord; 2] {
+        self.bounds
+    }
+    /// Getter for ports
+    pub fn ports(&self) -> &[Coord] {
+        &self.ports
+    }
+    /// Getter for orientation
+    pub fn orientation(&self) -> Orientation {
+        self.orientation
+    }
+        /// Getter for handedness
+    pub fn handedness(&self) -> Handedness {
+        self.handedness
+    }
+        /// Getter for extra properties
+    pub fn extra(&self) -> &PhysicalComponentEnum {
+        &self.extra
+    }
 }
 
 /// Errors which can occur when editing a middle-end circuit.
@@ -75,6 +107,7 @@ pub enum ReprEditErr {
 /// A mutable view of a middle-end circuit,
 /// which includes its engine component ([`crate::engine::Circuit`])
 /// and its physical properties.
+#[derive(Debug)]
 pub struct MiddleCircuit<'a> {
     repr: &'a mut MiddleRepr,
     key: CircuitKey
@@ -87,7 +120,20 @@ impl MiddleRepr {
     /// Creates a mutable view for a given subcircuit.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
         MiddleCircuit { repr: self, key }
-    }   
+    }  
+    /// Create a new circuit and return its key.
+    pub fn add_circuit(&mut self) -> CircuitKey {
+        let key = self.engine.add_circuit();
+        self.physical.insert(key, CircuitArea::default());
+        key
+    }
+    //checks to see if a circuit with the given key exists in the middle end
+    pub fn has_circuit(&self, key: CircuitKey) -> bool {
+        self.physical.contains_key(key)
+    }
+
+    
+    
 }
 
 /// Basic macro to pretend Circuit has the "graph" and "state" fields.
@@ -96,8 +142,8 @@ impl MiddleRepr {
 /// because this is returning a place rather than a value.
 macro_rules! circ {
     ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
-    ($self:ident.state)    => { $self.repr.engine.state[$self.key] };
+    ($self:ident.graph)    => { $self.repr.engine.graph($self.key) };
+    ($self:ident.state)    => { $self.repr.engine.state($self.key) };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
@@ -315,5 +361,30 @@ impl MiddleCircuit<'_> {
     /// Updates the engine.
     pub fn propagate(&mut self) {
         circ!(self.engine).propagate();
+    }
+
+    /// Gets the states of all components in the circuit
+    pub fn get_component_states<'a>(&'a self) -> Vec<(FunctionKey, &'a FunctionState)> {
+        circ!(self.state)
+            .functions
+            .iter()
+            .collect() 
+    }
+    /// get the component properties for a given component key, returns an error if the component does not exist
+    pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
+        match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.get(gate)
+                .ok_or(ReprEditErr::CannotRemoveComponent),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key)
+                .ok_or(ReprEditErr::CannotRemoveComponent),
+        }
+    }
+
+    /// Checks to see if circuit has a component with the given key
+    pub fn has_component(&self, key: ComponentKey) -> bool {
+        match key {
+            ComponentKey::Function(gate) => circ!(self.physical).components.contains_key(gate),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
+        }
     }
 }

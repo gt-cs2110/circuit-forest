@@ -54,6 +54,10 @@ impl CircuitForest {
     pub fn graph(&self, k: CircuitKey) -> &CircuitGraph {
         &self.graphs[k]
     }
+    //get the state associated with this key
+    pub fn state(&self, k: CircuitKey) -> &CircuitState {
+        &self.states[k]
+    }
     /// Gets the top level state associated with this key.
     pub fn top_level_state(&self, k: CircuitKey) -> &CircuitState {
         &self.states[k]

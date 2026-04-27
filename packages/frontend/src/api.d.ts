@@ -1,6 +1,6 @@
 // Type declarations for things established in preload.ts
 
-export type Core = typeof import("circuitsim-core");
+export type Core = typeof import("circuitsim-glue");
 
 export async function showModal(
     type: "save",

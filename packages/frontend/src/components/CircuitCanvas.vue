@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { GRID_SIZE } from "@/lib/consts";
 import {
     componentDrag,
+    updateComponent,
     placeComponent,
     placingComponent,
     selectedComponentId,
@@ -100,9 +101,8 @@ function handleComponentMove(e: MouseEvent) {
     const newX = Math.max(deltaX + componentDrag.initialPosition.x, 0);
     const deltaY = Math.round((e.clientY - componentDrag.initialMouse.y) / GRID_SIZE / scale.value);
     const newY = Math.max(deltaY + componentDrag.initialPosition.y, 0);
-
-    props.state.subcircuit.components.get(componentDrag.componentId).x = newX;
-    props.state.subcircuit.components.get(componentDrag.componentId).y = newY;
+    updateComponent(componentDrag.componentId, { x: newX, y: newY });
+    
 }
 
 function handleTooltip(target: EventTarget) {
@@ -125,6 +125,9 @@ function handleTooltip(target: EventTarget) {
 function handleMouseUp() {
     isDragging.value = false;
     componentDrag.isDragging = false;
+    // when we stop dragging a component, we snap it to the grid and update the backend
+    
+
 }
 
 function handleWheel(e: WheelEvent) {
@@ -237,6 +240,7 @@ function zoom(newScaleLevel: number) {
                 v-for="[id, component] in state.subcircuit.components"
                 :key="id"
                 :component="component"
+                :state="state.subcircuit.componentStates.get(id)"
             />
 
             <g

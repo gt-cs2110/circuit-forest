@@ -1,3 +1,4 @@
+import { ComponentState } from "circuitsim-glue";
 import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
@@ -15,6 +16,7 @@ export type Dimensions = { width: number; height: number };
 export type Location = { x: number; y: number };
 export type Port = Location & {
     label?: string;
+    value?: boolean;
 };
 
 export type ComponentMetadata = {
@@ -28,10 +30,15 @@ export type ComponentMap = Record<ComponentType, ComponentMetadata>;
 
 export type CircuitComponent = Location & {
     id: number;
+    backendkey: bigint;
     type: ComponentType;
     label: string;
     bitsize: number;
+    inputs: number;
 };
+
+
+
 
 export type WireDirection = "H" | "V";
 export type Wire = Location & {
@@ -41,6 +48,8 @@ export type Wire = Location & {
 
 export type Subcircuit = {
     name: string;
+    backendkey: bigint;
     components: Map<number, CircuitComponent>;
+    componentStates: Map<number, ComponentState>;
     wires: Wire[];
 };

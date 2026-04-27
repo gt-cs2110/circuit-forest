@@ -1,6 +1,6 @@
 import { computed, reactive, ref, watch } from "vue";
 
-import { ComponentType, Location, Subcircuit } from "../types";
+import { CircuitComponent, ComponentType, Location, Subcircuit } from "../types";
 import { settings } from "./settings";
 
 export type SubcircuitState = {
@@ -10,101 +10,12 @@ export type SubcircuitState = {
 };
 
 export const circuits = reactive<Map<string, SubcircuitState>>(
-    new Map([
-        [
-            "circuit1",
-            {
-                subcircuit: {
-                    name: "Main Circuit",
-                    components: new Map([
-                        [
-                            1,
-                            {
-                                id: 1,
-                                type: "nand",
-                                x: 1,
-                                y: 1,
-                                label: "Component A",
-                                bitsize: 1,
-                            },
-                        ],
-                        [
-                            2,
-                            {
-                                id: 2,
-                                type: "constant",
-                                x: 6,
-                                y: 7,
-                                label: "Component B",
-                                bitsize: 1,
-                            },
-                        ],
-                        [
-                            3,
-                            {
-                                id: 3,
-                                type: "or",
-                                x: 17,
-                                y: 9,
-                                label: "Component C",
-                                bitsize: 1,
-                            },
-                        ],
-                    ]),
-                    wires: [{ x: 5, y: 3, direction: "H", length: 5 }],
-                },
-                selectedComponentId: null,
-                offset: { x: 0, y: 0 },
-            },
-        ],
-        [
-            "circuit2",
-            {
-                subcircuit: {
-                    name: "Second Circuit",
-                    components: new Map([
-                        [
-                            1,
-                            {
-                                id: 1,
-                                type: "and",
-                                x: 1,
-                                y: 10,
-                                label: "Component A",
-                                bitsize: 1,
-                            },
-                        ],
-                        [
-                            2,
-                            {
-                                id: 2,
-                                type: "or",
-                                x: 7,
-                                y: 6,
-                                label: "Component B",
-                                bitsize: 1,
-                            },
-                        ],
-                        [
-                            3,
-                            {
-                                id: 3,
-                                type: "constant",
-                                x: 9,
-                                y: 13,
-                                label: "Component C",
-                                bitsize: 1,
-                            },
-                        ],
-                    ]),
-                    wires: [],
-                },
-                selectedComponentId: null,
-                offset: { x: 0, y: 0 },
-            },
-        ],
-    ]),
+    new Map([createSubcircuit("Circuit 1")]
+    ),
+
 );
+
+
 
 export const currentCircuitId = ref(circuits.keys().next().value);
 export const currentCircuit = computed(() => {
@@ -123,7 +34,7 @@ export const selectedComponentId = computed({
 // place selected components at end of map so that they appear on top
 watch(selectedComponentId, (id) => {
     if (id === null) return;
-
+    console.log(`Selected component with id ${id}`);
     const component = currentCircuit.value.subcircuit.components.get(id);
     if (!component) return;
 
@@ -149,31 +60,87 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         placingComponent.value = null;
         return;
     }
+    console.log(`Placing component of type ${type} at (${x}, ${y})`);
+    //when we place a component we remove the old component if it exists and create the new component
+    console.log(circuits);
+    const backendKey = window.api.core.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:type.toUpperCase(), label:"",bitsize:settings.globalBitsize, inputs: 2, x:x, y:y} );
+    
 
     const id = randomId();
     currentCircuit.value.subcircuit.components.set(id, {
         id,
+        backendkey: backendKey,
         bitsize: settings.globalBitsize,
+        inputs:2,
         label: "",
         type,
         x,
-        y,
+        y
     });
+    currentCircuit.value.subcircuit.componentStates.set(id, {
+        backendKey: backendKey,
+        portValues: [],
+        bounds: [],
+        portLocations: [],
+    });
+    updateCircuitState();
+
     selectedComponentId.value = id;
 
     placingComponent.value = null;
 }
-
-export function newSubcircuit() {
+export function updateComponent(id: number, updates: Partial<CircuitComponent>) {
+    const component = currentCircuit.value.subcircuit.components.get(id);
+    if (!component) return;
+    console.log(`Updating component with id ${id} to (${updates.x}, ${updates.y}) bitsize: ${updates.bitsize} inputs: ${updates.inputs}`);
+    Object.assign(component, updates);
+    window.api.core.removeComponent( currentCircuit.value.subcircuit.backendkey,component.backendkey);
+    const backendKey = window.api.core.addComponent(currentCircuit.value.subcircuit.backendkey, {componentType:component.type.toUpperCase(), label:component.label,bitsize:component.bitsize, inputs: component.inputs, x:component.x, y:component.y} );
+    //update backend key
+    const state = currentCircuit.value.subcircuit.componentStates.get(id);
+    if(state){
+        state.backendKey = backendKey;
+    }
+    component.backendkey = backendKey;
+    updateCircuitState();
+}
+function createSubcircuit(name: string) {
     const id = randomId().toString();
-    circuits.set(id, {
-        subcircuit: {
-            name: "New subcircuit",
-            components: new Map(),
-            wires: [],
-        },
-        offset: { x: 0, y: 0 },
-        selectedComponentId: null,
-    });
+    const key:bigint = window.api.core.createCircuit();
+    return [
+    id,
+    {
+      subcircuit: {
+        name:name,
+        backendkey:key,
+        components: new Map(),
+        componentStates: new Map(),
+        wires: [],
+      },
+      selectedComponentId: null,
+      offset: { x: 0, y: 0 },
+    },
+  ] as [string, SubcircuitState];
+}
+export function newSubcircuit() {
+    const [id,circuit] = createSubcircuit("New Subcircuit");
+    circuits.set(id, circuit);
     currentCircuitId.value = id;
+
+}
+
+export function updateCircuitState(){
+    console.log("Updating circuit state");
+    console.log(currentCircuit);
+    const state = window.api.core.getCircuitState(currentCircuit.value.subcircuit.backendkey)
+    state.components.forEach(component => {
+        const {backendKey, portValues, bounds, portLocations} = component;
+        const circuitComponent = Array.from(currentCircuit.value.subcircuit.componentStates.values()).find(k => k.backendKey === backendKey);
+        if(circuitComponent){
+            circuitComponent.portValues = portValues;
+            circuitComponent.bounds = bounds;
+            circuitComponent.portLocations = portLocations;
+        }
+    });
+    //update wire states
 }

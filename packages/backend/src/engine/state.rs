@@ -347,6 +347,16 @@ impl FunctionState {
     pub fn get_port(&self, index: usize) -> BitArray {
         self.ports[index]
     }
+    /// Gets a reference to the inner function state, if it exists.
+    pub fn get_inner(&self) -> &Option<InnerFunctionState> {
+        &self.inner
+    }
+
+    pub fn get_num_ports(&self) -> usize {
+        self.ports.len()
+    }
+
+
     /// Sets the bit value of a port.
     /// 
     /// This raises an error if the bitsize of the new value

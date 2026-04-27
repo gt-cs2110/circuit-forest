@@ -1,11 +1,18 @@
 use crate::engine::func;
 use crate::bitarr;
+use crate::bitarray::BitArray;
 use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Input {
     sim: func::Input
+}
+impl Input {
+    /// Creates a new instance of the input with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self { sim: func::Input::new(bitsize) }
+    }
 }
 impl PhysicalComponent for Input {
     fn engine_component(&self) -> Option<func::ComponentFn> {
@@ -26,6 +33,12 @@ impl PhysicalComponent for Input {
 pub struct Output {
     sim: func::Output
 }
+impl Output {
+    /// Creates a new instance of the output with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self { sim: func::Output::new(bitsize) }
+    }
+}
 impl PhysicalComponent for Output {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         Some(self.sim.into())
@@ -45,6 +58,12 @@ impl PhysicalComponent for Output {
 pub struct Constant {
     sim: func::Constant
 }
+impl Constant {
+    /// Creates a new instance of the constant with specified value.
+    pub fn new(value: BitArray) -> Self {
+        Self { sim: func::Constant::new(value) }
+    }
+}
 impl PhysicalComponent for Constant {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         Some(self.sim.into())
@@ -62,6 +81,12 @@ impl PhysicalComponent for Constant {
 /// Power (essentially a constant 1).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Power;
+impl Power {
+    /// Creates a new instance of power.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Power {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![1]).into())
@@ -79,6 +104,12 @@ impl PhysicalComponent for Power {
 /// Ground (essentially a constant 0).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Ground;
+impl Ground {
+    /// Creates a new instance of ground.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Ground {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![0]).into())
@@ -97,6 +128,12 @@ impl PhysicalComponent for Ground {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
     sim: func::Splitter
+}
+impl Splitter {
+    /// Creates a new instance of the splitter with specified bitsize.
+    pub fn new(bitsize: u8) -> Self {
+        Self { sim: func::Splitter::new(bitsize) }
+    }
 }
 impl PhysicalComponent for Splitter {
     fn engine_component(&self) -> Option<func::ComponentFn> {
@@ -119,6 +156,12 @@ impl PhysicalComponent for Splitter {
 /// A tunnel.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Tunnel;
+impl Tunnel {
+    /// Creates a new instance of a tunnel.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Tunnel {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         None
@@ -136,6 +179,12 @@ impl PhysicalComponent for Tunnel {
 /// A probe.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Probe;
+impl Probe {
+    /// Creates a new instance of a probe.
+    pub fn new() -> Self {
+        Self
+    }
+}
 impl PhysicalComponent for Probe {
     fn engine_component(&self) -> Option<func::ComponentFn> {
         None
