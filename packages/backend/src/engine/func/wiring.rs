@@ -1,30 +1,30 @@
 use crate::bitarray::BitArray;
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
+use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Input {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Input {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            bitsize: BitSize::new_clamped(bitsize)
         }
     }
 
     /// Gets the bitsize of this component.
     pub fn get_bitsize(&self) -> u8 {
-        self.bitsize
+        self.bitsize.get()
     }
 }
 impl Component for Input {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -36,26 +36,26 @@ impl Component for Input {
 /// An output.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Output {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Output {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            bitsize: BitSize::new_clamped(bitsize)
         }
     }
 
     /// Gets the bitsize of this component.
     pub fn get_bitsize(&self) -> u8 {
-        self.bitsize
+        self.bitsize.get()
     }
 }
 impl Component for Output {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // output
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -99,26 +99,26 @@ impl Component for Constant {
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Splitter {
     /// Creates a new instance of the Splitter with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            bitsize: BitSize::new_clamped(bitsize)
         }
     }
 
     /// Gets the bitsize of this component.
     pub fn get_bitsize(&self) -> u8 {
-        self.bitsize
+        self.bitsize.get()
     }
 }
 impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // joined
-            (PortProperties { ty: PortType::Inout, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Inout, bitsize: self.bitsize.get() }, 1),
             // split
             (PortProperties { ty: PortType::Inout, bitsize: 1 }, usize::from(self.bitsize)),
         ])

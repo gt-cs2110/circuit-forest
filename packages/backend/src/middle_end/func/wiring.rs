@@ -1,69 +1,65 @@
-use crate::engine::func;
+use crate::bitarray::BitArray;
+use crate::engine::func::{self, BitSize};
 use crate::bitarr;
-use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Input {
-    sim: func::Input
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Pin {
+    bitsize: BitSize,
+    is_input: bool,
+    orientation: Orientation
 }
-impl PhysicalComponent for Input {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+impl PhysicalComponent for Pin {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(match self.is_input {
+            true  => func::Input::new(self.bitsize.get()).into(),
+            false => func::Output::new(self.bitsize.get()).into()
+        })
     }
 
     fn component_name(&self) -> &'static str {
-        "Input"
+        match self.is_input {
+            true  => "Input",
+            false => "Output"
+        }
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
-    }
-}
-
-/// An output.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Output {
-    sim: func::Output
-}
-impl PhysicalComponent for Output {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
-    }
-
-    fn component_name(&self) -> &'static str {
-        "Output"
-    }
-
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_bitsize())
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
+            .orient(self.orientation, Default::default())
     }
 }
 
 /// A constant.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Constant {
-    sim: func::Constant
+    value: BitArray,
+    orientation: Orientation
 }
 impl PhysicalComponent for Constant {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::Constant::new(self.value).into())
     }
 
     fn component_name(&self) -> &'static str {
         "Constant"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.sim.get_value().len())
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        RelativeComponentBounds::single_port_from_bitsize(self.value.len())
+            .orient(self.orientation, Default::default())
     }
 }
 
 /// Power (essentially a constant 1).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Power;
 impl PhysicalComponent for Power {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![1]).into())
     }
 
@@ -71,16 +67,17 @@ impl PhysicalComponent for Power {
         "Power"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(2, 3, (1, 3))
     }
 }
 
 /// Ground (essentially a constant 0).
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ground;
 impl PhysicalComponent for Ground {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![0]).into())
     }
 
@@ -88,39 +85,46 @@ impl PhysicalComponent for Ground {
         "Ground"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(2, 3, (1, 0))
     }
 }
 
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Splitter {
-    sim: func::Splitter
+    bitsize: BitSize,
+    orientation: Orientation,
+    handedness: Handedness
 }
 impl PhysicalComponent for Splitter {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<func::ComponentFn> {
+        Some(func::Splitter::new(self.bitsize.get()).into())
     }
 
     fn component_name(&self) -> &'static str {
         "Splitter"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let bitsize = i32::from(self.sim.get_bitsize());
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let bitsize = i32::from(self.bitsize.get());
         let mut ports = vec![(0, 0)];
         ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
 
         RelativeComponentBounds::new((bitsize * 2, 2), ports)
+            .orient(self.orientation, self.handedness)
     }
 }
 
 /// A tunnel.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Tunnel;
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Tunnel {
+    orientation: Orientation
+}
 impl PhysicalComponent for Tunnel {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
         None
     }
 
@@ -128,16 +132,20 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
+            .orient(self.orientation, Default::default())
     }
 }
 
 /// A probe.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Probe;
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Probe {
+    orientation: Orientation
+}
 impl PhysicalComponent for Probe {
-    fn engine_component(&self) -> Option<func::ComponentFn> {
+    fn init_engine(&self) -> Option<func::ComponentFn> {
         None
     }
 
@@ -145,8 +153,9 @@ impl PhysicalComponent for Probe {
         "Probe"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         RelativeComponentBounds::single_port(2, 2)
+            .orient(self.orientation, Default::default())
     }
 }
 
