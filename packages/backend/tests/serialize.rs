@@ -1,3 +1,5 @@
+#![cfg(feature="serde")]
+
 use std::path::Path;
 
 use circuitsim_engine::middle_end::serialize::{CircuitFile, SerdeError};
