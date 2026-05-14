@@ -31,6 +31,7 @@ type CoordDelta = (AxisDelta, AxisDelta);
 
 /// A group of middle circuits.
 #[derive(Debug, Default)]
+#[cfg_attr(feature="serde", derive(serde::Deserialize), serde(try_from = "serialize::CircuitFile"))]
 pub struct MiddleRepr {
     engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>

@@ -5,6 +5,7 @@ pub use func::GateKind;
 
 /// A gate component with a variable number of inputs.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Gate {
     kind: GateKind,
     bitsize: u8,
@@ -38,6 +39,7 @@ impl PhysicalComponent for Gate {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 /// A NOT gate component.
 pub struct Not {
     bitsize: u8,
@@ -62,6 +64,7 @@ impl PhysicalComponent for Not {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 /// A tri-state buffer.
 pub struct TriState {
     bitsize: u8,
