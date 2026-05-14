@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use crate::bitarr;
 use crate::bitarray::{NotTwoValuedErr, ShiftType};
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
+use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarray::BitArray, bitarray::BitState};
 
 /// Parses a set of inputs, returning the results of each port.
@@ -48,13 +48,13 @@ fn sign_extend_128(n: u128, bitsize: u8) -> i128 {
 /// An adder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Adder {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Adder {
     /// Creates a new instance of the Adder with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
         }
     }
 }
@@ -62,13 +62,13 @@ impl Component for Adder {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // inputs A and B for Adder
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 2),
             // Carry In Bit
             (PortProperties { ty: PortType::Input, bitsize: 1}, 1),
             // Carry Out Bit
             (PortProperties { ty: PortType::Output, bitsize: 1}, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -85,26 +85,26 @@ impl Component for Adder {
             Ok([Some(a), Some(b), cin]) => (a, b, cin),
             Ok(_) => return vec![
                 PortUpdate { index: 3, value: bitarr![Z] },
-                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize.get()] },
             ],
             Err(_) => return vec![
                 PortUpdate { index: 3, value: bitarr![X] },
-                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize.get()] },
             ]
         };
         let cin = cin.unwrap_or(0);
 
         let (sum, cout) = a.carrying_add(b, cin & 1 != 0);
-        match self.bitsize {
+        match self.bitsize.get() {
             64.. => vec![
                 PortUpdate { index: 3, value: BitArray::from(cout) },
                 PortUpdate { index: 4, value: BitArray::from(sum) }
             ],
             _ => {
-                let cout = sum & (1 << self.bitsize) != 0;
+                let cout = sum & (1 << self.bitsize.get()) != 0;
                 vec![
                     PortUpdate { index: 3, value: BitArray::from(cout) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(sum, self.bitsize) }
+                    PortUpdate { index: 4, value: BitArray::from_bits(sum, self.bitsize.get()) }
                 ]
             }
         }
@@ -114,13 +114,13 @@ impl Component for Adder {
 /// A subtractor component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Subtractor {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Subtractor {
     /// Creates a new instance of the Subtractor with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
         }
     }
 }
@@ -128,13 +128,13 @@ impl Component for Subtractor {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // inputs A and B for Subtractor
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 2),
             // Borrow In Bit
             (PortProperties { ty: PortType::Input, bitsize: 1}, 1),
             // Borrow Out Bit
             (PortProperties { ty: PortType::Output, bitsize: 1}, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -151,26 +151,26 @@ impl Component for Subtractor {
             Ok([Some(a), Some(b), bin]) => (a, b, bin),
             Ok(_) => return vec![
                 PortUpdate { index: 3, value: bitarr![Z] },
-                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize.get()] },
             ],
             Err(_) => return vec![
                 PortUpdate { index: 3, value: bitarr![X] },
-                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize.get()] },
             ]
         };
         let bin = bin.unwrap_or(0);
 
         let (diff, bout) = a.borrowing_sub(b, bin & 1 != 0);
-        match self.bitsize {
+        match self.bitsize.get() {
             64.. => vec![
                 PortUpdate { index: 3, value: BitArray::from(bout) },
                 PortUpdate { index: 4, value: BitArray::from(diff) }
             ],
             _ => {
-                let bout = diff & (1 << self.bitsize) != 0;
+                let bout = diff & (1 << self.bitsize.get()) != 0;
                 vec![
                     PortUpdate { index: 3, value: BitArray::from(bout) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(diff, self.bitsize) }
+                    PortUpdate { index: 4, value: BitArray::from_bits(diff, self.bitsize.get()) }
                 ]
             }
         }
@@ -181,14 +181,14 @@ impl Component for Subtractor {
 /// A multiplier component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Multiplier {
-    bitsize: u8,
+    bitsize: BitSize,
     signedness: SignType
 }
 impl Multiplier {
     /// Creates a new instance of the Multiplier with specified bitsize.
     pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
             signedness
         }
     }
@@ -204,9 +204,9 @@ impl Component for Multiplier {
                 [4] = Carry Out / Upper Bits
              */
             // Inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 3),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 3),
             // Outputs
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 2),
         ])
     }
 
@@ -222,17 +222,17 @@ impl Component for Multiplier {
         let (a, b, cin) = match parse_args(ctx.new_ports) {
             Ok([Some(a), Some(b), cin]) => (a, b, cin),
             Ok(_) => return vec![
-                PortUpdate { index: 3, value: bitarr![Z; self.bitsize] },
-                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 3, value: bitarr![Z; self.bitsize.get()] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize.get()] },
             ],
             Err(_) => return vec![
-                PortUpdate { index: 3, value: bitarr![X; self.bitsize] },
-                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 3, value: bitarr![X; self.bitsize.get()] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize.get()] },
             ]
         };
         let cin = cin.unwrap_or(0);
 
-        match (self.bitsize, self.signedness) {
+        match (self.bitsize.get(), self.signedness) {
             (64.., SignType::Unsigned) => {
                 let (prod, cout) = a.carrying_mul(b, cin);
                 vec![
@@ -243,26 +243,26 @@ impl Component for Multiplier {
             (..64, SignType::Unsigned) => {
                 let (prod_lo, prod_hi) = a.carrying_mul(b, cin);
                 let full_prod = (u128::from(prod_hi) << 64) | u128::from(prod_lo);
-                let mask = (1u128 << self.bitsize) - 1;
+                let mask = (1u128 << self.bitsize.get()) - 1;
 
                 let prod = (full_prod & mask) as u64;
-                let cout = ((full_prod >> self.bitsize) & mask) as u64;
+                let cout = ((full_prod >> self.bitsize.get()) & mask) as u64;
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize.get()) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize.get()) },
                 ]
             },
             (_, SignType::TwosComplement) => {
-                let full_prod = sign_extend_128(u128::from(a), self.bitsize)
-                    .wrapping_mul(sign_extend_128(u128::from(b), self.bitsize))
-                    .wrapping_add(sign_extend_128(u128::from(cin), self.bitsize));
-                let mask = (1i128 << self.bitsize) - 1;
+                let full_prod = sign_extend_128(u128::from(a), self.bitsize.get())
+                    .wrapping_mul(sign_extend_128(u128::from(b), self.bitsize.get()))
+                    .wrapping_add(sign_extend_128(u128::from(cin), self.bitsize.get()));
+                let mask = (1i128 << self.bitsize.get()) - 1;
 
                 let prod = (full_prod & mask) as u64;
-                let cout = ((full_prod >> self.bitsize) & mask) as u64;
+                let cout = ((full_prod >> self.bitsize.get()) & mask) as u64;
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits(prod, self.bitsize.get()) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(cout, self.bitsize.get()) },
                 ]
             }
         }
@@ -272,14 +272,14 @@ impl Component for Multiplier {
 /// A Divider component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Divider {
-    bitsize: u8,
+    bitsize: BitSize,
     signedness: SignType
 }
 impl Divider {
     /// Creates a new instance of the Divider with specified bitsize.
     pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
             signedness
         }
     }
@@ -295,9 +295,9 @@ impl Component for Divider {
                 [4] = Remainder
              */
             // Inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 3),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 3),
             // Outputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 2),
         ])
     }
 
@@ -312,49 +312,49 @@ impl Component for Divider {
         let (a_lo, b, a_hi) = match parse_args(ctx.new_ports) {
             Ok([Some(a), Some(b), cin]) => (a, b, cin),
             Ok(_) => return vec![
-                PortUpdate { index: 3, value: bitarr![Z; self.bitsize] },
-                PortUpdate { index: 4, value: bitarr![Z; self.bitsize] },
+                PortUpdate { index: 3, value: bitarr![Z; self.bitsize.get()] },
+                PortUpdate { index: 4, value: bitarr![Z; self.bitsize.get()] },
             ],
             Err(_) => return vec![
-                PortUpdate { index: 3, value: bitarr![X; self.bitsize] },
-                PortUpdate { index: 4, value: bitarr![X; self.bitsize] },
+                PortUpdate { index: 3, value: bitarr![X; self.bitsize.get()] },
+                PortUpdate { index: 4, value: bitarr![X; self.bitsize.get()] },
             ]
         };
         match (b, self.signedness) {
             // Div by zero, just let it be div by 1
             (0, _) => {
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits(a_lo, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(0, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits(a_lo, self.bitsize.get()) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(0, self.bitsize.get()) },
                 ]
             }
             (_, SignType::Unsigned) => {
                 let a_hi = a_hi.unwrap_or(0); // ZEXT
-                let a = (u128::from(a_hi) << self.bitsize) | u128::from(a_lo);
+                let a = (u128::from(a_hi) << self.bitsize.get()) | u128::from(a_lo);
                 let b = u128::from(b);
 
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits((a / b) as u64, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits((a % b) as u64, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits((a / b) as u64, self.bitsize.get()) },
+                    PortUpdate { index: 4, value: BitArray::from_bits((a % b) as u64, self.bitsize.get()) },
                 ]
             }
             (_, SignType::TwosComplement) => {
                 let sa = match a_hi {
                     // a_hi concat a_lo
                     Some(a_hi) => sign_extend_128({
-                       (u128::from(a_hi) << self.bitsize) | u128::from(a_lo)
-                    }, self.bitsize * 2),
+                       (u128::from(a_hi) << self.bitsize.get()) | u128::from(a_lo)
+                    }, self.bitsize.get() * 2),
 
                     // a_lo, sign extended
-                    None => sign_extend_128(u128::from(a_lo), self.bitsize),
+                    None => sign_extend_128(u128::from(a_lo), self.bitsize.get()),
                 };
-                let sb = sign_extend_128(u128::from(b), self.bitsize);
+                let sb = sign_extend_128(u128::from(b), self.bitsize.get());
 
                 let div = sa / sb;
                 let rem = sa % sb;
                 vec![
-                    PortUpdate { index: 3, value: BitArray::from_bits(div as u64, self.bitsize) },
-                    PortUpdate { index: 4, value: BitArray::from_bits(rem as u64, self.bitsize) },
+                    PortUpdate { index: 3, value: BitArray::from_bits(div as u64, self.bitsize.get()) },
+                    PortUpdate { index: 4, value: BitArray::from_bits(rem as u64, self.bitsize.get()) },
                 ]
             }
         }
@@ -364,13 +364,13 @@ impl Component for Divider {
 /// A negator component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Negator {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Negator {
     /// Creates a new instance of the negator with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
         }
     }
 }
@@ -378,9 +378,9 @@ impl Component for Negator {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // Input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
             // Output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -389,11 +389,11 @@ impl Component for Negator {
             Ok(val) => val,
             Err(e) => return vec![PortUpdate {
                 index: 1,
-                value: BitArray::repeat(e.bit_state(), self.bitsize)
+                value: BitArray::repeat(e.bit_state(), self.bitsize.get())
             }]
         };
 
-        let out = BitArray::from_bits(inp.wrapping_neg(), self.bitsize);
+        let out = BitArray::from_bits(inp.wrapping_neg(), self.bitsize.get());
         vec![PortUpdate { index: 1, value: out }]
     }
 }
@@ -410,7 +410,7 @@ pub enum SignType {
 /// A Comparator component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Comparator {
-    bitsize: u8,
+    bitsize: BitSize,
     signedness: SignType
 
 }
@@ -418,7 +418,7 @@ impl Comparator {
     /// Creates a new instance of the comparator with specified bitsize.
     pub fn new(bitsize: u8, signedness: SignType) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            bitsize: BitSize::new_clamped(bitsize),
             signedness
         }
     }
@@ -427,7 +427,7 @@ impl Component for Comparator {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // Input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 2),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 2),
             /*
                 [2] = <
                 [3] = =
@@ -453,7 +453,7 @@ impl Component for Comparator {
         };
 
         let cmp = match self.signedness {
-            SignType::TwosComplement => sign_extend_64(a, self.bitsize).cmp(&sign_extend_64(b, self.bitsize)),
+            SignType::TwosComplement => sign_extend_64(a, self.bitsize.get()).cmp(&sign_extend_64(b, self.bitsize.get())),
             SignType::Unsigned => a.cmp(&b),
         };
         vec![
@@ -478,16 +478,16 @@ pub enum ExtensionType {
 /// A Bit-Extender component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct BitExtender {
-    in_bitsize: u8,
-    out_bitsize: u8,
+    in_bitsize: BitSize,
+    out_bitsize: BitSize,
     ext_type: ExtensionType
 }
 impl BitExtender {
     /// Creates a new instance of the bitextender with specified bitsize.
-    pub fn new(in_bitsize: u8, out_bitsize:u8, ext_type: ExtensionType) -> Self {
+    pub fn new(in_bitsize: u8, out_bitsize: u8, ext_type: ExtensionType) -> Self {
         Self {
-            in_bitsize: in_bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
-            out_bitsize: out_bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
+            in_bitsize: BitSize::new_clamped(in_bitsize),
+            out_bitsize: BitSize::new_clamped(out_bitsize),
             ext_type
         }
     }
@@ -496,9 +496,9 @@ impl Component for BitExtender {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // Input
-            (PortProperties { ty: PortType::Input, bitsize: self.in_bitsize}, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.in_bitsize.get() }, 1),
             // Output
-            (PortProperties { ty: PortType::Output, bitsize: self.out_bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.out_bitsize.get() }, 1),
         ])
     }
 
@@ -508,7 +508,7 @@ impl Component for BitExtender {
             ExtensionType::One => BitState::High,
             ExtensionType::Sign => ctx.new_ports[0].get(ctx.new_ports[0].len() - 1).unwrap(),
         };
-        let value = ctx.new_ports[0].resize(self.out_bitsize, fill);
+        let value = ctx.new_ports[0].resize(self.out_bitsize.get(), fill);
 
         vec![PortUpdate { index: 1, value }]
     }
@@ -517,13 +517,13 @@ impl Component for BitExtender {
 /// A Shifter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Shifter {
-    bitsize: u8,
+    bitsize: BitSize,
     shift_type: ShiftType
 }
 impl Shifter {
     /// Creates a new instance of the Shifter with specified bitsize.
     pub fn new(bitsize: u8, shift_type: ShiftType) -> Self {
-        let bitsize = bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        let bitsize = BitSize::new_clamped(bitsize);
         Self {
             bitsize,
             shift_type
@@ -534,7 +534,7 @@ impl Shifter {
     pub fn shift_bitsize(self) -> u8 {
         // ilog2 ceil
         // doesn't exist in stdlib so we're just gonna hardcode it lol
-        match self.bitsize {
+        match self.bitsize.get() {
             0..=2   => 1,
             3..=4   => 2,
             5..=8   => 3,
@@ -548,18 +548,18 @@ impl Component for Shifter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // Input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
             // Shift
             (PortProperties { ty: PortType::Input, bitsize: self.shift_bitsize() }, 1),
             // Output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         let a = ctx.new_ports[0];
         let Ok(b) = u64::try_from(ctx.new_ports[1]) else {
-            return vec![PortUpdate { index: 2, value: bitarr![X; self.bitsize] }]
+            return vec![PortUpdate { index: 2, value: bitarr![X; self.bitsize.get()] }]
         };
         
         vec![PortUpdate { index: 2, value: a.shift(b as u32, self.shift_type) }]
