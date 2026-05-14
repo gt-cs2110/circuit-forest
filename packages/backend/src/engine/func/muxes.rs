@@ -1,6 +1,7 @@
 
+use crate::bitarray::RangedByte;
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
+use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarr, bitarray::BitArray};
 
 /// Minimum number of selector bits for Mux/Demux/Decoder.
@@ -8,23 +9,25 @@ pub const MIN_SELSIZE: u8 = 1;
 /// Maximum number of selector bits for Mux/Demux/Decoder.
 pub const MAX_SELSIZE: u8 = 6;
 
+pub(crate) type SelSize = RangedByte<{ MIN_SELSIZE }, { MAX_SELSIZE }>;
+
 /// A multiplexer (mux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Mux {
-    bitsize: u8,
-    selsize: u8
+    bitsize: BitSize,
+    selsize: SelSize
 }
 impl Mux {
     /// Creates a new instance of the Mux with specified bitsize and selector size.
     pub fn new(bitsize: u8, selsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
-            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize)
         }
     }
 
-    pub(crate) fn n_inputs_from(selsize: u8) -> usize {
-        1 << selsize
+    pub(crate) fn n_inputs_from(selsize: SelSize) -> usize {
+        1 << selsize.get()
     }
     /// The number of inputs.
     pub fn n_inputs(self) -> usize {
@@ -35,11 +38,11 @@ impl Component for Mux {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize.get() }, 1),
             // inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, self.n_inputs()),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, self.n_inputs()),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -47,7 +50,7 @@ impl Component for Mux {
         let m_sel = u64::try_from(ctx.new_ports[0]);
         let result = match m_sel {
             Ok(sel) => ctx.new_ports[sel as usize + 1],
-            Err(e) => BitArray::repeat(e.bit_state(), self.bitsize),
+            Err(e) => BitArray::repeat(e.bit_state(), self.bitsize.get()),
         };
         vec![PortUpdate { index: 1 + self.n_inputs(), value: result }]
     }
@@ -56,20 +59,20 @@ impl Component for Mux {
 /// A demultiplexer (demux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Demux {
-    bitsize: u8,
-    selsize: u8
+    bitsize: BitSize,
+    selsize: SelSize
 }
 impl Demux {
     /// Creates a new instance of the Demux with specified bitsize and selector size.
     pub fn new(bitsize: u8, selsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
-            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize)
         }
     }
 
-    pub(crate) fn n_outputs_from(selsize: u8) -> usize {
-        1 << selsize
+    pub(crate) fn n_outputs_from(selsize: SelSize) -> usize {
+        1 << selsize.get()
     }
     /// The number of outputs.
     pub fn n_outputs(self) -> usize {
@@ -80,22 +83,22 @@ impl Component for Demux {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
             port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize.get() }, 1),
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
             // outputs
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, self.n_outputs()),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, self.n_outputs()),
         ])
     }
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         let m_sel = u64::try_from(ctx.new_ports[0]);
         let result = match m_sel {
             Ok(sel) => {
-                let mut result = vec![bitarr![0; self.bitsize]; self.n_outputs()];
+                let mut result = vec![bitarr![0; self.bitsize.get()]; self.n_outputs()];
                 result[sel as usize] = ctx.new_ports[1];
                 result
             },
-            Err(e) => vec![BitArray::repeat(e.bit_state(), self.bitsize); self.n_outputs()],
+            Err(e) => vec![BitArray::repeat(e.bit_state(), self.bitsize.get()); self.n_outputs()],
         };
 
         result.into_iter()
@@ -108,18 +111,18 @@ impl Component for Demux {
 /// A decoder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Decoder {
-    selsize: u8
+    selsize: SelSize
 }
 impl Decoder {
     /// Creates a new instance of the Decoder with specified selector size.
     pub fn new(selsize: u8) -> Self {
         Self {
-            selsize: selsize.clamp(MIN_SELSIZE, MAX_SELSIZE)
+            selsize: SelSize::new_clamped(selsize)
         }
     }
 
-    pub(crate) fn n_outputs_from(selsize: u8) -> usize {
-        1 << selsize
+    pub(crate) fn n_outputs_from(selsize: SelSize) -> usize {
+        1 << selsize.get()
     }
     /// The number of outputs
     pub fn n_outputs(self) -> usize {
@@ -130,7 +133,7 @@ impl Component for Decoder {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // selector
-            (PortProperties { ty: PortType::Input, bitsize: self.selsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.selsize.get() }, 1),
             // outputs
             (PortProperties { ty: PortType::Output, bitsize: 1 }, self.n_outputs()),
         ])

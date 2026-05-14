@@ -1,4 +1,4 @@
-use crate::engine::func::{self, ComponentFn};
+use crate::engine::func::{self, BitSize, ComponentFn, SelSize};
 use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 const PLEXER_WIDTH: u32 = 3;
@@ -7,14 +7,14 @@ const PLEXER_WIDTH: u32 = 3;
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mux {
-    bitsize: u8,
-    selsize: u8,
+    bitsize: BitSize,
+    selsize: SelSize,
     orientation: Orientation,
     handedness: Handedness
 }
 impl PhysicalComponent for Mux {
     fn init_engine(&self) -> Option<ComponentFn> {
-        Some(func::Mux::new(self.bitsize, self.selsize).into())
+        Some(func::Mux::new(self.bitsize.get(), self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {
@@ -43,14 +43,14 @@ impl PhysicalComponent for Mux {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Demux {
-    bitsize: u8,
-    selsize: u8,
+    bitsize: BitSize,
+    selsize: SelSize,
     orientation: Orientation,
     handedness: Handedness
 }
 impl PhysicalComponent for Demux {
     fn init_engine(&self) -> Option<ComponentFn> {
-        Some(func::Demux::new(self.bitsize, self.selsize).into())
+        Some(func::Demux::new(self.bitsize.get(), self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {
@@ -77,13 +77,13 @@ impl PhysicalComponent for Demux {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Decoder {
-    selsize: u8,
+    selsize: SelSize,
     orientation: Orientation,
     handedness: Handedness
 }
 impl PhysicalComponent for Decoder {
     fn init_engine(&self) -> Option<ComponentFn> {
-        Some(func::Decoder::new(self.selsize).into())
+        Some(func::Decoder::new(self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {

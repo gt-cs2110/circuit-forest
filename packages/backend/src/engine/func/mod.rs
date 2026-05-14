@@ -9,7 +9,7 @@
 //! - **[`PortType`] and [`PortProperties`]**: Enumerations and structures to define the types and properties of ports for components.
 //! - **[`PortUpdate`]**: A structure representing updates to port values during simulation.
 //! - **Digital Logic Components**: Implementations of basic logic components used to simulate digital circuits.
-use crate::bitarray::{BitArray, BitState};
+use crate::bitarray::{BitArray, BitState, RangedByte};
 use crate::engine::CircuitGraphMap;
 use crate::engine::state::InnerFunctionState;
 
@@ -239,3 +239,5 @@ fn floating_ports(properties: &[PortProperties]) -> Vec<BitArray> {
         .map(|p| bitarr![Z; p.bitsize])
         .collect()
 }
+
+pub(crate) type BitSize = RangedByte<{ BitArray::MIN_BITSIZE }, { BitArray::MAX_BITSIZE }>;

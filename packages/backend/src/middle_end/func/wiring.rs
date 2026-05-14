@@ -1,5 +1,5 @@
 use crate::bitarray::BitArray;
-use crate::engine::func;
+use crate::engine::func::{self, BitSize};
 use crate::bitarr;
 use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
@@ -7,15 +7,15 @@ use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, Physic
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pin {
-    bitsize: u8,
+    bitsize: BitSize,
     is_input: bool,
     orientation: Orientation
 }
 impl PhysicalComponent for Pin {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(match self.is_input {
-            true  => func::Input::new(self.bitsize).into(),
-            false => func::Output::new(self.bitsize).into()
+            true  => func::Input::new(self.bitsize.get()).into(),
+            false => func::Output::new(self.bitsize.get()).into()
         })
     }
 
@@ -27,7 +27,7 @@ impl PhysicalComponent for Pin {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.bitsize)
+        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
             .orient(self.orientation, Default::default())
     }
 }
@@ -94,13 +94,13 @@ impl PhysicalComponent for Ground {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Splitter {
-    bitsize: u8,
+    bitsize: BitSize,
     orientation: Orientation,
     handedness: Handedness
 }
 impl PhysicalComponent for Splitter {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Splitter::new(self.bitsize).into())
+        Some(func::Splitter::new(self.bitsize.get()).into())
     }
 
     fn component_name(&self) -> &'static str {
@@ -108,7 +108,7 @@ impl PhysicalComponent for Splitter {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let bitsize = i32::from(self.bitsize);
+        let bitsize = i32::from(self.bitsize.get());
         let mut ports = vec![(0, 0)];
         ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
 

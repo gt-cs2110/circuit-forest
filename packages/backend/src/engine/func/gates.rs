@@ -1,11 +1,13 @@
-use crate::bitarray::{BitArray, BitState, bitarr};
+use crate::bitarray::{BitArray, BitState, RangedByte, bitarr};
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
+use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 
 /// Minimum number of inputs for multi-input logic gates.
 pub const MIN_GATE_INPUTS: u8 = 2;
 /// Maximum number of inputs for multi-input logic gates.
 pub const MAX_GATE_INPUTS: u8 = 64;
+
+pub(crate) type GateInputs = RangedByte<MIN_GATE_INPUTS, MAX_GATE_INPUTS>;
 
 /// The gate type for [`Gate`].
 /// 
@@ -36,16 +38,16 @@ impl GateKind {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Gate {
     kind: GateKind,
-    bitsize: u8,
-    n_inputs: u8
+    bitsize: BitSize,
+    n_inputs: GateInputs
 }
 impl Gate {
     /// Creates a new instance of the gate with specified bitsize and number of inputs.
     pub fn new(kind: GateKind, bitsize: u8, n_inputs: u8) -> Self {
         Self {
             kind,
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE),
-            n_inputs: n_inputs.clamp(MIN_GATE_INPUTS, MAX_GATE_INPUTS)
+            bitsize: BitSize::new_clamped(bitsize),
+            n_inputs: GateInputs::new_clamped(n_inputs)
         }
     }
 
@@ -55,27 +57,27 @@ impl Gate {
     }
     /// Returns the number of inputs for this gate.
     pub fn n_inputs(&self) -> u8 {
-        self.n_inputs
+        self.n_inputs.get()
     }
     /// Returns the bitsize for this gate.
     pub fn bitsize(&self) -> u8 {
-        self.bitsize
+        self.bitsize.get()
     }
 }
 impl Component for Gate {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // inputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, usize::from(self.n_inputs)),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, usize::from(self.n_inputs)),
             // outputs
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         let inputs = ctx.new_ports[..usize::from(self.n_inputs)].iter().cloned();
         let output = self.kind.reduce(inputs)
-            .unwrap_or_else(|| bitarr![X; self.bitsize]);
+            .unwrap_or_else(|| bitarr![X; self.bitsize.get()]);
         
         vec![PortUpdate {
             index: usize::from(self.n_inputs),
@@ -87,13 +89,13 @@ impl Component for Gate {
 /// A NOT gate component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Not {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl Not {
     /// Creates a new instance of the NOT gate with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            bitsize: BitSize::new_clamped(bitsize)
         }
     }
 }
@@ -101,9 +103,9 @@ impl Component for Not {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -116,13 +118,13 @@ impl Component for Not {
 /// A tri-state buffer component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct TriState {
-    bitsize: u8
+    bitsize: BitSize
 }
 impl TriState {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
     pub fn new(bitsize: u8) -> Self {
         Self {
-            bitsize: bitsize.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            bitsize: BitSize::new_clamped(bitsize)
         }
     }
 }
@@ -132,9 +134,9 @@ impl Component for TriState {
             // selector
             (PortProperties { ty: PortType::Input, bitsize: 1 }, 1),
             // input
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 1),
             // output
-            (PortProperties { ty: PortType::Output, bitsize: self.bitsize }, 1),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 1),
         ])
     }
 
@@ -142,8 +144,8 @@ impl Component for TriState {
         let gate = ctx.new_ports[0].index(0);
         let result = match gate {
             BitState::High => ctx.new_ports[1],
-            BitState::Low | BitState::Imped => bitarr![Z; self.bitsize],
-            BitState::Unk => bitarr![X; self.bitsize],
+            BitState::Low | BitState::Imped => bitarr![Z; self.bitsize.get()],
+            BitState::Unk => bitarr![X; self.bitsize.get()],
         };
         vec![PortUpdate { index: 2, value: result }]
     }

@@ -1,5 +1,10 @@
 //! Bit manipulation used for wires and bit values.
 
+mod ranged;
+pub(crate) use ranged::RangedByte;
+
+type BitSize = RangedByte<0, { u64::BITS as u8 }>;
+
 /// A `u64` bit mask of `len` 1s,
 /// useful for masking against values which
 /// should not affect [`BitArray`] comparisons.
@@ -248,7 +253,7 @@ pub struct BitArray {
     // Note that while this is implemented internally as LSB = index 0.
     data: u64,
     spec: u64,
-    len: u8
+    len: BitSize
 }
 
 /// Creates a [`BitState`].
@@ -309,7 +314,7 @@ impl BitArray {
     /// Any bits after index `(len - 1)` in `data` are ignored.
     /// The least-significant bit of `data` acts as index 0.
     pub fn from_bits(data: u64, len: u8) -> Self {
-        Self { data, spec: 0, len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE) }
+        Self { data, spec: 0, len: RangedByte::new_clamped(len) }
     }
 
     /// Creates a new array where the bit state is repeated `len` times.
@@ -318,17 +323,13 @@ impl BitArray {
         Self {
             data: stretch(data),
             spec: stretch(spec),
-            len: len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE)
+            len: RangedByte::new_clamped(len)
         }
     }
 
     /// The length of the array.
     pub const fn len(self) -> u8 {
-        match self.len {
-            ..BitArray::MIN_BITSIZE => BitArray::MIN_BITSIZE,
-            len @ BitArray::MIN_BITSIZE..BitArray::MAX_BITSIZE => len,
-            _ => BitArray::MAX_BITSIZE,
-        }
+        self.len.get()
     }
     /// Whether the array has no elements.
     pub fn is_empty(self) -> bool {
@@ -418,7 +419,7 @@ impl BitArray {
     /// If the new bitsize is larger than the current bitsize,
     /// it is extended with the specified array.
     pub fn resize(self, new_len: u8, fill: BitState) -> Self {
-        let new_len = new_len.clamp(BitArray::MIN_BITSIZE, BitArray::MAX_BITSIZE);
+        let new_len = BitSize::new_clamped(new_len);
         if new_len <= self.len() {
             // Truncation
             Self { data: self.data, spec: self.spec, len: new_len }
@@ -438,10 +439,44 @@ impl BitArray {
 
     /// Shifts the bitarray by the specified `shift`, using the applied `shift_type`.
     pub fn shift(self, shift: u32, shift_type: ShiftType) -> Self {
-        let data = shift_type.apply(self.data, self.len, shift);
-        let spec = shift_type.apply(self.spec, self.len, shift);
+        let data = shift_type.apply(self.data, self.len(), shift);
+        let spec = shift_type.apply(self.spec, self.len(), shift);
 
         Self { data, spec, len: self.len }
+    }
+
+    /// Pops the bitstate from the 0th index, removing it from the bitarray.
+    /// 
+    /// Returns None if BitArray is empty.
+    fn pop_front(&mut self) -> Option<BitState> {
+            let nl = self.len.decremented()?;
+            let raw = self.get_raw(0);
+            self.data >>= 1;
+            self.spec >>= 1;
+            self.len = nl;
+            Some(raw)
+    }
+
+    /// Pops the bitstate from the (len-1)th index, removing it from the bitarray.
+    /// 
+    /// Returns None if BitArray is empty.
+    fn pop_back(&mut self) -> Option<BitState> {
+        let nl = self.len.decremented()?;
+        self.len = nl;
+        Some(self.get_raw(nl.get()))
+    }
+
+    /// Pushes the bitstate to the end of the array (i.e., to the (len)th index).
+    /// 
+    /// Returns whether the push was successful.
+    fn push_back(&mut self, st: BitState) -> bool {
+        if let Some(nl) = self.len.incremented() {
+            self.set_raw(self.len(), st);
+            self.len = nl;
+            true
+        } else {
+            false
+        }
     }
 }
 impl FromIterator<BitState> for BitArray {
@@ -468,10 +503,9 @@ impl FromIterator<BitState> for BitArray {
     /// ```
     fn from_iter<I: IntoIterator<Item = BitState>>(iter: I) -> Self {
         iter.into_iter()
-            .zip(0..64)
-            .fold(BitArray::new(), |mut arr, (st, i)| {
-                arr.set_raw(i, st);
-                arr.len += 1;
+            .take(64)
+            .fold(BitArray::new(), |mut arr, st| {
+                assert!(arr.push_back(st));
                 arr
             })
     }
@@ -515,13 +549,7 @@ impl Iterator for BitArrayIntoIter {
     type Item = BitState;
 
     fn next(&mut self) -> Option<Self::Item> {
-        (!self.0.is_empty()).then(|| {
-            let raw = self.0.get_raw(0);
-            self.0.data >>= 1;
-            self.0.spec >>= 1;
-            self.0.len -= 1;
-            raw
-        })
+        self.0.pop_front()
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.len();
@@ -530,16 +558,12 @@ impl Iterator for BitArrayIntoIter {
 }
 impl DoubleEndedIterator for BitArrayIntoIter {
     fn next_back(&mut self) -> Option<Self::Item> {
-        (!self.0.is_empty()).then(|| {
-            let raw = self.0.get_raw(self.0.len() - 1);
-            self.0.len -= 1;
-            raw
-        })
+        self.0.pop_back()
     }
 }
 impl ExactSizeIterator for BitArrayIntoIter {
     fn len(&self) -> usize {
-        usize::from(self.0.len())
+        usize::from(self.0.len)
     }
 }
 impl IntoIterator for BitArray {
@@ -616,14 +640,13 @@ impl BitArray {
         // 01 | 11 | 11 | 01 | 11
         // 10 | 00 | 01 | 10 | 11
         // 11 | 11 | 11 | 11 | 11
-        let len = self.len();
         let lz = self.is(BitState::Imped);
         let rz = rhs.is(BitState::Imped);
 
         let data = (!lz & !rz) | (lz & !rz & rhs.data) | (rz & self.data);
         let spec = (!lz & !rz) | (lz & !rz & rhs.spec) | (rz & self.spec);
         
-        Self { data, spec, len }
+        Self { data, spec, len: self.len }
     }
 
     pub(crate) fn short_circuits(self, occupied: u64) -> Option<u64> {
@@ -681,7 +704,7 @@ impl std::ops::BitAnd for BitArray {
 
         let data = !any_false;
         let spec = !any_false & !all_true;
-        let len = self.len();
+        let len = self.len;
         Self { spec, data, len }
     }
 }
