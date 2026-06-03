@@ -1,24 +1,28 @@
-use crate::engine::func::{self, ComponentFn};
-use crate::middle_end::func::{AbsoluteComponentBounds, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::engine::func::{self, BitSize, ComponentFn, SelSize};
+use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 const PLEXER_WIDTH: u32 = 3;
 
 /// A multiplexer (mux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mux {
-    sim: func::Mux
+    bitsize: BitSize,
+    selsize: SelSize,
+    orientation: Orientation,
+    handedness: Handedness
 }
 impl PhysicalComponent for Mux {
-    fn engine_component(&self) -> Option<ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<ComponentFn> {
+        Some(func::Mux::new(self.bitsize.get(), self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {
         "Mux"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let n_inputs: u32 = self.sim.n_inputs() as u32;
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let n_inputs: u32 = func::Mux::n_inputs_from(self.selsize) as u32;
         
         let width = PLEXER_WIDTH;
         let height = 2 * n_inputs;
@@ -31,25 +35,30 @@ impl PhysicalComponent for Mux {
 
         AbsoluteComponentBounds::new((width, height), ports)
             .into_relative(origin)
+            .orient(self.orientation, self.handedness)
     }
 }
 
 /// A demultiplexer (demux) component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Demux {
-    sim: func::Demux
+    bitsize: BitSize,
+    selsize: SelSize,
+    orientation: Orientation,
+    handedness: Handedness
 }
 impl PhysicalComponent for Demux {
-    fn engine_component(&self) -> Option<ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<ComponentFn> {
+        Some(func::Demux::new(self.bitsize.get(), self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {
         "Demux"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let n_outputs = self.sim.n_outputs() as u32;
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let n_outputs = func::Demux::n_outputs_from(self.selsize) as u32;
         
         let width = PLEXER_WIDTH;
         let height = 2 * n_outputs;
@@ -60,25 +69,29 @@ impl PhysicalComponent for Demux {
 
         AbsoluteComponentBounds::new((width, height), ports)
             .into_relative(origin)
+            .orient(self.orientation, self.handedness)
     }
 }
 
 /// A decoder component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Decoder {
-    sim: func::Decoder
+    selsize: SelSize,
+    orientation: Orientation,
+    handedness: Handedness
 }
 impl PhysicalComponent for Decoder {
-    fn engine_component(&self) -> Option<ComponentFn> {
-        Some(self.sim.into())
+    fn init_engine(&self) -> Option<ComponentFn> {
+        Some(func::Decoder::new(self.selsize.get()).into())
     }
 
     fn component_name(&self) ->  &'static str {
         "Decoder"
     }
 
-    fn bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let n_outputs = self.sim.n_outputs() as u32;
+    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let n_outputs = func::Decoder::n_outputs_from(self.selsize) as u32;
         
         let width = PLEXER_WIDTH;
         let height = 2 * n_outputs;
@@ -89,5 +102,6 @@ impl PhysicalComponent for Decoder {
 
         AbsoluteComponentBounds::new((width, height), ports)
             .into_relative(origin)
+            .orient(self.orientation, self.handedness)
     }
 }
