@@ -30,9 +30,9 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
     match orientation {
         // To transform east to north, we rotate 90 deg CCW,
         // which transforms (x, y) to (-y, x)
-        Orientation::North => (-y,  x),
+        Orientation::North => (y,  -x),
         Orientation::East  => ( x,  y),
-        Orientation::South => ( y, -x),
+        Orientation::South => ( -y, x),
         Orientation::West  => (-x, -y)
     }
 }

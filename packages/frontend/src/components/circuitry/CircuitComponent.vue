@@ -74,18 +74,20 @@ const rotationTransform = computed(() => {
             :height="dimensions.height * GRID_SIZE"
             fill="transparent"
         ></rect>
+        
     </g>
      <!-- transparent stroke enlarges hitbox -->
+        
+        </g>
         <circle
             v-for="(point,index) in ports"
             :key="`${index}`"
-            :cx="point.x * GRID_SIZE"
-            :cy="point.y * GRID_SIZE"
+            :cx="point.x  * GRID_SIZE"
+      :cy="(point.y) * GRID_SIZE"
             r="2"
             fill="currentColor"
             stroke="transparent"
             stroke-width="4"
             class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
         />
-        </g>
 </template>
