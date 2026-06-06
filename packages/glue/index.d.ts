@@ -5,8 +5,28 @@ export declare function addComponent(circuitKey: bigint, gateKind: string, bitsi
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(name: string): bigint
 
+/** Function Get Transient State, gets the relevant data and state of all components in a circuit */
+export declare function getTransientState(circuitKey: bigint): Array<TransientComponentState>
+
+export interface Location {
+  x: number
+  y: number
+}
+
+export interface PortTransientState {
+  x: number
+  y: number
+  value: string
+}
+
 export declare function printCircuit(circuitKey: bigint): string
 
 export declare function propagate(circuitKey: bigint): void
 
 export declare function removeComponent(circuitKey: bigint, componentKey: bigint): void
+
+export interface TransientComponentState {
+  backendKey: string
+  ports: Array<PortTransientState>
+  bounds: Array<Location>
+}

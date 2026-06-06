@@ -1,92 +1,84 @@
-// testing layout file. to be removed
+import type { Subcircuit, CircuitComponent } from "../types";
 
-import { Subcircuit } from "../types";
+export function createTwoAndGateCircuit(): Map<number, Subcircuit> {
+  const circuitKey = window.api.core.createCircuit("Test");
 
-export const initialCircuit: Map<string, Subcircuit> = new Map([
-    [
-        "circuit1",
+  const and1 = window.api.core.addComponent(
+    circuitKey,
+    "AND",
+    1,
+    2,
+    2,
+    "AND1",
+    10,
+    10,
+    2
+  );
+
+  const and2 = window.api.core.addComponent(
+    circuitKey,
+    "AND",
+    1,
+    2,
+    2,
+    "AND2",
+    20,
+    10,
+    2
+  );
+  console.log(window.api.core.getTransientState(BigInt(circuitKey)));
+
+
+  const subcircuit: Subcircuit = {
+    frontendId: 0,
+    backendKey: circuitKey.toString(),
+    name: "A AND B",
+    components: new Map<number, CircuitComponent>([
+      [
+        1,
         {
-            id: "circuit1",
-            name: "Main Circuit",
-            components: new Map([
-                [
-                    1,
-                    {
-                        id: 1,
-                        type: "nand",
-                        x: 1,
-                        y: 1,
-                        label: "Component A",
-                        bitsize: 1,
-                    },
-                ],
-                [
-                    2,
-                    {
-                        id: 2,
-                        type: "constant",
-                        x: 6,
-                        y: 7,
-                        label: "Component B",
-                        bitsize: 1,
-                    },
-                ],
-                [
-                    3,
-                    {
-                        id: 3,
-                        type: "or",
-                        x: 17,
-                        y: 9,
-                        label: "Component C",
-                        bitsize: 1,
-                    },
-                ],
-            ]),
-            wires: [{ x: 5, y: 3, direction: "H", length: 5 }],
+          frontendId: 1,
+          backendKey: and1.toString(),
+          type: "and",
+          label: "AND1",
+          bitsize: 1,
+          inputs: 2,
+          ports: [],
+          bounds: [
+            { x: 10, y: 10 },
+            { x: 13, y: 12 },
+          ],
+          orientation: 2,
+          handedness: -1,
+          labelOrientation: 2,
+          x: 10,
+          y: 10,
         },
-    ],
-    [
-        "circuit2",
+      ],
+      [
+        2,
         {
-            id: "circuit2",
-            name: "Second Circuit",
-            components: new Map([
-                [
-                    1,
-                    {
-                        id: 1,
-                        type: "and",
-                        x: 1,
-                        y: 10,
-                        label: "Component A",
-                        bitsize: 1,
-                    },
-                ],
-                [
-                    2,
-                    {
-                        id: 2,
-                        type: "or",
-                        x: 7,
-                        y: 6,
-                        label: "Component B",
-                        bitsize: 1,
-                    },
-                ],
-                [
-                    3,
-                    {
-                        id: 3,
-                        type: "constant",
-                        x: 9,
-                        y: 13,
-                        label: "Component C",
-                        bitsize: 1,
-                    },
-                ],
-            ]),
-            wires: [],
+          frontendId: 2,
+          backendKey: and2.toString(),
+          type: "and",
+          label: "AND2",
+          bitsize: 1,
+          inputs: 2,
+          ports: [],
+          bounds: [
+            { x: 20, y: 10 },
+            { x: 23, y: 12 },
+          ],
+          orientation: 2,
+          handedness: -1,
+          labelOrientation: 2,
+          x: 20,
+          y: 10,
         },
-    ],
-]);
+      ],
+    ]),
+    wires: [],
+  };
+
+  return new Map<number, Subcircuit>([[0, subcircuit]]);
+}

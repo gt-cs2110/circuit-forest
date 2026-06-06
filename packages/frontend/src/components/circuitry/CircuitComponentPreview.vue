@@ -21,7 +21,7 @@ const metadata = computed(() => componentMap[props.type]);
         <component :is="metadata.component" />
 
         <circle
-            v-for="(port, i) in metadata.getPorts()"
+            v-for="(port, i) in metadata.getDefaultPorts()"
             :key="i"
             :cx="port.x * GRID_SIZE"
             :cy="port.y * GRID_SIZE"

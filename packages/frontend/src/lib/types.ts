@@ -1,3 +1,4 @@
+import { TransientComponentState } from "circuitsim-glue";
 import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
@@ -7,31 +8,54 @@ export const componentCategories = {
     wiring: wiringTypes,
     gates: gateTypes,
 };
+export type Dimensions = { width: number; height: number };
 
 export const componentTypes = [...gateTypes, ...wiringTypes];
 export type ComponentType = (typeof componentTypes)[number];
+export const Orientation = {
+    "NORTH":0,
+    
+    "SOUTH":1,
+    "EAST":2,
+    "WEST":3
+}
+export const  Handedness = {
+    "N/A":-1,
+    "TOPLEFT":0,
+    "BOTTOMRIGHT":1
+    
+}
 
-export type Dimensions = { width: number; height: number };
 export type Location = { x: number; y: number };
 export type Port = Location & {
     label?: string;
+    value?: string;
 };
 
 export type ComponentMetadata = {
     displayName: string;
     component: Component;
     getDimensions: (component?: CircuitComponent) => Dimensions;
-    getPorts: (component?: CircuitComponent) => Port[];
+    getDefaultPorts: (component?: CircuitComponent) => Port[];//Default Ports are only used for preview visualization before a component is created
+
 };
 
 export type ComponentMap = Record<ComponentType, ComponentMetadata>;
 
-export type CircuitComponent = Location & {
-    id: number;
+
+export type CircuitComponent = Location & TransientComponentState &{
+    frontendId:number;
     type: ComponentType;
     label: string;
     bitsize: number;
+    inputs:number;
+    orientation:number;
+    handedness:number;
+    labelOrientation:number;
+   
 };
+
+
 
 export type WireDirection = "H" | "V";
 export type Wire = Location & {
@@ -40,7 +64,8 @@ export type Wire = Location & {
 };
 
 export type Subcircuit = {
-    id: string;
+    frontendId: number;
+    backendKey:string;
     name: string;
     components: Map<number, CircuitComponent>;
     wires: Wire[];

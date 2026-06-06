@@ -6,7 +6,7 @@ export const xnor: ComponentMetadata = {
     displayName: "XNOR",
     component: XnorGate,
     getDimensions: () => ({ width: 4, height: 4 }),
-    getPorts() {
+    getDefaultPorts() {
         return [
             { x: 0, y: 1, label: "0" },
             { x: 0, y: 3, label: "1" },

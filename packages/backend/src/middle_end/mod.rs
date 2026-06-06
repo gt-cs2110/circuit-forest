@@ -51,17 +51,17 @@ struct CircuitArea {
 
 /// Properties of a middle-end component.
 #[derive(Debug)]
-struct ComponentProps {
-    label: String,
-    label_location: Orientation,
+pub struct ComponentProps {
+    pub label: String,
+    pub label_location: Orientation,
 
     // Position
-    origin: Coord,
-    bounds: [Coord; 2],
-    ports: Vec<Coord>,
+    pub origin: Coord,
+    pub bounds: [Coord; 2],
+    pub ports: Vec<Coord>,
 
     // Component-specific props
-    inner: PhysicalComponentEnum
+    pub inner: PhysicalComponentEnum
 }
 
 #[derive(Debug, Error)]
@@ -290,6 +290,13 @@ impl MiddleCircuit<'_> {
             .iter()
             .collect() 
     } 
+      /// get the component properties for a given component key, returns an error if the component does not exist
+    pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
+        match key {
+                ComponentKey::Function(gate) => circ!(self.physical).components.get(gate).ok_or(ReprEditErr::ComponentDoesNotExist),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key).ok_or(ReprEditErr::ComponentDoesNotExist),
+        }
+    }
     
     /// Checks to see if circuit has a component with the given key
     pub fn has_component(&self, key: ComponentKey) -> bool {

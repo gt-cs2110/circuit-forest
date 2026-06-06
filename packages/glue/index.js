@@ -578,6 +578,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.addComponent = nativeBinding.addComponent
 module.exports.createCircuit = nativeBinding.createCircuit
+module.exports.getTransientState = nativeBinding.getTransientState
 module.exports.printCircuit = nativeBinding.printCircuit
 module.exports.propagate = nativeBinding.propagate
 module.exports.removeComponent = nativeBinding.removeComponent

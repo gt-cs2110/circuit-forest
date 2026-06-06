@@ -1,3 +1,4 @@
+import { updateComponent } from "@/lib/store/circuit";
 import type { Location, Subcircuit } from "@/lib/types";
 import { ComputedRef, Reactive, reactive } from "vue";
 
@@ -16,6 +17,7 @@ export function useDrag(subcircuit: Reactive<Subcircuit>, selection: ComputedRef
             const comp = subcircuit.components.get(id);
             if (comp) drag.initialPositions.set(id, { x: comp.x, y: comp.y });
         }
+        console.log(drag.initialPositions)
     }
 
     function updateDrag(worldX: number, worldY: number) {
@@ -26,9 +28,10 @@ export function useDrag(subcircuit: Reactive<Subcircuit>, selection: ComputedRef
 
         for (const [id, initial] of drag.initialPositions) {
             const comp = subcircuit.components.get(id);
+            console.log(comp)
             if (!comp) continue;
-            comp.x = Math.max(initial.x + deltaX, 0);
-            comp.y = Math.max(initial.y + deltaY, 0);
+            updateComponent(comp.frontendId, {x:Math.max(initial.x + deltaX, 0), y:Math.max(initial.y + deltaY, 0)})
+            
         }
     }
 

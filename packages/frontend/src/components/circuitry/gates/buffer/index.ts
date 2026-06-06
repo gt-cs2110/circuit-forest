@@ -6,7 +6,7 @@ export const buffer: ComponentMetadata = {
     displayName: "BUFFER",
     component: BufferGate,
     getDimensions: () => ({ width: 2, height: 2 }),
-    getPorts() {
+    getDefaultPorts() {
         return [
             { x: 0, y: 1, label: "In" },
             { x: 1, y: 2, label: "Enable" },

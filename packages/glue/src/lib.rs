@@ -17,6 +17,7 @@ pub fn create_circuit(name:String)-> Result<BigInt, napi::Error> {
   Ok(key_to_bigint(key))
 }
 
+
 #[napi]
 pub fn add_component(circuit_key: BigInt, gate_kind:String, bitsize:u8, inputs:u8, orientation:u8,label:String, x:u32, y:u32, label_orientation:u8) -> Result<BigInt, napi::Error>{
    let mut rep = REPR.lock().unwrap();
@@ -82,6 +83,38 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
 }
 
 
+/// Function Get Transient State, gets the relevant data and state of all components in a circuit
+
+#[napi]
+ pub fn getTransientState(circuit_key: BigInt)-> Result<Vec<TransientComponentState>,napi::Error>{
+    let mut component_states: Vec<TransientComponentState> = Vec::new();
+
+    let mut rep = REPR.lock().unwrap();
+    let key = bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("invalid circut key"))?;
+    if !rep.has_circuit(key) {return Err(napi::Error::from_reason("Circuit not found"));}
+    let  circuit = rep.circuit(key);
+
+    for (key, state) in circuit.get_component_states() {
+      let big_int = key_to_bigint(key);
+      let component = circuit.get_component(ComponentKey::Function(key)).map_err(|_| napi::Error::from_reason("Component not found"))?;
+      //get num ports and iterate through them to get values and states
+      let num_ports = state.get_num_ports();
+
+      let ports: Vec<PortTransientState> = (0..num_ports).map(|i| {
+        let (x, y) = component.ports[i];
+        let value = state.get_port(i).to_string();
+        PortTransientState { x, y,  value }
+      }).collect();
+      component_states.push(TransientComponentState { backendKey: big_int.get_i128().0.to_string(), ports, bounds: vec![ Location{x:component.bounds[0].0, y: component.bounds[0].1 }, Location{x:component.bounds[1].0, y: component.bounds[1].1 } ]});
+    }
+
+
+
+    Ok(component_states)
+
+ }
+
+
  
 
  #[napi]
@@ -117,4 +150,22 @@ fn bigint_to_key<K: slotmap::Key>(b: &BigInt) -> Option<K> {
   }
 
   Some(K::from(KeyData::from_ffi(raw)))
+}
+
+#[napi(object)]
+pub struct TransientComponentState{
+  pub backendKey: String,
+  pub ports: Vec<PortTransientState>,
+  pub bounds: Vec<Location>,
+}
+#[napi(object)]
+pub struct PortTransientState{
+  pub x: u32,
+  pub y: u32,
+  pub value:String
+}
+#[napi(object)]
+pub struct Location{
+  pub x: u32,
+  pub y: u32,
 }

@@ -22,7 +22,7 @@ const props = defineProps<{
 }>();
 
 const containerRef = ref<HTMLDivElement>();
-const view = computed(() => getViewState(props.subcircuit.id));
+const view = computed(() => getViewState(props.subcircuit.frontendId));
 
 // NOTE: offset should always be assigned to by setting offset.value, not by
 // setting offset.value.x/y individually. this is so that the value is always

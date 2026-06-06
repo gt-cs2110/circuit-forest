@@ -6,5 +6,5 @@ export const constant: ComponentMetadata = {
     displayName: "Constant",
     component: Constant,
     getDimensions: () => ({ width: 2, height: 2 }),
-    getPorts: () => [{ x: 2, y: 1 }],
+    getDefaultPorts: () => [{ x: 2, y: 1 }],
 };

@@ -1,13 +1,15 @@
 import { computed, reactive, ref } from "vue";
 
-import { ComponentType, Subcircuit } from "../types";
-import { initialCircuit } from "./initialCircuit";
-import { settings } from "./settings";
+import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
+import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
+import { TransientComponentState } from "circuitsim-glue";
 
-export const circuits = reactive<Map<string, Subcircuit>>(initialCircuit);
-export const currentSubcircuitId = ref("circuit1");
+export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
+export const currentSubcircuitId = ref(0);
 export const currentSubcircuit = computed(() => circuits.get(currentSubcircuitId.value)!);
+updateState();
+let nextFrontendId = 100;
 
 // // place selected components at end of map so that they appear on top
 // watch(selectedComponentId, (id) => {
@@ -20,42 +22,99 @@ export const currentSubcircuit = computed(() => circuits.get(currentSubcircuitId
 //     currentCircuit.value.subcircuit.components.set(id, component);
 // });
 
-function randomId() {
-    return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-}
 
+
+//// Updates component representation in backend and frontend, only succeeds in frontend if succeeds in backend
+export function updateComponent(frontendId: number, updates: Partial<CircuitComponent>) {
+    //Retreive component from store of current circuit
+    const component = currentSubcircuit.value.components.get(frontendId);
+    if (!component) return;
+    console.log(`Updating component with frontend id ${frontendId} to (${updates.x}, ${updates.y}) bitsize: ${updates.bitsize} inputs: ${updates.inputs}`);
+   
+    //Apply the changes in the Partial<Circuit Component>
+    Object.assign(component, updates);
+    
+    //To Update the component we delete the old and add a new identical component with the changes applied
+
+    //Remove the Old Component with this id
+    window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
+
+    //Add New component with changes applied
+    const backendKey = window.api.core.addComponent(BigInt(currentSubcircuit.value.backendKey), component.type.toUpperCase(), component.bitsize,component.inputs, component.orientation,component.label,component.x, component.y, component.labelOrientation );
+    
+    //update backend key
+    const state = currentSubcircuit.value.components.get(frontendId);
+    if(state){
+        state.backendKey = String(backendKey);
+    }
+    updateState();}
+
+
+/// Adds a new component to the frontend and updates the backend
 export function placeComponent(type: ComponentType, x: number, y: number) {
     if (x < 0 || y < 0) {
         placingComponent.value = null;
         return;
     }
 
-    const id = randomId();
-    currentSubcircuit.value.components.set(id, {
-        id,
-        bitsize: settings.globalBitsize,
+    const frontendId = generateFrontendId();
+    const new_component:CircuitComponent = {
+        backendKey: "",
+        frontendId:frontendId,
+        type: type,
         label: "",
-        type,
-        x,
-        y,
-    });
-    selectComponent(id, false);
+        bitsize: 2,
+        inputs:2,
+        ports:[],
+        bounds:[],
+        orientation:Orientation["EAST"],
+        handedness:Handedness["N/A"],
+        labelOrientation:Orientation["EAST"],
+        x:x,
+        y:y
+
+    }
+    const backendKey = window.api.core.addComponent(BigInt(currentSubcircuit.value.backendKey), type.toUpperCase(), new_component.bitsize,new_component.inputs, new_component.orientation,new_component.label, new_component.x, new_component.y, new_component.labelOrientation );
+    new_component.backendKey = String(backendKey);
+
+    currentSubcircuit.value.components.set(frontendId, new_component);
+    selectComponent(frontendId, false);
+    updateState();
 
     placingComponent.value = null;
 }
 
-export function newSubcircuit() {
-    const id = randomId().toString();
-    circuits.set(id, {
-        id,
-        name: "New subcircuit",
+export function newSubcircuit(name?:string) {
+    const frontendId = generateFrontendId();
+    const backendKey = String(window.api.core.createCircuit(name ?? ("Circuit" + circuits.size)));
+    circuits.set(frontendId, {
+        frontendId,
+        backendKey,
+        name: name ?? ("Circuit" + circuits.size),
         components: new Map(),
         wires: [],
     });
-    currentSubcircuitId.value = id;
+    currentSubcircuitId.value = frontendId;
 }
 
-export function deleteSubcircuit(id: string) {
-    circuits.delete(id);
-    deleteViewState(id);
+export function deleteSubcircuit(frontendId: number) {
+    //TODO not removing on backend is only an issue if you are using subcircuits, but honestly that could be checked and prevented in frontend
+    circuits.delete(frontendId);
+    deleteViewState(frontendId);
+}
+
+export function updateState() {
+    //call glue functions to propagate changes to backend and update frontend state based on backend state
+    window.api.core.propagate(BigInt(currentSubcircuit.value.backendKey));
+    const transientStates:TransientComponentState[] = window.api.core.getTransientState(BigInt(currentSubcircuit.value.backendKey));
+    transientStates.forEach(state=>{
+        const corresponding_object = currentSubcircuit.value.components.values().find(component=>component.backendKey === String(state.backendKey));
+        if(corresponding_object){
+            Object.assign(corresponding_object, state);
+        }
+    })
+}
+//TODO Update Circuit State
+export function generateFrontendId() {
+  return nextFrontendId++;
 }
