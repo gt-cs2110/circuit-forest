@@ -49,6 +49,15 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     }
     updateState();}
 
+export function deleteComponent(frontendId: number){
+    const circuit = circuits.get(currentSubcircuitId.value);
+    if (!circuit) return;
+    const component = circuit?.components.get(frontendId);
+    if (!component) return;
+    window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
+    circuit.components.delete(frontendId);
+    updateState();
+}
 
 /// Adds a new component to the frontend and updates the backend
 export function placeComponent(type: ComponentType, x: number, y: number) {
@@ -98,7 +107,7 @@ export function newSubcircuit(name?:string) {
 }
 
 export function deleteSubcircuit(frontendId: number) {
-    //TODO not removing on backend is only an issue if you are using subcircuits, but honestly that could be checked and prevented in frontend
+    //TODO REMOVE on backend. TBH removing circuits is only an issue if you are using subcircuits, but honestly that could be checked and prevented in frontend
     circuits.delete(frontendId);
     deleteViewState(frontendId);
 }

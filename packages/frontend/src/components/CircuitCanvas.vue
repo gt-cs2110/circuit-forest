@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
-import { placeComponent } from "@/lib/store/circuit";
+import { deleteComponent, placeComponent } from "@/lib/store/circuit";
 import { clearSelection, getViewState, placingComponent, selection } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
 import { Subcircuit } from "@/lib/types";
@@ -113,6 +113,16 @@ function handleMouseMove(e: MouseEvent) {
     updateMarquee(world.x, world.y);
     updateTooltip(e.target!);
 }
+function handleDelete(e:KeyboardEvent) {
+    if (e.key === 'Backspace') {
+        if (selection.value.size > 0) {
+        selection.value.forEach((frontendId) => {
+            deleteComponent(frontendId);
+        });
+    }
+  }
+    
+}
 
 function handleMouseUp() {
     stopPan();
@@ -140,6 +150,9 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => document.addEventListener("keydown", handleKeyDown));
+onMounted(() =>{
+    document.addEventListener("keydown", handleDelete);
+})
 onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 </script>
 
