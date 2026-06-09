@@ -123,3 +123,4 @@ impl PhysicalComponent for Decoder {
             .orient(self.orientation, self.handedness)
     }
 }
+

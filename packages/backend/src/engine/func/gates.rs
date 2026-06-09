@@ -150,7 +150,9 @@ impl Component for TriState {
         vec![PortUpdate { index: 2, value: result }]
     }
 }
-
+pub fn gateinputs_from_u8(value: u8) -> Option<GateInputs> {
+    Some(GateInputs::new_clamped(value))
+}
 #[cfg(test)]
 mod tests {
     use super::*;

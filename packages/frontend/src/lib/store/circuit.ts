@@ -40,7 +40,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
 
     //Add New component with changes applied
-    const backendKey = window.api.core.addComponent(BigInt(currentSubcircuit.value.backendKey), component.type.toUpperCase(), component.bitsize,component.inputs, component.orientation,component.label,component.x, component.y, component.labelOrientation );
+    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(component.type).toUpperCase(), bitsize: component.bitsize, inputs: component.inputs, orientation: component.orientation, label: component.label, x: component.x, y: component.y, labelOrientation: component.labelOrientation });
     
     //update backend key
     const state = currentSubcircuit.value.components.get(frontendId);
@@ -83,12 +83,12 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         y:y
 
     }
-    const backendKey = window.api.core.addComponent(BigInt(currentSubcircuit.value.backendKey), type.toUpperCase(), new_component.bitsize,new_component.inputs, new_component.orientation,new_component.label, new_component.x, new_component.y, new_component.labelOrientation );
+    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType:String(type).toUpperCase(),  x: new_component.x, y: new_component.y });
     new_component.backendKey = String(backendKey);
 
     currentSubcircuit.value.components.set(frontendId, new_component);
     selectComponent(frontendId, false);
-    updateState();
+    updateState();//will update the ports and bounds values from the backend
 
     placingComponent.value = null;
 }

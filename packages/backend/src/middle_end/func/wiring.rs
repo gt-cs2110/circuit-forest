@@ -11,6 +11,12 @@ pub struct Pin {
     is_input: bool,
     orientation: Orientation
 }
+impl Pin{
+    /// Creates a new instance of the pin with specified bitsize and whether it's an input or output.
+    pub fn new(bitsize: BitSize, is_input: bool, orientation:Orientation) -> Self {
+        Self { bitsize, is_input, orientation }
+    }
+}
 impl PhysicalComponent for Pin {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(match self.is_input {
@@ -141,11 +147,16 @@ impl PhysicalComponent for Splitter {
     }
 }
 
-/// A tunnel.
+/// A tunnel. TO DO names for linking tunnels
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tunnel {
     orientation: Orientation
+}
+impl Tunnel{
+    pub fn new(orientation:Orientation)->Self{
+        Self{orientation:orientation}
+    }
 }
 impl PhysicalComponent for Tunnel {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -167,6 +178,12 @@ impl PhysicalComponent for Tunnel {
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Probe {
     orientation: Orientation
+}
+impl Probe{
+    /// Creates a new instance of the probe with specified orientation.
+    pub fn new( orientation:Orientation)->Self{
+        Self{orientation:orientation}
+    }
 }
 impl PhysicalComponent for Probe {
     fn init_engine(&self) -> Option<func::ComponentFn> {

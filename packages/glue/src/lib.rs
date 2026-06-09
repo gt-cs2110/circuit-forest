@@ -1,8 +1,8 @@
 #![deny(clippy::all)]
 
-use std::sync::{LazyLock, Mutex};
+use std::{str::FromStr, sync::{LazyLock, Mutex}};
 
-use circuitsim_engine::{engine::{ FunctionKey, func::{bitsize_from_u8, gateinputs_from_u8}}, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Gate, Orientation}}};
+use circuitsim_engine::{bitarray::BitArray, engine::{ FunctionKey, func::{bitsize_from_u8, gateinputs_from_u8, selsize_from_u8}}, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}}};
 use circuitsim_engine::engine::func::{GateKind};
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -17,40 +17,77 @@ pub fn create_circuit(name:String)-> Result<BigInt, napi::Error> {
   Ok(key_to_bigint(key))
 }
 
+/**
+ * Pin, Constant, Splitter, Power, Ground, Tunnel, Probe,
+    // Muxes
+    Mux, Demux, Decoder,
+    // Misc
+    Text, Subcircuit,
+    //Gates
+    Gate, Not, TriState,
+ */
+
+
+ /**
+  * constant_value, is input for pin, selsize, text content, 
+  */
 
 #[napi]
-pub fn add_component(circuit_key: BigInt, gate_kind:String, bitsize:u8, inputs:u8, orientation:u8,label:String, x:u32, y:u32, label_orientation:u8) -> Result<BigInt, napi::Error>{
+pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error>{
    let mut rep = REPR.lock().unwrap();
-
-   let gate_type:GateKind = match gate_kind.as_str() {
-    "AND" => GateKind::And,
-    "OR" => GateKind::Or,
-    "NAND" => GateKind::Nand,
-    "NOR" => GateKind::Nor,
-    "XNOR" => GateKind::Xnor,
-    "XOR" => GateKind::Xor,
-    _ => return Err(napi::Error::from_reason("Unknown gate type")),
-   };
-   let orient:Orientation = match orientation{
+   let bitsize = bitsize_from_u8(args.bitsize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Invalid bit size"))?;
+   let selsize = selsize_from_u8(args.selSize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Missing sel size for Mux"))?;
+let orient:Orientation = match args.orientation.unwrap_or(2) {
     0 => Orientation::North,
     1 => Orientation::South,
     2 => Orientation::East,
     3 => Orientation::West,
     _ => return Err(napi::Error::from_reason("Invalid orientation value")),
    };
-   let label_orient: Orientation = match label_orientation {
+   let label_orient: Orientation = match args.labelOrientation.unwrap_or(2) {
     0 => Orientation::North,
     1 => Orientation::South,
     2 => Orientation::East,
     3 => Orientation::West,
     _ => return Err(napi::Error::from_reason("Invalid label orientation value")),
    };
-   let gate:Gate = Gate::new(gate_type, bitsize_from_u8(bitsize).ok_or_else(|| napi::Error::from_reason("Invalid bit size"))?, gateinputs_from_u8(inputs).ok_or_else(|| napi::Error::from_reason("Invalid gate inputs"))?, orient);
+   let handedness: Handedness = match args.handedness.unwrap_or(0) {
+    0 => Handedness::TopLeft,
+    1 => Handedness::DownRight,
+    _ => return Err(napi::Error::from_reason("Invalid handedness value")),
+   };
+   let bitArray = BitArray::from_str(args.constantValue.unwrap_or_default().as_str()).map_err(|_| napi::Error::from_reason("Invalid Constant Value"))?;
+   let inputs = gateinputs_from_u8(args.inputs.unwrap_or(2)).ok_or_else(|| napi::Error::from_reason("Invalid gate inputs"))?;
+  let component:PhysicalComponentEnum = match args.componentType.as_str() {
+    "PIN" => Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
+    "CONSTANT" => Constant::new(bitArray, orient).into(),
+    "SPLITTER" => Splitter::new(bitsize, orient, handedness).into(),
+    "POWER" => Power::new().into(),
+    "GROUND" => Ground::new().into(),
+    "TUNNEL" => Tunnel::new(orient).into(),
+    "PROBE" => Probe::new( orient).into(),
+    "MUX" => Mux::new(bitsize, selsize, orient, handedness).into(),
+    "DEMUX" => Demux::new(bitsize, selsize, orient, handedness).into(),
+    "DECODER" => Decoder::new(selsize,orient, handedness).into(),
+    "TEXT" => Text::new().into(),
+    "SUBCIRCUIT" => Subcircuit::new(bigint_to_key(&args.circuitKey).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?).into(),
+    "NOT" => Not::new(bitsize,orient).into(),
+    "BUFFER" => TriState::new(bitsize,orient).into(),
+    "AND" => Gate::new(GateKind::And, bitsize, inputs, orient).into(),
+    "OR" => Gate::new(GateKind::Or, bitsize, inputs, orient).into(),
+    "NAND" => Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
+    "NOR" => Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
+    "XOR" => Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
+    _ => return Err(napi::Error::from_reason("Unknown gate type")),
+   };
+  
    
 
-   let mut circuit = rep.circuit(bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?);
+   
 
-  let cmpkey = circuit.add_component(gate, &label, label_orient, (x, y)).map_err(|_| napi::Error::from_reason("Component edit failed"))?;
+   let mut circuit = rep.circuit(bigint_to_key(&args.circuitKey).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?);
+
+  let cmpkey = circuit.add_component(component, &args.label.unwrap_or_default(), label_orient, (args.x, args.y)).map_err(|_| napi::Error::from_reason("Component edit failed"))?;
   let big = match cmpkey {//unwrap the component key into either type and convert to bigint
   ComponentKey::Function(k) => key_to_bigint(k),
   ComponentKey::UI(k) => key_to_bigint(k),
@@ -152,6 +189,24 @@ fn bigint_to_key<K: slotmap::Key>(b: &BigInt) -> Option<K> {
   Some(K::from(KeyData::from_ffi(raw)))
 }
 
+#[napi(object)]
+pub struct CreateComponentArgs{
+  pub circuitKey:BigInt,
+  pub componentType:String,
+  pub bitsize:Option<u8>,
+  pub inputs:Option<u8>,
+  pub orientation:Option<u8>,
+  pub label:Option<String>,
+  pub x:u32,
+  pub y:u32,
+  pub labelOrientation:Option<u8>,
+  pub constantValue:Option<String>,
+  pub isInput:Option<bool>,
+  pub selSize:Option<u8>,
+  pub textContent:Option<String>,
+    pub handedness:Option<u8>,
+
+}
 #[napi(object)]
 pub struct TransientComponentState{
   pub backendKey: String,

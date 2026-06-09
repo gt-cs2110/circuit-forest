@@ -154,6 +154,7 @@ onMounted(() =>{
     document.addEventListener("keydown", handleDelete);
 })
 onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
+console.log(props.subcircuit.components);
 </script>
 
 <template>
