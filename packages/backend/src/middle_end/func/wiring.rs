@@ -51,6 +51,12 @@ impl Constant {
         Self { value, orientation }
     }
 }
+impl Constant
+{
+    pub fn getValue(&self) -> BitArray {
+        self.value
+    }
+}
 impl PhysicalComponent for Constant {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(self.value).into())
@@ -59,9 +65,10 @@ impl PhysicalComponent for Constant {
     fn component_name(&self) -> &'static str {
         "Constant"
     }
+    
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.value.len())
+        RelativeComponentBounds::single_port_from_bitsize(std::cmp::max(self.value.len(), 2))
             .orient(self.orientation, Default::default())
     }
 }

@@ -56,7 +56,7 @@ let orient:Orientation = match args.orientation.unwrap_or(2) {
     1 => Handedness::DownRight,
     _ => return Err(napi::Error::from_reason("Invalid handedness value")),
    };
-   let bitArray = BitArray::from_str(args.constantValue.unwrap_or_default().as_str()).map_err(|_| napi::Error::from_reason("Invalid Constant Value"))?;
+   let bitArray = BitArray::from_str(args.constantValue.unwrap_or("0".to_string()).as_str()).map_err(|_| napi::Error::from_reason("Invalid Constant Value"))?;
    let inputs = gateinputs_from_u8(args.inputs.unwrap_or(2)).ok_or_else(|| napi::Error::from_reason("Invalid gate inputs"))?;
   let component:PhysicalComponentEnum = match args.componentType.as_str() {
     "PIN" => Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
@@ -78,6 +78,7 @@ let orient:Orientation = match args.orientation.unwrap_or(2) {
     "NAND" => Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
     "NOR" => Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
     "XOR" => Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
+    "XNOR" => Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
     _ => return Err(napi::Error::from_reason("Unknown gate type")),
    };
   
@@ -142,7 +143,13 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
         let value = state.get_port(i).to_string();
         PortTransientState { x, y,  value }
       }).collect();
-      component_states.push(TransientComponentState { backendKey: big_int.get_i128().0.to_string(), ports, bounds: vec![ Location{x:component.bounds[0].0, y: component.bounds[0].1 }, Location{x:component.bounds[1].0, y: component.bounds[1].1 } ]});
+      //check to see if component is a probe or constant to get value for component value field
+      let component_value = match component.inner {
+        PhysicalComponentEnum::Probe(probe) => Some("0".to_string()), // Need to figure out how to get the actual value of the probe
+        PhysicalComponentEnum::Constant(constant) => Some(constant.getValue().to_string()),
+        _ => None,
+      };
+      component_states.push(TransientComponentState { backendKey: big_int.get_i128().0.to_string(), ports, bounds: vec![ Location{x:component.bounds[0].0, y: component.bounds[0].1 }, Location{x:component.bounds[1].0, y: component.bounds[1].1 } ], componentValue: component_value });
     }
 
 
@@ -212,6 +219,7 @@ pub struct TransientComponentState{
   pub backendKey: String,
   pub ports: Vec<PortTransientState>,
   pub bounds: Vec<Location>,
+  pub componentValue: Option<String>//only for probes and constants
 }
 #[napi(object)]
 pub struct PortTransientState{

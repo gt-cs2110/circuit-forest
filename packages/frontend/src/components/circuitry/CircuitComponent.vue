@@ -27,14 +27,26 @@ function handleMouseDown(e: MouseEvent) {
     }
     emit("dragstart", e);
 }
-console.log(props.component)
 
 const metadata = computed(() => componentMap[props.component.type]);
 const dimensions = computed(() => ({
   width: props.component.bounds[1].x - props.component.bounds[0].x,
   height: props.component.bounds[1].y - props.component.bounds[0].y,
 }));
-const topLeft = computed(() => props.component.bounds[0]);
+
+
+const absoluteOutputPortLocation = computed(()=>{
+    return {x:props.component.x*GRID_SIZE, y:props.component.y*GRID_SIZE}
+})
+const localOutputPortLocation = computed(()=>{
+    return {
+        x: metadata.value.getDimensions().width*GRID_SIZE,
+        y: metadata.value.getDimensions().height*GRID_SIZE/2,
+    }
+}
+)
+
+
 
 const ports = computed(() =>props.component.ports);
 const rotation = computed(() => {
@@ -45,49 +57,60 @@ const rotation = computed(() => {
     default: return 180;; // w
   }
 });
-const rotationTransform = computed(() => {
-  const cx =
-    (topLeft.value.x + dimensions.value.width / 2) * GRID_SIZE;
-  const cy =
-    (topLeft.value.y + dimensions.value.height / 2) * GRID_SIZE;
 
-  return `rotate(${rotation.value}, ${cx}, ${cy})`;
+const transform = computed(() => {
+  const world = absoluteOutputPortLocation.value;
+  const local = localOutputPortLocation.value;
+  const angle = rotation.value;
+
+  return `
+    translate(${world.x}, ${world.y})
+    rotate(${angle})
+    translate(${-local.x}, ${-local.y})
+  `;
 });
 </script>
 
 <template>
-    <g
-        :transform="rotationTransform"
-        @mousedown="handleMouseDown"
-    >
-    <g
-        :transform="`translate(${topLeft.x * GRID_SIZE}, ${topLeft.y * GRID_SIZE})`"
-    >
-        <component :is="metadata.component" :component="props.component" />
-
-       
-
-        <rect
-            v-if="isSelected(props.component.frontendId)"
-            class="pointer-events-none outline outline-offset-1 outline-blue-500"
-            :width="dimensions.width * GRID_SIZE"
-            :height="dimensions.height * GRID_SIZE"
-            fill="transparent"
-        ></rect>
-        
+    ///Translation
+    <g 
+    :transform="transform"
+     @mousedown="handleMouseDown">
+    
+        <!-- <g :transform="rotate"> -->
+            <component :is="metadata.component" :component="props.component" />
+            <text
+                v-if="props.component.type === 'probe' || props.component.type === 'Constant'"
+                :x="(dimensions.width * GRID_SIZE) / 2"
+                :y="(dimensions.height * GRID_SIZE) / 2"
+                text-anchor="middle"
+                dominant-baseline="middle"
+                class="pointer-events-none fill-black text-xs"
+            >{{ props.component.componentValue }}</text>
+        <!-- </g> -->
+          
     </g>
+        <rect
+    v-if="isSelected(props.component.frontendId)"
+            :x="props.component.bounds[0].x * GRID_SIZE"
+            :y="props.component.bounds[0].y * GRID_SIZE"
+            :width="(props.component.bounds[1].x - props.component.bounds[0].x) * GRID_SIZE"
+            :height="(props.component.bounds[1].y - props.component.bounds[0].y) * GRID_SIZE"
+            fill="none"
+            stroke="#3b82f6"
+            stroke-width="2"
+    />
      <!-- transparent stroke enlarges hitbox -->
-        
-        </g>
-        <circle
-            v-for="(point,index) in ports"
-            :key="`${index}`"
-            :cx="point.x  * GRID_SIZE"
+  <circle
+      v-for="(point,index) in ports"
+      :key="`${index}`"
+      :cx="point.x  * GRID_SIZE"
       :cy="(point.y) * GRID_SIZE"
-            r="2"
-            fill="currentColor"
-            stroke="transparent"
-            stroke-width="4"
-            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
-        />
+      r="2"
+      fill="currentColor"
+      stroke="transparent"
+      stroke-width="4"
+      class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+  />
+
 </template>

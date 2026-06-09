@@ -122,6 +122,7 @@ export function updateState() {
             Object.assign(corresponding_object, state);
         }
     })
+    console.log(circuits)
 }
 //TODO Update Circuit State
 export function generateFrontendId() {

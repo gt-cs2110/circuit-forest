@@ -32,7 +32,6 @@ export const selection = computed(() => currentViewState.value.selection);
 export function selectComponent(componentFrontEndId: number, additive: boolean) {
     if (!additive) selection.value.clear();
     selection.value.add(componentFrontEndId);
-    console.log(selectComponent)
 }
 
 export function deselectComponent(componentFrontEndId: number) {

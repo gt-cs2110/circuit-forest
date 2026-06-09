@@ -40,12 +40,12 @@ export type ComponentMetadata = {
 
 };
 
-export type ComponentMap = Record<ComponentType, ComponentMetadata>;
+export type ComponentMap = Record<string, ComponentMetadata>;
 
 
 export type CircuitComponent = Location & TransientComponentState &{
     frontendId:number;
-    type: ComponentType;
+    type: string;
     label: string;
     bitsize: number;
     inputs:number;
