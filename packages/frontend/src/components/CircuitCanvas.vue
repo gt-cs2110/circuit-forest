@@ -89,6 +89,7 @@ watch(mousePosition, (mouse) => {
     placingComponentPosition.y = Math.floor(
         (mouse.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2,
     );
+    
 });
 
 function handleMouseDown(e: MouseEvent) {
@@ -97,7 +98,7 @@ function handleMouseDown(e: MouseEvent) {
         return;
     }
     if (e.button !== 0) return;
-
+    
     const world = toWorld(e);
     startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
 }
@@ -107,9 +108,12 @@ function handleMouseMove(e: MouseEvent) {
     mousePosition.x = e.clientX - rect.left;
     mousePosition.y = e.clientY - rect.top;
 
+    
+
     const world = toWorld(e);
+    
     updatePan(e.clientX, e.clientY);
-    updateDrag(world.x, world.y);
+    updateDrag(world.x , world.y);
     updateMarquee(world.x, world.y);
     updateTooltip(e.target!);
 }
@@ -124,7 +128,20 @@ function handleDelete(e:KeyboardEvent) {
     
 }
 
-function handleMouseUp() {
+function handleMouseUp(e: MouseEvent) {
+    const rect = containerRef.value!.getBoundingClientRect();
+    mousePosition.x = e.clientX - rect.left;
+    mousePosition.y = e.clientY - rect.top;
+
+
+    
+
+
+
+    const world = toWorld(e);
+    
+    updatePan(e.clientX, e.clientY);
+    updateDrag(world.x, world.y);
     stopPan();
     stopDrag();
     finalizeMarquee();
@@ -154,7 +171,18 @@ onMounted(() =>{
     document.addEventListener("keydown", handleDelete);
 })
 onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
-console.log(props.subcircuit.components);
+
+const metadata = computed(() => componentMap[placingComponent.value||"and"]);
+
+
+
+
+const localOutputPortLocation = computed(()=>{
+    return {
+        x: metadata.value.getDimensions().width*GRID_SIZE,
+        y: metadata.value.getDimensions().height*GRID_SIZE/2,
+    }
+})
 </script>
 
 <template>
@@ -218,8 +246,8 @@ console.log(props.subcircuit.components);
                 @click="
                     placeComponent(
                         placingComponent,
-                        placingComponentPosition.x,
-                        placingComponentPosition.y,
+                        placingComponentPosition.x+metadata.getDimensions().width,
+                        placingComponentPosition.y+metadata.getDimensions().height/2,
                     )
                 "
             >

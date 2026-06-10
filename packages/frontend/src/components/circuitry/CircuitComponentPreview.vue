@@ -7,6 +7,12 @@ import { computed } from "vue";
 const props = defineProps<{ type: ComponentType }>();
 
 const metadata = computed(() => componentMap[props.type]);
+
+
+
+
+
+
 </script>
 
 <template>
@@ -18,6 +24,7 @@ const metadata = computed(() => componentMap[props.type]);
             height: metadata.getDimensions().height * GRID_SIZE + 'px',
         }"
     >
+    
         <component :is="metadata.component" />
 
         <circle
