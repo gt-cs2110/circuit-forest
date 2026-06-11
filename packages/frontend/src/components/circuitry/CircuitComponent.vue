@@ -4,7 +4,7 @@ import { selectComponent, deselectComponent, isSelected } from "@/lib/store/view
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
@@ -40,7 +40,7 @@ const absoluteOutputPortLocation = computed(()=>{
 })
 const localOutputPortLocation = computed(()=>{
     return {
-        x: metadata.value.getDimensions().width*GRID_SIZE,
+        x: props.component.type=="constant"?props.component.bitsize*GRID_SIZE:metadata.value.getDimensions().width*GRID_SIZE,
         y: metadata.value.getDimensions().height*GRID_SIZE/2,
     }
 }
@@ -69,6 +69,7 @@ const transform = computed(() => {
     translate(${-local.x}, ${-local.y})
   `;
 });
+
 </script>
 
 <template>
@@ -78,12 +79,14 @@ const transform = computed(() => {
      @mousedown="handleMouseDown">
     
         <!-- <g :transform="rotate"> -->
-            <component :is="metadata.component" :component="props.component" />
+            <component :is="metadata.component" :component="props.component" :bitsize="component.bitsize"/>
             <text
-                v-if="props.component.type === 'probe' || props.component.type === 'Constant'"
-                :x="(dimensions.width * GRID_SIZE) / 2"
+                v-if=" props.component.type == 'constant'"
+                :x="(props.component.bitsize * GRID_SIZE)"
                 :y="(dimensions.height * GRID_SIZE) / 2"
-                text-anchor="middle"
+                :letter-spacing=GRID_SIZE/3
+
+                text-anchor="end"
                 dominant-baseline="middle"
                 class="pointer-events-none fill-black text-xs"
             >{{ props.component.componentValue }}</text>

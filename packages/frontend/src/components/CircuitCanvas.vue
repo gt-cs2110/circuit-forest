@@ -177,12 +177,6 @@ const metadata = computed(() => componentMap[placingComponent.value||"and"]);
 
 
 
-const localOutputPortLocation = computed(()=>{
-    return {
-        x: metadata.value.getDimensions().width*GRID_SIZE,
-        y: metadata.value.getDimensions().height*GRID_SIZE/2,
-    }
-})
 </script>
 
 <template>

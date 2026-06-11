@@ -1,5 +1,5 @@
 use crate::engine::func::{self, BitSize, GateInputs};
-use crate::middle_end::func::{AbsoluteComponentBounds, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 pub use func::GateKind;
 
@@ -80,12 +80,13 @@ impl PhysicalComponent for Not {
 /// A tri-state buffer.
 pub struct TriState {
     bitsize: BitSize,
-    orientation: Orientation
+    orientation: Orientation,
+    handedness: Handedness
 }
 impl TriState {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(bitsize: BitSize, orientation:Orientation) -> Self {
-        Self { bitsize, orientation }
+    pub fn new(bitsize: BitSize, orientation:Orientation, handedness:Handedness) -> Self {
+        Self { bitsize, orientation, handedness }
     }
 }
 
@@ -100,8 +101,12 @@ impl PhysicalComponent for TriState {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (2, 1);
+        // AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
+        //     .into_relative(origin)
+        //     .orient(self.orientation, Default::default())
         AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
-            .into_relative(origin)
-            .orient(self.orientation, Default::default())
+        .into_relative(origin)
+        .orient(self.orientation, self.handedness)
+            
     }
 }

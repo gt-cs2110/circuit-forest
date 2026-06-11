@@ -25,7 +25,7 @@ const metadata = computed(() => componentMap[props.type]);
         }"
     >
     
-        <component :is="metadata.component" />
+        <component :is="metadata.component" :bitsize="1"/>
 
         <circle
             v-for="(port, i) in metadata.getDefaultPorts()"

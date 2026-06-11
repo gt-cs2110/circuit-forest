@@ -20,7 +20,7 @@ export const Orientation = {
     "WEST":3
 }
 export const  Handedness = {
-    "N/A":-1,
+    "N/A":0,
     "TOPLEFT":0,
     "BOTTOMRIGHT":1
     
@@ -48,6 +48,12 @@ export type CircuitComponent = Location & TransientComponentState &{
     type: string;
     label: string;
     bitsize: number;
+    selsize:number;
+    isInput:boolean;//For Pins
+    textContent:string;//For textboxes
+    constantValue:string;
+    
+
     inputs:number;
     orientation:number;
     handedness:number;

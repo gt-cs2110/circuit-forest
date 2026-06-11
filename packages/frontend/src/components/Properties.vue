@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circuit";
-import { componentMap } from "./circuitry";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
@@ -25,11 +24,18 @@ const subcircuitName = computed({
         currentSubcircuit.value.name = name;
     },
 });
+
+
 const orientations = [
   { label: "N", value: 0 },
   { label: "S", value: 1 },
   { label: "E", value: 2 },
   { label: "W", value: 3 },
+] as const;
+const handidnesses = [
+  { label: "TOP/LEFT", value: 0 },
+  { label: "BOTTOM/RIGHT", value: 1 },
+ 
 ] as const;
 
 const selectedComponent = computed(() =>
@@ -37,6 +43,71 @@ const selectedComponent = computed(() =>
 );
 
 const sections = ["global", "circuit", "component"] as const;
+
+
+//CONSTANT INPUT LOGIC
+const constantError = ref("");
+// const constantValue = ref({binaryValue:selectedComponent.value!.constantValue.padStart(selectedComponent.value!.bitsize,"0"),decimalValue:parseInt(selectedComponent.value!.constantValue,2).toString()})
+const constantValue = ref({binaryValue:"0", decimalValue:"0"})
+watch(()=>selectedComponent, (comp)=>{
+    constantValue.value = {binaryValue:selectedComponent.value!.constantValue.padStart(selectedComponent.value!.bitsize,"0"),decimalValue:parseInt(selectedComponent.value!.constantValue,2).toString()}
+    // constantValue.value.binaryValue = constantValue.value!.binaryValue.padStart(newBitsize,"0")
+    // updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+})
+watch(()=>selectedComponent.value?.bitsize, (newBitsize)=>
+{
+   constantValue.value.binaryValue = constantValue.value!.binaryValue.slice(-newBitsize!).padStart(newBitsize!,"0")
+    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue }); 
+})
+
+function onDecimalInput(e: Event) {
+    const val = (e.target as HTMLInputElement).value.trim();
+    constantError.value = ""
+    if (!val) {
+        constantValue.value.binaryValue="";
+        constantValue.value.decimalValue=""
+        return;
+    }
+    const n = Number(val);
+    if (!Number.isInteger(n) || n < 0 || isNaN(n)) {
+        constantError.value = "Enter a non-negative integer";
+        return;
+    }
+    if (n.toString(2).length > selectedComponent.value!.bitsize){//exceeds max bit size
+        constantError.value = "Value exceeds current bitsize"
+        
+        return;
+    }
+        console.log(val)
+
+    constantValue.value={ binaryValue:n.toString(2).padStart(selectedComponent.value!.bitsize,"0"), decimalValue:val}
+    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+}
+function onBinaryInput(e: Event) {
+    const val = (e.target as HTMLInputElement).value.trim();
+        constantError.value = ""
+    if (!val) {
+       constantValue.value.binaryValue="";
+        constantValue.value.decimalValue=""
+        return;
+    }
+    if (!/^[01]+$/.test(val) ) {
+        constantError.value = "Binary digits only (0 and 1)";
+        
+        return;
+    }
+     if (val.length > selectedComponent.value!.bitsize){//exceeds max bit size
+        constantError.value = "Value exceeds current bitsize"
+        return;
+    }
+    const n = parseInt(val, 2);
+    constantValue.value={ binaryValue:val.padStart(selectedComponent.value!.bitsize,"0"), decimalValue:String(n)}
+    console.log(val)
+
+    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+}
+
+
 </script>
 
 <template>
@@ -87,9 +158,51 @@ const sections = ["global", "circuit", "component"] as const;
 
          <AccordionItem v-if="selectedComponent !== null && selectedComponent !=undefined" value="component">
             <AccordionHeader>
-                {{ selectedComponent.label }}
+                {{ selectedComponent.label !=""?selectedComponent.label:selectedComponent.type.toUpperCase()}}
             </AccordionHeader>
 
+            <!-- LABEL -->
+             <AccordionContent class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between font-medium"> Label </span>
+                    <input
+                        v-model.lazy.trim="selectedComponent.label"
+                        type="text"
+                       placeholder="Enter label..."
+                       @keydown.stop
+                        @change="updateComponent(selectedComponent.frontendId, { label: selectedComponent.label })"
+                        
+                    />
+                </label>
+            </AccordionContent>
+<!-- LABEL ORIENTATION -->
+            <AccordionContent v-if="selectedComponent.label!=''"class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="font-medium">Label Orientation</span>
+
+                    <div class="mt-2 flex overflow-hidden rounded border">
+                    <button
+                        v-for="option in orientations"
+                        :key="option.value"
+                        type="button"
+                        class="flex-1 px-3 py-2 transition-colors"
+                        :class="
+                        selectedComponent.orientation === option.value
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-panel-light hover:bg-panel-dark'
+                        "
+                        @click="
+                        updateComponent(selectedComponent.frontendId, {
+                            labelOrientation: option.value,
+                        })
+                        "
+                    >
+                        {{ option.label }}
+                    </button>
+                    </div>
+                </label>
+            </AccordionContent>
+            <!-- BITSIZE -->
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
@@ -108,6 +221,26 @@ const sections = ["global", "circuit", "component"] as const;
                     />
                 </label>
             </AccordionContent>
+            <!--SELSIZE-->
+            <AccordionContent v-if= "selectedComponent.type == 'MUX'||selectedComponent.type == 'DEMUX'" class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between">
+                        <span class="font-medium"> SelectorBits</span>
+                        <span>{{ selectedComponent.selsize }}</span>
+                    </span>
+                    <input
+                        v-model.number="selectedComponent.selsize"
+                        type="range"
+                        min="1"
+                        step="1"
+                        max="16"
+                        @change = "updateComponent(selectedComponent.frontendId, { selsize: selectedComponent.selsize })"
+
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                    />
+                </label>
+            </AccordionContent>
+            <!-- INPUTS -->
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
@@ -126,6 +259,7 @@ const sections = ["global", "circuit", "component"] as const;
                     />
                 </label>
             </AccordionContent>
+            <!-- ORIENTATION -->
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Orientation</span>
@@ -150,6 +284,65 @@ const sections = ["global", "circuit", "component"] as const;
                         {{ option.label }}
                     </button>
                     </div>
+                </label>
+            </AccordionContent>
+            
+            <!-- HANDIDNESS -->
+            <AccordionContent v-if = "selectedComponent.type.toUpperCase()=='BUFFER'" class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="font-medium">Handedness</span>
+
+                    <div class="mt-2 flex overflow-hidden rounded border">
+                    <button
+                        v-for="option in handidnesses"
+                        :key="option.value"
+                        type="button"
+                        class="flex-1 px-3 py-2 transition-colors"
+                        :class="
+                        selectedComponent.handedness === option.value
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-panel-light hover:bg-panel-dark'
+                        "
+                        @click="
+                        updateComponent(selectedComponent.frontendId, {
+                            handedness: option.value,
+                        })
+                        "
+                    >
+                        {{ option.label }}
+                    </button>
+                    </div>
+                </label>
+            </AccordionContent>
+            <!-- CONSTANT VALUE -->
+            <AccordionContent v-if="selectedComponent.type.toUpperCase() == 'CONSTANT'" class="px-4 py-3 text-xs">
+                <label class="block space-y-3">
+                    <span class="font-medium">Value</span>
+
+                    <div>
+                        <span class="flex justify-between font-medium">Decimal</span>
+                        <input
+                            :value="constantValue.decimalValue"
+                            type="text"
+                            :placeholder="constantValue.decimalValue"
+                            class="font-mono"
+                            @keydown.stop
+                            @input="onDecimalInput"
+                        />
+                    </div>
+                    <div>
+                        <span class="flex justify-between font-medium">Binary</span>
+                        <input
+                            :value="constantValue.binaryValue"
+                            type="text"
+                            :placeholder="constantValue.binaryValue"
+                            class="font-mono"
+                            @keydown.stop
+                            @change="onBinaryInput"
+                        />
+                    </div>
+                                                                <span v-if="constantError" class="text-xs text-red-500">{{ constantError }}</span>
+
                 </label>
             </AccordionContent>
         </AccordionItem>

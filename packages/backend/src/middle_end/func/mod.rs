@@ -155,10 +155,10 @@ impl RelativeComponentBounds {
         match bitsize {
             // If two bits, use a 2 x 2 tile
             ..=2 => Self::single_port(2, height),
-            // If 2-8 bits, use a 2n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port(2 * w, height),
+            // If 2-8 bits, use a n x 2 tile
+            w @ ..=MAX_COLS => Self::single_port( w, height),
             // If 9+ bits, use a 16 x h tile
-            _ => Self::single_port(2 * MAX_COLS, height)
+            _ => Self::single_port( MAX_COLS, height)
         }
     }
 
