@@ -187,6 +187,7 @@ const properties = computed(() => {
                 <label class="block">
                     <span class="flex justify-between font-medium"> Label </span>
                     <input
+                        
                        :value="0"
                         type="text"
                        placeholder="Enter label..."
@@ -194,7 +195,8 @@ const properties = computed(() => {
                         @change="updateComponent(selectedComponents[0].frontendId, { label: label })"
                         
                     />
-                    <span class="font-medium">Label Orientation</span>
+                    
+                    <h2 class="font-medium">Label Orientation</h2>
 
                     <div class="mt-2 flex overflow-hidden rounded border">
                     <button
@@ -203,7 +205,7 @@ const properties = computed(() => {
                         type="button"
                         class="flex-1 px-3 py-2 transition-colors"
                         :class="
-                        selectedComponents[0].orientation === option.value
+                        selectedComponents[0].labelOrientation === option.value
                             ? 'bg-blue-500 text-white'
                             : 'bg-panel-light hover:bg-panel-dark'
                         "
@@ -218,33 +220,7 @@ const properties = computed(() => {
                     </div>
                 </label>
             </AccordionContent>
-<!-- LABEL ORIENTATION -->
-            <AccordionContent v-if="selectedComponents.length==1 && componentPropertiesMap[selectedComponents[0].type.toLowerCase()].includes('label_orientation')" class="px-4 py-3 text-xs">
-                <label class="block">
-                    <span class="font-medium">Label Orientation</span>
 
-                    <div class="mt-2 flex overflow-hidden rounded border">
-                    <button
-                        v-for="option in orientations"
-                        :key="option.value"
-                        type="button"
-                        class="flex-1 px-3 py-2 transition-colors"
-                        :class="
-                        selectedComponents[0].orientation === option.value
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-panel-light hover:bg-panel-dark'
-                        "
-                        @click="
-                        updateComponent(selectedComponents[0].frontendId, {
-                            labelOrientation: option.value,
-                        })
-                        "
-                    >
-                        {{ option.label }}
-                    </button>
-                    </div>
-                </label>
-            </AccordionContent>
             <!-- BITSIZE -->
             <AccordionContent v-if="properties.includes('bitsize')" class="px-4 py-3 text-xs">
                 <label class="block">
