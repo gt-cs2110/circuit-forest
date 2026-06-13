@@ -5,6 +5,7 @@ import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from 
 import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
 import { selection } from "@/lib/store/view";
+import { componentPropertiesMap } from "@/lib/types";
 
 const nameReset = ref(0);
 const subcircuitName = computed({
@@ -38,8 +39,8 @@ const handidnesses = [
  
 ] as const;
 
-const selectedComponent = computed(() =>
-    selection.value.values().next().value?currentSubcircuit.value.components.get(selection.value.values().next().value||-1):null
+const selectedComponents = computed(() =>
+    [...selection.value].map((id)=>currentSubcircuit.value.components.get(id))
 );
 
 const sections = ["global", "circuit", "component"] as const;
@@ -47,18 +48,18 @@ const sections = ["global", "circuit", "component"] as const;
 
 //CONSTANT INPUT LOGIC
 const constantError = ref("");
-// const constantValue = ref({binaryValue:selectedComponent.value!.constantValue.padStart(selectedComponent.value!.bitsize,"0"),decimalValue:parseInt(selectedComponent.value!.constantValue,2).toString()})
 const constantValue = ref({binaryValue:"0", decimalValue:"0"})
-watch(()=>selectedComponent, (comp)=>{
-    constantValue.value = {binaryValue:selectedComponent.value!.constantValue.padStart(selectedComponent.value!.bitsize,"0"),decimalValue:parseInt(selectedComponent.value!.constantValue,2).toString()}
-    // constantValue.value.binaryValue = constantValue.value!.binaryValue.padStart(newBitsize,"0")
-    // updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+
+//Once selectedComponents renders in, we'll set the default binary and decimal values in the constant accordion selector to be the constant value associated with the first constant
+watch(()=>selectedComponents, (_)=>{
+    if (!selectedComponents.value || selectedComponents.value.length ==0){
+        return;
+    }
+    constantValue.value = {binaryValue:selectedComponents.value[0]!.constantValue.padStart(selectedComponents.value[0]!.bitsize,"0"),decimalValue:parseInt(selectedComponents.value[0]!.constantValue,2).toString()}
+    
 })
-watch(()=>selectedComponent.value?.bitsize, (newBitsize)=>
-{
-   constantValue.value.binaryValue = constantValue.value!.binaryValue.slice(-newBitsize!).padStart(newBitsize!,"0")
-    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue }); 
-})
+
+
 
 function onDecimalInput(e: Event) {
     const val = (e.target as HTMLInputElement).value.trim();
@@ -73,15 +74,19 @@ function onDecimalInput(e: Event) {
         constantError.value = "Enter a non-negative integer";
         return;
     }
-    if (n.toString(2).length > selectedComponent.value!.bitsize){//exceeds max bit size
+    if (n.toString(2).length > selectedComponents.value[0]!.bitsize){//exceeds max bit size
         constantError.value = "Value exceeds current bitsize"
         
         return;
     }
         console.log(val)
 
-    constantValue.value={ binaryValue:n.toString(2).padStart(selectedComponent.value!.bitsize,"0"), decimalValue:val}
-    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+    constantValue.value={ binaryValue:n.toString(2).padStart(selectedComponents.value[0]!.bitsize,"0"), decimalValue:val}
+
+ selectedComponents.value.forEach(component=>{
+    if(!component)return;
+    updateComponent(component.frontendId, {componentValue:constantValue.value.binaryValue})
+   });
 }
 function onBinaryInput(e: Event) {
     const val = (e.target as HTMLInputElement).value.trim();
@@ -96,18 +101,33 @@ function onBinaryInput(e: Event) {
         
         return;
     }
-     if (val.length > selectedComponent.value!.bitsize){//exceeds max bit size
+     if (val.length > selectedComponents.value[0]!.bitsize){//exceeds max bit size
         constantError.value = "Value exceeds current bitsize"
         return;
     }
     const n = parseInt(val, 2);
-    constantValue.value={ binaryValue:val.padStart(selectedComponent.value!.bitsize,"0"), decimalValue:String(n)}
+    constantValue.value={ binaryValue:val.padStart(selectedComponents.value[0]!.bitsize,"0"), decimalValue:String(n)}
     console.log(val)
 
-    updateComponent(selectedComponent.value!.frontendId, { componentValue: constantValue.value.binaryValue });
+     selectedComponents.value.forEach(component=>{
+    if(!component)return;
+    updateComponent(component.frontendId, {componentValue:constantValue.value.binaryValue})
+   });
 }
 
+const label = computed(()=>selectedComponents.value.length == 0?"":selectedComponents.value[0]?.label)
 
+//If we have more than one componet selected, we will choose to display the property modifier which al=pply to all of them
+
+const properties = computed(() => {
+    if (!selectedComponents.value[0]) return [];
+    let props = componentPropertiesMap[selectedComponents.value[0].type.toLowerCase()];
+    selectedComponents.value.forEach(comp => {
+        if (!comp) return;
+        props = props.filter(prop => componentPropertiesMap[comp.type.toLowerCase()].includes(prop));
+    });
+    return props;
+});
 </script>
 
 <template>
@@ -156,27 +176,50 @@ function onBinaryInput(e: Event) {
             </AccordionContent>
         </AccordionItem>
 
-         <AccordionItem v-if="selectedComponent !== null && selectedComponent !=undefined" value="component">
+         <AccordionItem v-if="selectedComponents.length !=0 &&selectedComponents[0]!=undefined" value="component">
             <AccordionHeader>
-                {{ selectedComponent.label !=""?selectedComponent.label:selectedComponent.type.toUpperCase()}}
+
+                {{ selectedComponents.length>1?"Component Group":(selectedComponents[0].label !=""?selectedComponents[0].label:selectedComponents[0].type.toUpperCase())}}
             </AccordionHeader>
 
             <!-- LABEL -->
-             <AccordionContent class="px-4 py-3 text-xs">
+             <AccordionContent v-if="selectedComponents.length==1 && componentPropertiesMap[selectedComponents[0].type.toLowerCase()].includes('label')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between font-medium"> Label </span>
                     <input
-                        v-model.lazy.trim="selectedComponent.label"
+                       :value="0"
                         type="text"
                        placeholder="Enter label..."
                        @keydown.stop
-                        @change="updateComponent(selectedComponent.frontendId, { label: selectedComponent.label })"
+                        @change="updateComponent(selectedComponents[0].frontendId, { label: label })"
                         
                     />
+                    <span class="font-medium">Label Orientation</span>
+
+                    <div class="mt-2 flex overflow-hidden rounded border">
+                    <button
+                        v-for="option in orientations"
+                        :key="option.value"
+                        type="button"
+                        class="flex-1 px-3 py-2 transition-colors"
+                        :class="
+                        selectedComponents[0].orientation === option.value
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-panel-light hover:bg-panel-dark'
+                        "
+                        @click="
+                        updateComponent(selectedComponents[0].frontendId, {
+                            labelOrientation: option.value,
+                        })
+                        "
+                    >
+                        {{ option.label }}
+                    </button>
+                    </div>
                 </label>
             </AccordionContent>
 <!-- LABEL ORIENTATION -->
-            <AccordionContent v-if="selectedComponent.label!=''"class="px-4 py-3 text-xs">
+            <AccordionContent v-if="selectedComponents.length==1 && componentPropertiesMap[selectedComponents[0].type.toLowerCase()].includes('label_orientation')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Label Orientation</span>
 
@@ -187,12 +230,12 @@ function onBinaryInput(e: Event) {
                         type="button"
                         class="flex-1 px-3 py-2 transition-colors"
                         :class="
-                        selectedComponent.orientation === option.value
+                        selectedComponents[0].orientation === option.value
                             ? 'bg-blue-500 text-white'
                             : 'bg-panel-light hover:bg-panel-dark'
                         "
                         @click="
-                        updateComponent(selectedComponent.frontendId, {
+                        updateComponent(selectedComponents[0].frontendId, {
                             labelOrientation: option.value,
                         })
                         "
@@ -203,64 +246,77 @@ function onBinaryInput(e: Event) {
                 </label>
             </AccordionContent>
             <!-- BITSIZE -->
-            <AccordionContent class="px-4 py-3 text-xs">
+            <AccordionContent v-if="properties.includes('bitsize')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
                         <span class="font-medium"> Bitsize</span>
-                        <span>{{ selectedComponent.bitsize }}</span>
+                        <span>{{ selectedComponents[0].bitsize }}</span>
                     </span>
                     <input
-                        v-model.number="selectedComponent.bitsize"
+                        :value="selectedComponents[0].bitsize"
                         type="range"
                         min="1"
                         step="1"
                         max="16"
-                        @change = "updateComponent(selectedComponent.frontendId, { bitsize: selectedComponent.bitsize })"
+                        @change = "(e) => {
+                            let bitsize =  Number((e.target as HTMLInputElement).value)
+                            
+                        constantValue.binaryValue = constantValue.binaryValue.slice(-bitsize!).padStart(bitsize!,'0');
+                        selectedComponents.forEach(comp=>{
+                            if(!comp)return;
+                                updateComponent(comp.frontendId, {componentValue:constantValue.binaryValue, bitsize: Number((e.target as HTMLInputElement).value)})
+                        });
+                        }"
 
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>
             </AccordionContent>
-            <!--SELSIZE-->
-            <AccordionContent v-if= "selectedComponent.type == 'MUX'||selectedComponent.type == 'DEMUX'" class="px-4 py-3 text-xs">
+
+            <!-- SELSIZE -->
+            <AccordionContent v-if= "properties.includes('selsize')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
                         <span class="font-medium"> SelectorBits</span>
-                        <span>{{ selectedComponent.selsize }}</span>
+                        <span>{{ selectedComponents[0].selsize }}</span>
                     </span>
                     <input
-                        v-model.number="selectedComponent.selsize"
+                        :value="selectedComponents[0].selsize"
                         type="range"
                         min="1"
                         step="1"
                         max="16"
-                        @change = "updateComponent(selectedComponent.frontendId, { selsize: selectedComponent.selsize })"
+                        @change = " selectedComponents.forEach(comp=>{
+                            if(!comp)return;
+                             updateComponent(comp!.frontendId, { selsize: Number(($event.target as HTMLInputElement).value) })
+                        });
+                        "
 
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>
             </AccordionContent>
             <!-- INPUTS -->
-            <AccordionContent class="px-4 py-3 text-xs">
+            <AccordionContent v-if = "properties.includes('inputs')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
                         <span class="font-medium"> Num Inputs</span>
-                        <span>{{ selectedComponent.inputs }}</span>
+                        <span>{{ selectedComponents[0].inputs }}</span>
                     </span>
                     <input
-                        v-model.number="selectedComponent.inputs"
+                        :value="selectedComponents[0].inputs"
                         type="range"
                         min="1"
                         step="1"
                         max="8"
-                        @change = "updateComponent(selectedComponent.frontendId, { inputs: selectedComponent.inputs })"
+                        @change = "selectedComponents.forEach(comp=>{if(!comp){return;}updateComponent(comp.frontendId, { inputs: Number(($event.target as HTMLInputElement).value) })})"
 
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                     />
                 </label>
             </AccordionContent>
             <!-- ORIENTATION -->
-            <AccordionContent class="px-4 py-3 text-xs">
+            <AccordionContent v-if = "properties.includes('orientation')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Orientation</span>
 
@@ -271,15 +327,11 @@ function onBinaryInput(e: Event) {
                         type="button"
                         class="flex-1 px-3 py-2 transition-colors"
                         :class="
-                        selectedComponent.orientation === option.value
+                        selectedComponents[0].orientation === option.value
                             ? 'bg-blue-500 text-white'
                             : 'bg-panel-light hover:bg-panel-dark'
                         "
-                        @click="
-                        updateComponent(selectedComponent.frontendId, {
-                            orientation: option.value,
-                        })
-                        "
+                        @click="selectedComponents.forEach(comp=>{if(!comp){return;}updateComponent(comp.frontendId, { orientation: Number(option.value) })})"
                     >
                         {{ option.label }}
                     </button>
@@ -288,7 +340,7 @@ function onBinaryInput(e: Event) {
             </AccordionContent>
             
             <!-- HANDIDNESS -->
-            <AccordionContent v-if = "selectedComponent.type.toUpperCase()=='BUFFER'" class="px-4 py-3 text-xs">
+            <AccordionContent v-if = "properties.includes('buffer')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Handedness</span>
 
@@ -299,15 +351,11 @@ function onBinaryInput(e: Event) {
                         type="button"
                         class="flex-1 px-3 py-2 transition-colors"
                         :class="
-                        selectedComponent.handedness === option.value
+                        selectedComponents[0].handedness === option.value
                             ? 'bg-blue-500 text-white'
                             : 'bg-panel-light hover:bg-panel-dark'
                         "
-                        @click="
-                        updateComponent(selectedComponent.frontendId, {
-                            handedness: option.value,
-                        })
-                        "
+                        @click="selectedComponents.forEach(comp=>{if(!comp){return;}updateComponent(comp.frontendId, { handedness: Number(($event.target as HTMLInputElement).value) })})"
                     >
                         {{ option.label }}
                     </button>
@@ -315,7 +363,7 @@ function onBinaryInput(e: Event) {
                 </label>
             </AccordionContent>
             <!-- CONSTANT VALUE -->
-            <AccordionContent v-if="selectedComponent.type.toUpperCase() == 'CONSTANT'" class="px-4 py-3 text-xs">
+            <AccordionContent v-if="properties.includes('constantValue')" class="px-4 py-3 text-xs">
                 <label class="block space-y-3">
                     <span class="font-medium">Value</span>
 
@@ -335,16 +383,18 @@ function onBinaryInput(e: Event) {
                         <input
                             :value="constantValue.binaryValue"
                             type="text"
+
                             :placeholder="constantValue.binaryValue"
                             class="font-mono"
                             @keydown.stop
                             @change="onBinaryInput"
                         />
                     </div>
-                                                                <span v-if="constantError" class="text-xs text-red-500">{{ constantError }}</span>
+                    <span v-if="constantError" class="text-xs text-red-500">{{ constantError }}</span>
 
                 </label>
             </AccordionContent>
+            
         </AccordionItem>
         
     </AccordionRoot>

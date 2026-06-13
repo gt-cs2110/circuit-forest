@@ -29,7 +29,8 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     //Retreive component from store of current circuit
     const component = currentSubcircuit.value.components.get(frontendId);
     if (!component) return;
-    console.log(`Updating component with frontend id ${frontendId} to (${updates.x}, ${updates.y}) bitsize: ${updates.bitsize} inputs: ${updates.inputs}`);
+    console.log(`Updating component with frontend id ${frontendId}`);
+    console.log(updates);
    
     //Apply the changes in the Partial<Circuit Component>
     Object.assign(component, updates);
@@ -127,7 +128,6 @@ export function updateState() {
             Object.assign(corresponding_object, state);
         }
     })
-    console.log(circuits)
 }
 //TODO Update Circuit State
 export function generateFrontendId() {

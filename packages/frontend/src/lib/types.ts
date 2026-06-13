@@ -76,3 +76,73 @@ export type Subcircuit = {
     components: Map<number, CircuitComponent>;
     wires: Wire[];
 };
+
+
+
+
+export const allTypes = [
+  "pin",
+  "constant",
+  "splitter",
+  "power",
+  "ground",
+  "tunnel",
+  "probe",
+  "mux",
+  "demux",
+  "decoder",
+  "text",
+  "subcircuit",
+  "not",
+  "buffer",
+  "and",
+  "or",
+  "nand",
+  "nor",
+  "xor",
+  "xnor"
+]
+
+//Component Types gate, not, buffer, constant, pin, splitter, power ground, tunnel, probe, mux, demux, decode, text subcircuit
+const propertyGroups = [
+  {
+    types: ["and", "nand", "nor", "or", "xnor", "xor"],
+    properties: ["label", "label_orientation", "orientation", "bitsize", "inputs"]
+  },
+  {
+    types: ["demux", "mux"],
+    properties: ["label", "label_orientation", "orientation", "handedness", "bitsize", "selsize"]
+  },
+  {
+    types: ["buffer", "splitter"],
+    properties: ["label", "label_orientation", "orientation", "handedness", "bitsize"]
+  },
+  {
+    types: ["not", "pin", "probe", "tunnel"],
+    properties: ["label", "label_orientation", "orientation", "bitsize"]
+  },
+  {
+    types: ["constant"],
+    properties: ["label", "label_orientation", "orientation", "bitsize", "constantValue"]
+  },
+  {
+    types: ["decoder"],
+    properties: ["label", "label_orientation", "orientation", "handedness", "selsize"]
+  },
+  {
+    types: ["ground", "power", "subcircuit"],
+    properties: ["label", "label_orientation", "orientation"]
+  },
+  {
+    types: ["text"],
+    properties: []
+  }
+];
+//BUild a lookup map
+export const componentPropertiesMap:Record<string, string[]> = {};
+
+propertyGroups.forEach(group => {
+  group.types.forEach(type => {
+    componentPropertiesMap[type] = group.properties;
+  });
+});
