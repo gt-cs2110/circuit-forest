@@ -3,10 +3,13 @@ import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
 export const wiringTypes = ["constant"] as const;
+export const selctionTypes = ["mux"];
 
 export const componentCategories = {
     wiring: wiringTypes,
     gates: gateTypes,
+    selctionTypes:selctionTypes
+
 };
 export type Dimensions = { width: number; height: number };
 
@@ -35,8 +38,9 @@ export type Port = Location & {
 export type ComponentMetadata = {
     displayName: string;
     component: Component;
-    getDimensions: (component?: CircuitComponent) => Dimensions;
-    getDefaultPorts: (component?: CircuitComponent) => Port[];//Default Ports are only used for preview visualization before a component is created
+    getDefaultDimensions: () => Dimensions;
+    getDimensions: (component: CircuitComponent) => Dimensions;
+    getDefaultPorts: () => Port[];//Default Ports are only used for preview visualization before a component is created
 
 };
 

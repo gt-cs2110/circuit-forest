@@ -233,7 +233,7 @@ const properties = computed(() => {
                         type="range"
                         min="1"
                         step="1"
-                        max="16"
+                        max="64"
                         @change = "(e) => {
                             let bitsize =  Number((e.target as HTMLInputElement).value)
                             
@@ -261,7 +261,7 @@ const properties = computed(() => {
                         type="range"
                         min="1"
                         step="1"
-                        max="16"
+                        max="6"
                         @change = " selectedComponents.forEach(comp=>{
                             if(!comp)return;
                              updateComponent(comp!.frontendId, { selsize: Number(($event.target as HTMLInputElement).value) })
@@ -316,7 +316,7 @@ const properties = computed(() => {
             </AccordionContent>
             
             <!-- HANDIDNESS -->
-            <AccordionContent v-if = "properties.includes('buffer')" class="px-4 py-3 text-xs">
+            <AccordionContent v-if = "properties.includes('handedness')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Handedness</span>
 
@@ -331,7 +331,7 @@ const properties = computed(() => {
                             ? 'bg-blue-500 text-white'
                             : 'bg-panel-light hover:bg-panel-dark'
                         "
-                        @click="selectedComponents.forEach(comp=>{if(!comp){return;}updateComponent(comp.frontendId, { handedness: Number(($event.target as HTMLInputElement).value) })})"
+                        @click="selectedComponents.forEach(comp=>{if(!comp){return;}updateComponent(comp.frontendId, { handedness: Number(option.value) })})"
                     >
                         {{ option.label }}
                     </button>

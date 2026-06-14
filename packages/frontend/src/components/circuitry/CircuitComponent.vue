@@ -4,7 +4,7 @@ import { selectComponent, deselectComponent, isSelected } from "@/lib/store/view
 import { CircuitComponent } from "@/lib/types";
 
 import { componentMap } from ".";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
@@ -29,25 +29,31 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 const metadata = computed(() => componentMap[props.component.type]);
-const dimensions = computed(() => ({
-  width: props.component.bounds[1].x - props.component.bounds[0].x,
-  height: props.component.bounds[1].y - props.component.bounds[0].y,
-}));
+
 
 
 const absoluteOutputPortLocation = computed(()=>{
     return {x:props.component.x*GRID_SIZE, y:props.component.y*GRID_SIZE}
 })
 const localOutputPortLocation = computed(()=>{
+    //whicever side is longer is the one hte output port is on
+    let longer = Math.max(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
+    let shorter = Math.min(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
+    if(props.component.type == "constant"){
+         shorter = Math.max(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
+         longer = Math.min(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
+    }
+    
+    
     return {
-        x: props.component.type=="constant"?props.component.bitsize*GRID_SIZE:metadata.value.getDimensions().width*GRID_SIZE,
-        y: metadata.value.getDimensions().height*GRID_SIZE/2,
+        x: props.component.type=="constant"?props.component.bitsize*GRID_SIZE:shorter*GRID_SIZE,
+        y: longer*GRID_SIZE/2,
     }
 }
 )
 
 
-
+console.log(props.component)
 const ports = computed(() =>props.component.ports);
 const rotation = computed(() => {
   switch (props.component.orientation) {
@@ -69,6 +75,7 @@ const transform = computed(() => {
     translate(${-local.x}, ${-local.y})
   `;
 });
+computed(()=>console.log(props.component))
 
 </script>
 
@@ -79,17 +86,8 @@ const transform = computed(() => {
      @mousedown="handleMouseDown">
     
         <!-- <g :transform="rotate"> -->
-            <component :is="metadata.component" :component="props.component" :bitsize="component.bitsize"/>
-            <text
-                v-if=" props.component.type == 'constant'"
-                :x="(props.component.bitsize * GRID_SIZE)"
-                :y="(dimensions.height * GRID_SIZE) / 2"
-                :letter-spacing=GRID_SIZE/3
-
-                text-anchor="end"
-                dominant-baseline="middle"
-                class="pointer-events-none fill-black text-xs"
-            >{{ props.component.componentValue }}</text>
+            <component :is="metadata.component" :component="props.component" />
+            
         <!-- </g> -->
           
     </g>
@@ -97,8 +95,8 @@ const transform = computed(() => {
     v-if="isSelected(props.component.frontendId)"
             :x="props.component.bounds[0].x * GRID_SIZE"
             :y="props.component.bounds[0].y * GRID_SIZE"
-            :width="(props.component.bounds[1].x - props.component.bounds[0].x) * GRID_SIZE"
-            :height="(props.component.bounds[1].y - props.component.bounds[0].y) * GRID_SIZE"
+            :width="metadata.getDimensions(props.component).width * GRID_SIZE"
+            :height="metadata.getDimensions(props.component).height * GRID_SIZE"
             fill="none"
             stroke="#3b82f6"
             stroke-width="2"

@@ -29,7 +29,7 @@ impl PhysicalComponent for Mux {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_inputs: u32 = func::Mux::n_inputs_from(self.selsize) as u32;
-        
+
         let width = PLEXER_WIDTH;
         let height = 2 * n_inputs;
 
@@ -71,7 +71,6 @@ impl PhysicalComponent for Demux {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_outputs = func::Demux::n_outputs_from(self.selsize) as u32;
-        
         let width = PLEXER_WIDTH;
         let height = 2 * n_outputs;
 

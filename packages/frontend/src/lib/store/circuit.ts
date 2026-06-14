@@ -41,7 +41,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
 
     //Add New component with changes applied
-    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(component.type).toUpperCase(), bitsize: component.bitsize, inputs: component.inputs, orientation: component.orientation, label: component.label, x: component.x, y: component.y, labelOrientation: component.labelOrientation, handedness:component.handedness, constantValue:component.componentValue });
+    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(component.type).toUpperCase(), bitsize: component.bitsize, inputs: component.inputs, orientation: component.orientation, label: component.label, x: component.x, y: component.y, labelOrientation: component.labelOrientation, handedness:component.handedness, constantValue:component.componentValue, selsize:component.selsize });
     
     //update backend key
     const state = currentSubcircuit.value.components.get(frontendId);
@@ -82,7 +82,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         labelOrientation:Orientation["EAST"],
         x:x,
         y:y, 
-        selsize:2, 
+        selsize:1, 
         isInput:false,
         textContent:"",
         constantValue:"0"
@@ -121,6 +121,7 @@ export function deleteSubcircuit(frontendId: number) {
 export function updateState() {
     //call glue functions to propagate changes to backend and update frontend state based on backend state
     window.api.core.propagate(BigInt(currentSubcircuit.value.backendKey));
+    console.log(circuits)
     const transientStates:TransientComponentState[] = window.api.core.getTransientState(BigInt(currentSubcircuit.value.backendKey));
     transientStates.forEach(state=>{
         const corresponding_object = currentSubcircuit.value.components.values().find(component=>component.backendKey === String(state.backendKey));

@@ -82,7 +82,7 @@ watch(mousePosition, (mouse) => {
         return;
     }
     const metadata = componentMap[placingComponent.value];
-    const dimensions = metadata?.getDimensions() || { width: 1, height: 1 };
+    const dimensions = metadata?.getDefaultDimensions() || { width: 1, height: 1 };
     placingComponentPosition.x = Math.floor(
         (mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
     );
@@ -240,8 +240,8 @@ const metadata = computed(() => componentMap[placingComponent.value||"and"]);
                 @click="
                     placeComponent(
                         placingComponent,
-                        placingComponentPosition.x+metadata.getDimensions().width,
-                        placingComponentPosition.y+metadata.getDimensions().height/2,
+                        placingComponentPosition.x+metadata.getDefaultDimensions().width,
+                        placingComponentPosition.y+metadata.getDefaultDimensions().height/2,
                     )
                 "
             >

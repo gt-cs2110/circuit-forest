@@ -29,7 +29,7 @@ export interface CreateComponentArgs {
   labelOrientation?: number
   constantValue?: string
   isInput?: boolean
-  selSize?: number
+  selsize?: number
   textContent?: string
   handedness?: number
 }

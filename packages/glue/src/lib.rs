@@ -36,7 +36,7 @@ pub fn create_circuit(name:String)-> Result<BigInt, napi::Error> {
 pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error>{
    let mut rep = REPR.lock().unwrap();
    let bitsize = bitsize_from_u8(args.bitsize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Invalid bit size"))?;
-   let selsize = selsize_from_u8(args.selSize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Missing sel size for Mux"))?;
+   let selsize = selsize_from_u8(args.selsize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Missing sel size for Mux"))?;
 let orient:Orientation = match args.orientation.unwrap_or(2) {
     0 => Orientation::North,
     1 => Orientation::South,
@@ -209,7 +209,7 @@ pub struct CreateComponentArgs{
   pub labelOrientation:Option<u8>,
   pub constantValue:Option<String>,
   pub isInput:Option<bool>,
-  pub selSize:Option<u8>,
+  pub selsize:Option<u8>,
   pub textContent:Option<String>,
     pub handedness:Option<u8>,
 
