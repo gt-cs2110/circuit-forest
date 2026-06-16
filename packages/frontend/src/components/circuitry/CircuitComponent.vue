@@ -32,28 +32,6 @@ const metadata = computed(() => componentMap[props.component.type]);
 
 
 
-const absoluteOutputPortLocation = computed(()=>{
-    return {x:props.component.x*GRID_SIZE, y:props.component.y*GRID_SIZE}
-})
-const localOutputPortLocation = computed(()=>{
-    //whicever side is longer is the one hte output port is on
-    let longer = Math.max(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
-    let shorter = Math.min(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
-    if(props.component.type == "constant"){
-         shorter = Math.max(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
-         longer = Math.min(metadata.value.getDimensions(props.component).width, metadata.value.getDimensions(props.component).height)
-    }
-    
-    
-    return {
-        x: props.component.type=="constant"?props.component.bitsize*GRID_SIZE:shorter*GRID_SIZE,
-        y: longer*GRID_SIZE/2,
-    }
-}
-)
-
-
-console.log(props.component)
 const ports = computed(() =>props.component.ports);
 const rotation = computed(() => {
   switch (props.component.orientation) {
@@ -65,14 +43,18 @@ const rotation = computed(() => {
 });
 
 const transform = computed(() => {
-  const world = absoluteOutputPortLocation.value;
-  const local = localOutputPortLocation.value;
+  const ShiftToWorldCoordinates = {x:props.component.x*GRID_SIZE, y:props.component.y*GRID_SIZE};
+ 
+  const OriginRelativeToFixedPortRelative = {x:metadata.value.getOriginToFixedPortOffset(props.component).x*GRID_SIZE, y:metadata.value.getOriginToFixedPortOffset(props.component).y*GRID_SIZE};
   const angle = rotation.value;
 
+  //Trnaformations are applied right to left, first we shift so output port to be at 0,0 using the fixed to origin offset
+  //rotate has to be next bc it rotates about world 0,0, so once we have fixed port on world 0,0 it rotates about ixed port
+  //then we shift output port to be at the coordinates x,y
   return `
-    translate(${world.x}, ${world.y})
+    translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})
     rotate(${angle})
-    translate(${-local.x}, ${-local.y})
+    translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})
   `;
 });
 computed(()=>console.log(props.component))
