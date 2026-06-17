@@ -3,7 +3,6 @@ import { computed, reactive, ref } from "vue";
 import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
-import { TransientComponentState } from "circuitsim-glue";
 
 export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -121,14 +120,16 @@ export function deleteSubcircuit(frontendId: number) {
 export function updateState() {
     //call glue functions to propagate changes to backend and update frontend state based on backend state
     window.api.core.propagate(BigInt(currentSubcircuit.value.backendKey));
-    console.log(circuits)
-    const transientStates:TransientComponentState[] = window.api.core.getTransientState(BigInt(currentSubcircuit.value.backendKey));
-    transientStates.forEach(state=>{
+    const [transientComponentStates, transientWireState] = window.api.core.getTransientState(BigInt(currentSubcircuit.value.backendKey));
+    transientComponentStates.forEach(state=>{
         const corresponding_object = currentSubcircuit.value.components.values().find(component=>component.backendKey === String(state.backendKey));
         if(corresponding_object){
             Object.assign(corresponding_object, state);
         }
     })
+    console.log("backend updates" )
+    console.log(transientComponentStates)
+    console.log(transientWireState)
 }
 //TODO Update Circuit State
 export function generateFrontendId() {

@@ -23,11 +23,11 @@ fn minmax<T: Ord>(p: T, q: T) -> [T; 2] {
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Wire {
     /// The lowermost X coordinate of the wire.
-    x: Axis,
+    pub x: Axis,
     /// The lowermost Y coordinate of the wire.
-    y: Axis,
+    pub y: Axis,
     /// The length of the wire.
-    length: NonZero<Axis>,
+    pub length: NonZero<Axis>,
     /// Whether the wire is horizontal or vertical.
     #[cfg_attr(feature="serde", serde(rename = "isHorizontal"))]
     horizontal: bool

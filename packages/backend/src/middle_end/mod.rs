@@ -5,14 +5,18 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
+use serde::de::value;
 use slotmap::{SecondaryMap, SlotMap};
 use thiserror::Error;
 
-use crate::engine::state::FunctionState;
-use crate::engine::{CircuitForest, CircuitKey, FunctionKey, FunctionPort};
+use crate::bitarray::{BitArray};
+use crate::engine::graph::ValueNode;
+use crate::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
+use crate::engine::state::{FunctionState, ValueState};
+use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort, ValueKey};
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
-use crate::middle_end::wire::{Wire, WireSet};
+use crate::middle_end::wire::{MeshKey, Wire, WireSet};
 
 mod key;
 mod string_interner;
@@ -290,6 +294,25 @@ impl MiddleCircuit<'_> {
             .iter()
             .collect() 
     } 
+
+    pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
+       return circ!(self.physical).wires.wires().map(|wire| {
+        let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
+        return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
+            match issue{
+                ShortCircuit =>"ShortCircuit".to_string(),
+                OscillationDetected => "OscillationDetected".to_string(),
+                MismatchedBitsizes => "MismatchedBitsize".to_string()
+            }
+        }).collect())
+    }).collect();
+    }
+     pub fn get_wire_set(&self)->&WireSet{
+        &circ!(self.physical).wires
+    }
+    pub fn get_circuit_state(&self)->&CircuitState{
+        &circ!(self.state)
+    }
       /// get the component properties for a given component key, returns an error if the component does not exist
     pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
         match key {

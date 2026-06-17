@@ -7,7 +7,10 @@ use circuitsim_engine::engine::func::{GateKind};
 use napi_derive::napi;
 use slotmap::KeyData;
 use napi::bindgen_prelude::BigInt;
+use circuitsim_engine::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
+
 static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
+
 
 /// Creates a new circuit and returns its key as an i64 for JS.
 #[napi]
@@ -124,7 +127,7 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
 
 #[napi]
- pub fn getTransientState(circuit_key: BigInt)-> Result<Vec<TransientComponentState>,napi::Error>{
+ pub fn getTransientState(circuit_key: BigInt)-> Result<(Vec<TransientComponentState>, Vec<TransientWireState>),napi::Error>{
     let mut component_states: Vec<TransientComponentState> = Vec::new();
 
     let mut rep = REPR.lock().unwrap();
@@ -141,7 +144,15 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
       let ports: Vec<PortTransientState> = (0..num_ports).map(|i| {
         let (x, y) = component.ports[i];
         let value = state.get_port(i).to_string();
-        PortTransientState { x, y,  value }
+        let valueKey = circuit.get_wire_set().find_key((ComponentKey::Function(key), i)).unwrap();
+        let issues  = circuit.get_circuit_state().get_issues(valueKey).iter().map(|issue| {
+            match issue{
+                ShortCircuit =>"ShortCircuit".to_string(),
+                OscillationDetected => "OscillationDetected".to_string(),
+                MismatchedBitsizes => "MismatchedBitsize".to_string()
+            }
+        }).collect();
+        PortTransientState { x, y,  value, issues }
       }).collect();
       //check to see if component is a probe or constant to get value for component value field
       let component_value = match component.inner {
@@ -154,7 +165,20 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
 
 
 
-    Ok(component_states)
+    //Get Wire Transient States
+    //Middle End has a wire set and tunnel interner'
+
+    //Wire Range Map holds all our horizantal and vertical segments
+
+    let mut wire_states: Vec<TransientWireState> = Vec::new();
+
+    for(wire, value, issues) in circuit.get_wire_states(){
+      wire_states.push(TransientWireState{endpoints:vec![Location{x:wire.endpoints()[0].0, y:wire.endpoints()[0].1}, Location{x:wire.endpoints()[1].0, y:wire.endpoints()[1].1}], isHorizantal:wire.horizontal(), length:wire.length(), value:value.to_string(), issues:issues});
+    }
+
+   
+
+    Ok((component_states, wire_states))
 
  }
 
@@ -222,10 +246,19 @@ pub struct TransientComponentState{
   pub componentValue: Option<String>//only for probes and constants
 }
 #[napi(object)]
+pub struct TransientWireState{
+  pub endpoints: Vec<Location>, 
+  pub isHorizantal: bool, 
+  pub length: u32,
+  pub value: String, 
+  pub issues: Vec<String>
+}
+#[napi(object)]
 pub struct PortTransientState{
   pub x: u32,
   pub y: u32,
-  pub value:String
+  pub value:String,
+  pub issues:Vec<String>
 }
 #[napi(object)]
 pub struct Location{

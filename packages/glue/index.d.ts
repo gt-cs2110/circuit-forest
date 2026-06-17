@@ -35,7 +35,7 @@ export interface CreateComponentArgs {
 }
 
 /** Function Get Transient State, gets the relevant data and state of all components in a circuit */
-export declare function getTransientState(circuitKey: bigint): Array<TransientComponentState>
+export declare function getTransientState(circuitKey: bigint): [Array<TransientComponentState>, Array<TransientWireState>]
 
 export interface Location {
   x: number
@@ -46,6 +46,7 @@ export interface PortTransientState {
   x: number
   y: number
   value: string
+  issues: Array<string>
 }
 
 export declare function printCircuit(circuitKey: bigint): string
@@ -59,4 +60,12 @@ export interface TransientComponentState {
   ports: Array<PortTransientState>
   bounds: Array<Location>
   componentValue?: string
+}
+
+export interface TransientWireState {
+  endpoints: Array<Location>
+  isHorizantal: boolean
+  length: number
+  value: string
+  issues: Array<string>
 }
