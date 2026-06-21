@@ -30,7 +30,7 @@ pub struct Wire {
     pub length: NonZero<Axis>,
     /// Whether the wire is horizontal or vertical.
     #[cfg_attr(feature="serde", serde(rename = "isHorizontal"))]
-    horizontal: bool
+    pub horizontal: bool
 }
 impl Wire {
     /// Creates a new Wire, returning None if `length` would result in overflowing coordinates.

@@ -1,8 +1,8 @@
 #![deny(clippy::all)]
 
-use std::{str::FromStr, sync::{LazyLock, Mutex}};
+use std::{num::NonZero, str::FromStr, sync::{LazyLock, Mutex}};
 
-use circuitsim_engine::{bitarray::BitArray, engine::{ FunctionKey, func::{bitsize_from_u8, gateinputs_from_u8, selsize_from_u8}}, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}}};
+use circuitsim_engine::{bitarray::BitArray, engine::{ FunctionKey, func::{bitsize_from_u8, gateinputs_from_u8, selsize_from_u8}}, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}, wire::Wire}};
 use circuitsim_engine::engine::func::{GateKind};
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -122,6 +122,27 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
 
   Err(napi::Error::from_reason("Invalid component key"))
 }
+#[napi]
+
+pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
+
+  let mut rep = REPR.lock().unwrap();
+  let key = bigint_to_key(&cricuit_key).unwrap();
+  // if !rep.has_circuit(key){return Err(napi::Error::from_reason("Circuit not found"))};
+    if !rep.has_circuit(key){return "Circuit Nto Found".to_string()};
+
+  let mut circuit = rep.circuit(key);
+  //coordinates are loermost  x and y so smallest value
+  let x = std::cmp::min(wire.endpoints[0].x, wire.endpoints[1].x);
+  let y= std::cmp::min(wire.endpoints[0].y, wire.endpoints[1].y); 
+  // circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizantal}).map_err(|op| napi::Error::from_reason(op.to_string()))
+  let res =  circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizontal});
+  if res.is_err(){
+    return res.map_err(|op| op.to_string()).err().unwrap();
+  }
+  return "".to_string();
+
+}
 
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
@@ -173,7 +194,7 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
     let mut wire_states: Vec<TransientWireState> = Vec::new();
 
     for(wire, value, issues) in circuit.get_wire_states(){
-      wire_states.push(TransientWireState{endpoints:vec![Location{x:wire.endpoints()[0].0, y:wire.endpoints()[0].1}, Location{x:wire.endpoints()[1].0, y:wire.endpoints()[1].1}], isHorizantal:wire.horizontal(), length:wire.length(), value:value.to_string(), issues:issues});
+      wire_states.push(TransientWireState{endpoints:vec![Location{x:wire.endpoints()[0].0, y:wire.endpoints()[0].1}, Location{x:wire.endpoints()[1].0, y:wire.endpoints()[1].1}], isHorizontal:wire.horizontal(), length:wire.length(), value:value.to_string(), issues:issues});
     }
 
    
@@ -248,7 +269,7 @@ pub struct TransientComponentState{
 #[napi(object)]
 pub struct TransientWireState{
   pub endpoints: Vec<Location>, 
-  pub isHorizantal: bool, 
+  pub isHorizontal: bool, 
   pub length: u32,
   pub value: String, 
   pub issues: Vec<String>

@@ -14,6 +14,8 @@ Gate, Not, TriState,
  */
 export declare function addComponent(args: CreateComponentArgs): bigint
 
+export declare function addWire(cricuitKey: bigint, wire: TransientWireState): string
+
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(name: string): bigint
 
@@ -64,7 +66,7 @@ export interface TransientComponentState {
 
 export interface TransientWireState {
   endpoints: Array<Location>
-  isHorizantal: boolean
+  isHorizontal: boolean
   length: number
   value: string
   issues: Array<string>

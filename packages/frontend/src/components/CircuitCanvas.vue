@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
-import { deleteComponent, placeComponent } from "@/lib/store/circuit";
+import { addWire, deleteComponent, placeComponent, updateState } from "@/lib/store/circuit";
 import { clearSelection, getViewState, placingComponent, selection } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
 import { Subcircuit } from "@/lib/types";
+import { Location } from "circuitsim-glue";
 import { componentMap } from "./circuitry";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import Wire from "./circuitry/Wire.vue";
-
 import { useCoordinates } from "@/composables/useCoordinates";
 import { usePan } from "@/composables/usePan";
 import { useDrag } from "@/composables/useDrag";
@@ -37,6 +37,14 @@ const offset = computed({
 
 // container coordinates
 const mousePosition = reactive({ x: 0, y: 0 });
+
+const wireDrag = reactive({
+    active:false,
+    multiDimension:false,
+    start:{x:0,y:0},
+    middle:{x:0,y:0},
+    end:{x:0, y:0}
+});
 
 const { containerToWorld, worldToContainer } = useCoordinates(offset, scale);
 const { isPanning, startPan, updatePan, stopPan } = usePan(offset);
@@ -100,7 +108,7 @@ function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
     
     const world = toWorld(e);
-    startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
+    if (!wireDrag.active)startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -114,6 +122,7 @@ function handleMouseMove(e: MouseEvent) {
     
     updatePan(e.clientX, e.clientY);
     updateDrag(world.x , world.y);
+    updateWireDrag(e);
     updateMarquee(world.x, world.y);
     updateTooltip(e.target!);
 }
@@ -131,19 +140,14 @@ function handleDelete(e:KeyboardEvent) {
 function handleMouseUp(e: MouseEvent) {
     const rect = containerRef.value!.getBoundingClientRect();
     mousePosition.x = e.clientX - rect.left;
-    mousePosition.y = e.clientY - rect.top;
-
-
-    
-
-
-
+    mousePosition.y = e.clientY - rect.top
     const world = toWorld(e);
     
     updatePan(e.clientX, e.clientY);
     updateDrag(world.x, world.y);
     stopPan();
     stopDrag();
+    stopWireDrag();
     finalizeMarquee();
 }
 
@@ -151,6 +155,85 @@ function handleComponentDragStart(e: MouseEvent) {
     const world = toWorld(e);
     startDrag(world.x, world.y);
 }
+function handleComponentWireDrag(e: MouseEvent){
+    console.log("starting wire drag");
+    const world = toWorld(e);
+  
+    if(!wireDrag.active){
+        wireDrag.active = true;
+        wireDrag.start.x = Math.round(world.x);
+        wireDrag.start.y = Math.round(world.y);
+    }
+}
+function stopWireDrag(){
+    if(!wireDrag.active)return
+   
+    
+    //have to clone wireDrag bc its a vue reactive element so we can get the raw values
+    let clonedWireDrag = structuredClone(toRaw(wireDrag));
+
+    let hDist = Math.abs(clonedWireDrag.end.x-clonedWireDrag.start.x);
+    let vDist = Math.abs(clonedWireDrag.end.y-clonedWireDrag.start.y);
+    if(clonedWireDrag.multiDimension){
+        let firstWireIsHorizontal = wireDrag.middle.y==wireDrag.start.y;
+       
+
+        addWire(clonedWireDrag.start, clonedWireDrag.middle, firstWireIsHorizontal?hDist:vDist, firstWireIsHorizontal)
+        addWire(clonedWireDrag.middle, clonedWireDrag.end, !firstWireIsHorizontal?hDist:vDist, !firstWireIsHorizontal)
+
+    }
+    else {
+        let isHorizontal = wireDrag.end.y==wireDrag.start.y;
+        addWire(clonedWireDrag.start, clonedWireDrag.end,isHorizontal?hDist:vDist, isHorizontal)
+
+    }
+    wireDrag.active = false;
+    wireDrag.multiDimension= false;
+    wireDrag.start = {x:0,y:0};
+    wireDrag.end = {x:0,y:0};
+    wireDrag.middle = {x:0,y:0};
+    updateState()
+}
+function updateWireDrag(e: MouseEvent){
+    if(!wireDrag.active)return;
+    const world = toWorld(e);
+    world.x = Math.ceil(world.x);
+    world.y = Math.floor(world.y);
+    console.log(Math.abs(wireDrag.start.x-world.x) + " " + Math.abs(wireDrag.start.y-world.y))
+
+    if (wireDrag.start.x==world.x){//we are only changing y direction
+        wireDrag.multiDimension = false;
+        wireDrag.end = world;
+    }
+    else if (wireDrag.start.y == world.y)//we are only changing x direciotn
+    { 
+        wireDrag.multiDimension = false;  
+        wireDrag.end = world;
+    }
+    else {
+        //the dimension with largest delta becomes the first line
+        if ((!wireDrag.multiDimension && Math.abs(wireDrag.start.x-world.x) > Math.abs(wireDrag.start.y-world.y))||(wireDrag.multiDimension && wireDrag.middle.y==wireDrag.start.y)){
+            //we choose horizontal to be the first line
+            wireDrag.middle.x = world.x;
+            wireDrag.middle.y = wireDrag.start.y;
+            wireDrag.end.x = world.x;
+            wireDrag.end.y = world.y;
+            wireDrag.multiDimension = true;
+        }
+        else {
+            //we choose vertical to be the first line
+            
+            wireDrag.middle.y = world.y;
+            wireDrag.middle.x = wireDrag.start.x;
+            wireDrag.end.y = world.y;
+            wireDrag.end.x = world.x;
+            wireDrag.multiDimension = true;
+        }
+    }
+
+    
+}
+
 
 function handleWheel(e: WheelEvent) {
     wheelZoom(e);
@@ -227,6 +310,7 @@ const metadata = computed(() => componentMap[placingComponent.value||"and"]);
                 :key="id"
                 :component="component"
                 @dragstart="handleComponentDragStart"
+                @wiredrag="handleComponentWireDrag"
             />
 
             <g
@@ -249,9 +333,41 @@ const metadata = computed(() => componentMap[placingComponent.value||"and"]);
             </g>
 
             <g v-for="(wire, i) in subcircuit.wires" :key="i">
-                <Wire :wire />
+                <Wire :wire   @wiredrag="handleComponentWireDrag"
+/>
             </g>
+            <line
+                v-if="wireDrag.active && !wireDrag.multiDimension"
+                :x1="wireDrag.start.x * GRID_SIZE"
+                :y1="wireDrag.start.y * GRID_SIZE"
+                :x2="wireDrag.end.x * GRID_SIZE"
+                :y2="wireDrag.end.y * GRID_SIZE"
+                stroke="black"
+                stroke-width="2"
+                stroke-linecap="round"
+            />
+            <line
+                v-if="wireDrag.active && wireDrag.multiDimension"
+                :x1="wireDrag.start.x * GRID_SIZE"
+                :y1="wireDrag.start.y * GRID_SIZE"
+                :x2="wireDrag.middle.x * GRID_SIZE"
+                :y2="wireDrag.middle.y * GRID_SIZE"
+                stroke="black"
+                stroke-width="2"
+                stroke-linecap="round"
+            />
+             <line
+                v-if="wireDrag.active && wireDrag.multiDimension"
+                :x1="wireDrag.middle.x * GRID_SIZE"
+                :y1="wireDrag.middle.y * GRID_SIZE"
+                :x2="wireDrag.end.x * GRID_SIZE"
+                :y2="wireDrag.end.y * GRID_SIZE"
+                stroke="black"
+                stroke-width="2"
+                stroke-linecap="round"
+            />
         </svg>
+
 
         <div
             v-if="marquee.active"

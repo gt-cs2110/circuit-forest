@@ -3,6 +3,7 @@ import { computed, reactive, ref } from "vue";
 import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
+import { Location} from 'circuitsim-glue'
 
 export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -97,7 +98,11 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     placingComponent.value = null;
 }
-
+export function addWire(start:Location, end:Location, length:number, isHorizontal:boolean){
+    console.log("adding")
+    console.log([start, end, length, isHorizontal])
+    console.log(window.api.core.addWire(BigInt(currentSubcircuit.value.backendKey), {endpoints:[start, end], isHorizontal,length, value:"", issues:[]  }))
+}
 export function newSubcircuit(name?:string) {
     const frontendId = generateFrontendId();
     const backendKey = String(window.api.core.createCircuit(name ?? ("Circuit" + circuits.size)));
@@ -127,6 +132,8 @@ export function updateState() {
             Object.assign(corresponding_object, state);
         }
     })
+    currentSubcircuit.value.wires=transientWireState
+    console.log(currentSubcircuit.value)
     console.log("backend updates" )
     console.log(transientComponentStates)
     console.log(transientWireState)

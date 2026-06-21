@@ -29,7 +29,6 @@ export const  Handedness = {
     
 }
 
-export type Location = { x: number; y: number };
 export type Port = Location & {
     label?: string;
     value?: string;

@@ -9,9 +9,11 @@ import { computed } from "vue";
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
     dragstart: [e: MouseEvent];
+    wiredrag: [e: MouseEvent];
 }>();
 
 function handleMouseDown(e: MouseEvent) {
+    console.log(e)
     if (e.button !== 0) return;
     e.stopPropagation();
 
@@ -27,7 +29,9 @@ function handleMouseDown(e: MouseEvent) {
     }
     emit("dragstart", e);
 }
-
+function onPortDrag(e: MouseEvent){
+    emit("wiredrag", e)
+}
 const metadata = computed(() => componentMap[props.component.type]);
 
 
@@ -93,7 +97,11 @@ computed(()=>console.log(props.component))
       :fill="point.value.includes('Z')?'rgb(255,0,0)':(point.value.includes('X')?'rgb(0,0,255)':(point.value.includes('1')?'rgb(0,255,0)':'#006400'))"
       stroke="transparent"
       stroke-width="4"
+      draggable="true"
+      @mousedown="onPortDrag"
+      
       class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+
   />
 
 </template>
