@@ -150,7 +150,6 @@ pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
 #[napi]
  pub fn getTransientState(circuit_key: BigInt)-> Result<(Vec<TransientComponentState>, Vec<TransientWireState>),napi::Error>{
     let mut component_states: Vec<TransientComponentState> = Vec::new();
-
     let mut rep = REPR.lock().unwrap();
     let key = bigint_to_key(&circuit_key).ok_or_else(|| napi::Error::from_reason("invalid circut key"))?;
     if !rep.has_circuit(key) {return Err(napi::Error::from_reason("Circuit not found"));}
@@ -161,11 +160,10 @@ pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
       let component = circuit.get_component(ComponentKey::Function(key)).map_err(|_| napi::Error::from_reason("Component not found"))?;
       //get num ports and iterate through them to get values and states
       let num_ports = state.get_num_ports();
-
       let ports: Vec<PortTransientState> = (0..num_ports).map(|i| {
         let (x, y) = component.ports[i];
         let value = state.get_port(i).to_string();
-        let valueKey = circuit.get_wire_set().find_key((ComponentKey::Function(key), i)).unwrap();
+        let valueKey: circuitsim_engine::engine::ValueKey = circuit.get_wire_set().find_key((ComponentKey::Function(key), i)).unwrap();
         let issues  = circuit.get_circuit_state().get_issues(valueKey).iter().map(|issue| {
             match issue{
                 ShortCircuit =>"ShortCircuit".to_string(),

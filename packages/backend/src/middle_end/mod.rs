@@ -229,7 +229,14 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
             wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, k1, keys) => {
+            wire::AddWireResult::Join(c, k1, mut keys) => {
+                //we call floodfill using k1 the valueKey that has been selected to become the valueKey
+                //but when we call .join on the keys vector it takes the first key in the keys array to be used. But keys[0]isnt necessarliy k1, so we have to ensure we are using the same vauekey to flodfill that we are updating the abckend with
+                keys.sort_by_key(|&k|k!=k1);
+                //The print statment show how without the patch the keys are different
+                // println!("JOINING");
+                // println!("join k1/post_fill_key: {:?}", k1);
+                // println!("join keys: {:?}", keys);
                 circ!(self.engine).join(&keys);
                 circ!(self.physical).wires.flood_fill(c, k1);
             },
@@ -298,6 +305,7 @@ impl MiddleCircuit<'_> {
     pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
        return circ!(self.physical).wires.wires().map(|wire| {
         let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
+        println!("getwirestate");
         return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
             match issue{
                 ShortCircuit =>"ShortCircuit".to_string(),
@@ -328,4 +336,7 @@ impl MiddleCircuit<'_> {
             ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
         }
     }
+
+
+    
 }

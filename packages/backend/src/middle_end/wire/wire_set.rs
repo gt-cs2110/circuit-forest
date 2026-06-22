@@ -417,7 +417,17 @@ impl WireSet {
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-        let mut frontier = vec![p.into()];
+
+        //It is possible that the coordinate p correspons to an endpoint that is now an interior point and was deleted in the wire merging, thus we ened to find the mesh key that corresponds to the wire this corrdiante is on
+        let mut frontier = if self.graph.contains_node(p.into()) {
+            vec![p.into()]
+        } else {
+            self.ranges
+                .wires_at_coord(p)
+                .flat_map(|w| w.endpoints())
+                .map(MeshKey::from)
+                .collect()
+        };
 
         while let Some(k) = frontier.pop() {
             let edges_to_flood: Vec<_> = self.graph.edges(k)
@@ -453,7 +463,7 @@ mod tests {
 
     use slotmap::SlotMap;
 
-    use crate::middle_end::wire::range_map::assert_range_map;
+    use crate::{engine::func::bitsize_from_u8, middle_end::{MiddleRepr, func::{Orientation, Pin}, wire::range_map::assert_range_map}};
 
     use super::*;
     
@@ -951,4 +961,75 @@ mod tests {
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
+    #[test]
+fn wire_merge_issue_with_differing_keys() {
+
+    //When mergeing to Value Nodes, the 
+    let mut repr = MiddleRepr::new();
+    let circuit_key = repr.add_circuit("debug");
+    let bitsize = bitsize_from_u8(1).unwrap();
+    let mut circuit = repr.circuit(circuit_key);
+
+    let left = circuit
+        .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, (10, 10))
+        .unwrap();
+
+    let right = circuit
+        .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, (20, 10))
+        .unwrap();
+
+    circuit.add_wire(Wire::new(10, 10, 10, true).unwrap()).unwrap();
+    circuit.propagate();
+
+    for key in [left, right] {
+        let ComponentKey::Function(gate) = key else {
+            panic!("expected function component");
+        };
+
+        let value_key = circuit
+            .get_wire_set()
+            .find_key((ComponentKey::Function(gate), 0))
+            .unwrap();
+
+        let _ = circuit.get_circuit_state().get_issues(value_key);
+    }
+
+    let _ = circuit.get_wire_states();
+}
+#[test]
+fn non_joint_coord_being_used_as_meshkey_for_floodfill() {
+    let mut repr = MiddleRepr::new();
+    let circuit_key = repr.add_circuit("debug");
+    let bitsize = bitsize_from_u8(1).unwrap();
+    let mut circuit = repr.circuit(circuit_key);
+
+    let left = circuit
+        .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, (10, 10))
+        .unwrap();
+
+    let right = circuit
+        .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, (30, 10))
+        .unwrap();
+
+    circuit.add_wire(Wire::new(10, 10, 5, true).unwrap()).unwrap();
+    circuit.add_wire(Wire::new(25, 10, 5, true).unwrap()).unwrap();
+    circuit.add_wire(Wire::new(15, 10, 10, true).unwrap()).unwrap();
+
+    circuit.propagate();
+
+    for key in [left, right] {
+        let ComponentKey::Function(gate) = key else {
+            panic!("expected function component");
+        };
+
+        let value_key = circuit
+            .get_wire_set()
+            .find_key((ComponentKey::Function(gate), 0))
+            .unwrap();
+
+        let _ = circuit.get_circuit_state().get_issues(value_key);
+    }
+
+    let _ = circuit.get_wire_states();
+}
 }
