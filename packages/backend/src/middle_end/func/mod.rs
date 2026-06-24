@@ -37,6 +37,11 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
     }
 }
 
+/// Cast from number to [`Orientation`] or [`Handedness`] failed.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot convert number to type")]
+pub struct InvalidNum(());
+
 /// Orientation.
 /// 
 /// This is typically used to describe the orientation of a component which can be rotated.
@@ -45,6 +50,19 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Orientation {
     North, South, #[default] East, West
+}
+impl TryFrom<u8> for Orientation {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Orientation::North),
+            1 => Ok(Orientation::South),
+            2 => Ok(Orientation::East),
+            3 => Ok(Orientation::West),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// The handedness (or mirror orientation).
@@ -73,6 +91,17 @@ pub enum Handedness {
     /// For north-oriented components, the chiral port is pointed eastwards (right).
     #[default]
     DownRight
+}
+impl TryFrom<u8> for Handedness {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Handedness::TopLeft),
+            1 => Ok(Handedness::DownRight),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// Context available during [`PhysicalComponent`] initialization.

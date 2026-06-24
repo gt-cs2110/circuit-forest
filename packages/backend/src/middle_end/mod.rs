@@ -9,8 +9,7 @@ use slotmap::{SecondaryMap, SlotMap};
 use thiserror::Error;
 
 use crate::bitarray::{BitArray};
-use crate::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
-use crate::engine::state::FunctionState;
+use crate::engine::state::{FunctionState, ValueIssue};
 use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
@@ -293,22 +292,20 @@ impl MiddleCircuit<'_> {
             .collect() 
     } 
 
-    pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
-       return circ!(self.physical).wires.wires().map(|wire| {
-        let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
-        return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
-            match issue{
-                ShortCircuit =>"ShortCircuit".to_string(),
-                OscillationDetected => "OscillationDetected".to_string(),
-                MismatchedBitsizes => "MismatchedBitsize".to_string()
-            }
-        }).collect())
-    }).collect();
+    pub fn get_wire_states(&self) -> Vec<(Wire, BitArray, Vec<ValueIssue>)> {
+        circ!(self.physical).wires.wires().map(|wire| {
+            let value_key = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
+            let bit_value = circ!(self.state).get_node_value(value_key);
+            let issues = circ!(self.state).get_issues(value_key).iter().copied().collect();
+
+            (wire, bit_value, issues)
+        }).collect()
     }
-     pub fn get_wire_set(&self)->&WireSet{
+
+    pub fn get_wire_set(&self) -> &WireSet {
         &circ!(self.physical).wires
     }
-    pub fn get_circuit_state(&self)->&CircuitState{
+    pub fn get_circuit_state(&self) -> &CircuitState {
         &circ!(self.state)
     }
       /// get the component properties for a given component key, returns an error if the component does not exist
