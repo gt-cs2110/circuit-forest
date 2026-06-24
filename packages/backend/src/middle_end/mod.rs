@@ -229,14 +229,7 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
             wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, k1, mut keys) => {
-                //we call floodfill using k1 the valueKey that has been selected to become the valueKey
-                //but when we call .join on the keys vector it takes the first key in the keys array to be used. But keys[0]isnt necessarliy k1, so we have to ensure we are using the same vauekey to flodfill that we are updating the abckend with
-                keys.sort_by_key(|&k|k!=k1);
-                //The print statment show how without the patch the keys are different
-                // println!("JOINING");
-                // println!("join k1/post_fill_key: {:?}", k1);
-                // println!("join keys: {:?}", keys);
+            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
                 circ!(self.engine).join(&keys);
                 circ!(self.physical).wires.flood_fill(c, k1);
             },
@@ -305,7 +298,6 @@ impl MiddleCircuit<'_> {
     pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
        return circ!(self.physical).wires.wires().map(|wire| {
         let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
-        println!("getwirestate");
         return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
             match issue{
                 ShortCircuit =>"ShortCircuit".to_string(),
@@ -336,7 +328,77 @@ impl MiddleCircuit<'_> {
             ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
         }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use crate::engine::func::BitSize;
+    use crate::middle_end::func::Pin;
 
+    use super::*;
+
+    #[test]
+    fn middle_repr_connect_wire() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let bitsize = BitSize::new(1).unwrap();
+        let mut circuit = repr.circuit(circuit_key);
+
+        let [p, q] = [(10, 10), (20, 10)];
+
+        let left = circuit
+            .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, p)
+            .unwrap();
+
+        let right = circuit
+            .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, q)
+            .unwrap();
+
+        let w = Wire::from_endpoints(p, q).unwrap();
+        circuit.add_wire(w).unwrap();
+
+        let [lk, rk] = [left, right].map(|key| {
+            let ComponentKey::Function(gate) = key else {
+                panic!("expected function component");
+            };
     
+            circuit.get_wire_set()
+                .find_key((ComponentKey::Function(gate), 0))
+                .unwrap()
+        });
+
+        assert_eq!(lk, rk);
+    }
+    #[test]
+    fn middle_repr_connect_wire_not_endpoint() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let bitsize = BitSize::new(1).unwrap();
+        let mut circuit = repr.circuit(circuit_key);
+
+        let [p, m1, m2, q] = [(10, 10), (15, 10), (25, 10), (30, 10)];
+        let left = circuit
+            .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, p)
+            .unwrap();
+
+        let right = circuit
+            .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, q)
+            .unwrap();
+
+        circuit.add_wire(Wire::from_endpoints(p, m1).unwrap()).unwrap();
+        circuit.add_wire(Wire::from_endpoints(m2, q).unwrap()).unwrap();
+        circuit.add_wire(Wire::from_endpoints(m1, m2).unwrap()).unwrap();
+
+        let [lk, rk] = [left, right].map(|key| {
+            let ComponentKey::Function(gate) = key else {
+                panic!("expected function component");
+            };
+    
+            circuit.get_wire_set()
+                .find_key((ComponentKey::Function(gate), 0))
+                .unwrap()
+        });
+
+        assert_eq!(lk, rk);
+    }
 }

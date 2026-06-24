@@ -55,9 +55,9 @@ pub enum AddWireResult {
     /// Joining is necessary.
     /// The parameters are:
     /// - The coordinate to start a flood fill from.
-    /// - The value key the new wire is set to.
-    /// - The value keys which need to be replaced with the new wire's key.
-    Join(Coord, ValueKey, Vec<ValueKey>)
+    /// - The value keys which must be joined.
+    ///   They should be replaced with the first key in the vector.
+    Join(Coord, Vec<ValueKey>)
 }
 
 type SplitGroupMap = HashMap<ValueKey, Vec<HashSet<MeshKey>>>;
@@ -167,8 +167,6 @@ impl WireSet {
     pub fn add_wire(&mut self, w: Wire, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         // If horizontal or vertical, these two points can be connected.
         let [p, q] = w.endpoints();
-        let pk = self.find_key(p);
-        let qk = self.find_key(q);
 
         // If endpoints intersect the middle of a wire, create an intersection:
         self.split_wire_on_joint(p, !w.horizontal);
@@ -227,24 +225,7 @@ impl WireSet {
                 (new_key, AddWireResult::NoJoin(new_key))
             },
             &[k] => (k, AddWireResult::NoJoin(k)),
-            &[k1, k2, ..] => {
-                // If multiple keys, then we know we need to eventually join
-                // and we need to determine which key to use.
-                // 
-                // fill_point: Where a flood fill needs to start
-                // fill_key: The key to temporarily fill the wire with
-                // post_fill_key: The key to actually fill with (using flood fill)
-                //
-                // This is set up this way so that any adjacent wires to this wire
-                // are all flood-filled properly.
-                let (fill_point, post_fill_key, fill_key) = match (pk, qk) {
-                    (Some(pk), _) => (p, pk, *keys.iter().find(|&&k| k != pk).unwrap()),
-                    (_, Some(qk)) => (q, qk, *keys.iter().find(|&&k| k != qk).unwrap()),
-                    _ => (p, k1, k2)
-                };
-
-                (fill_key, AddWireResult::Join(fill_point, post_fill_key, keys))
-            }
+            &[_, k2, ..] => (k2, AddWireResult::Join(p, keys))
         };
         // Add all the wires
         self.graph.extend(
@@ -417,15 +398,13 @@ impl WireSet {
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-
-        //It is possible that the coordinate p correspons to an endpoint that is now an interior point and was deleted in the wire merging, thus we ened to find the mesh key that corresponds to the wire this corrdiante is on
-        let mut frontier = if self.graph.contains_node(p.into()) {
-            vec![p.into()]
-        } else {
-            self.ranges
-                .wires_at_coord(p)
-                .flat_map(|w| w.endpoints())
-                .map(MeshKey::from)
+        let mut frontier: Vec<_> = {
+            // Pick the first accessible endpoint on the wire where p is.
+            // If no wire exists, this will immediately terminate.
+            self.wires_at_coord(p)
+                .next()
+                .map(|w| MeshKey::from(w.endpoints()[0]))
+                .into_iter()
                 .collect()
         };
 
@@ -463,7 +442,7 @@ mod tests {
 
     use slotmap::SlotMap;
 
-    use crate::{engine::func::bitsize_from_u8, middle_end::{MiddleRepr, func::{Orientation, Pin}, wire::range_map::assert_range_map}};
+    use crate::middle_end::wire::range_map::assert_range_map;
 
     use super::*;
     
@@ -574,12 +553,14 @@ mod tests {
         assert_range_map(&ws.ranges, edges);
 
         // Join ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(w(n01, n11), &mut keygen) else {
+        let Some(AddWireResult::Join(ffpt, keys)) = ws.add_wire(w(n01, n11), &mut keygen) else {
             panic!("Expected join")
         };
+        let &main_key = keys.first().expect("keys list should've had at least 1 key");
+
         assert!(ffpt == n01 || ffpt == n11);
-        assert!(src_key == k0 || src_key == k1);
-        assert!(dst_key.contains(&k0) && dst_key.contains(&k1));
+        assert!(main_key == k0 || main_key == k1);
+        assert!(keys.contains(&k0) && keys.contains(&k1));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
@@ -961,75 +942,4 @@ mod tests {
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
-    #[test]
-fn wire_merge_issue_with_differing_keys() {
-
-    //When mergeing to Value Nodes, the 
-    let mut repr = MiddleRepr::new();
-    let circuit_key = repr.add_circuit("debug");
-    let bitsize = bitsize_from_u8(1).unwrap();
-    let mut circuit = repr.circuit(circuit_key);
-
-    let left = circuit
-        .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, (10, 10))
-        .unwrap();
-
-    let right = circuit
-        .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, (20, 10))
-        .unwrap();
-
-    circuit.add_wire(Wire::new(10, 10, 10, true).unwrap()).unwrap();
-    circuit.propagate();
-
-    for key in [left, right] {
-        let ComponentKey::Function(gate) = key else {
-            panic!("expected function component");
-        };
-
-        let value_key = circuit
-            .get_wire_set()
-            .find_key((ComponentKey::Function(gate), 0))
-            .unwrap();
-
-        let _ = circuit.get_circuit_state().get_issues(value_key);
-    }
-
-    let _ = circuit.get_wire_states();
-}
-#[test]
-fn non_joint_coord_being_used_as_meshkey_for_floodfill() {
-    let mut repr = MiddleRepr::new();
-    let circuit_key = repr.add_circuit("debug");
-    let bitsize = bitsize_from_u8(1).unwrap();
-    let mut circuit = repr.circuit(circuit_key);
-
-    let left = circuit
-        .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, (10, 10))
-        .unwrap();
-
-    let right = circuit
-        .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, (30, 10))
-        .unwrap();
-
-    circuit.add_wire(Wire::new(10, 10, 5, true).unwrap()).unwrap();
-    circuit.add_wire(Wire::new(25, 10, 5, true).unwrap()).unwrap();
-    circuit.add_wire(Wire::new(15, 10, 10, true).unwrap()).unwrap();
-
-    circuit.propagate();
-
-    for key in [left, right] {
-        let ComponentKey::Function(gate) = key else {
-            panic!("expected function component");
-        };
-
-        let value_key = circuit
-            .get_wire_set()
-            .find_key((ComponentKey::Function(gate), 0))
-            .unwrap();
-
-        let _ = circuit.get_circuit_state().get_issues(value_key);
-    }
-
-    let _ = circuit.get_wire_states();
-}
 }
