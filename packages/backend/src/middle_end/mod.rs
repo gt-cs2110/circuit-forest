@@ -127,8 +127,8 @@ impl MiddleRepr {
 /// because this is returning a place rather than a value.
 macro_rules! circ {
     ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.engine.graph($self.key) };
-    ($self:ident.state)    => { $self.repr.engine.top_level_state($self.key) };
+    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
+    ($self:ident.state)    => { $self.repr.engine.states[$self.key] };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
@@ -309,7 +309,7 @@ impl MiddleCircuit<'_> {
         &circ!(self.physical).wires
     }
     pub fn get_circuit_state(&self)->&CircuitState{
-        circ!(self.state)
+        &circ!(self.state)
     }
       /// get the component properties for a given component key, returns an error if the component does not exist
     pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {

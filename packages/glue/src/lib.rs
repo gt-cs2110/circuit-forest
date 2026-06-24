@@ -1,4 +1,3 @@
-use std::num::NonZero;
 use std::str::FromStr;
 use std::sync::{LazyLock, Mutex};
 
@@ -125,7 +124,9 @@ pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
   let x = std::cmp::min(wire.endpoints[0].x, wire.endpoints[1].x);
   let y= std::cmp::min(wire.endpoints[0].y, wire.endpoints[1].y); 
   // circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizantal}).map_err(|op| napi::Error::from_reason(op.to_string()))
-  let res =  circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizontal});
+  let res =  circuit.add_wire(
+    Wire::new(x, y, wire.length, wire.isHorizontal).unwrap()
+  );
   if res.is_err(){
     return res.map_err(|op| op.to_string()).err().unwrap();
   }
