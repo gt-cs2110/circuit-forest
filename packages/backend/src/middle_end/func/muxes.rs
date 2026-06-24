@@ -14,8 +14,13 @@ pub struct Mux {
 }
 impl Mux {
     /// Creates a new instance of the mux with specified bitsize and selector size.
-    pub fn new(bitsize: BitSize, selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
-        Self { bitsize, selsize, orientation, handedness }
+    pub fn new(bitsize: u8, selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
     }
 }
 impl PhysicalComponent for Mux {
@@ -56,8 +61,13 @@ pub struct Demux {
 }
 impl Demux {
     /// Creates a new instance of the demux with specified bitsize and selector size.
-    pub fn new(bitsize: BitSize, selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
-        Self { bitsize, selsize, orientation, handedness}
+    pub fn new(bitsize: u8, selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
     }
 }
 impl PhysicalComponent for Demux {
@@ -94,8 +104,12 @@ pub struct Decoder {
 }
 impl Decoder {
     /// Creates a new instance of the decoder with specified selector size.
-    pub fn new(selsize: SelSize, orientation:Orientation, handedness: Handedness) -> Self {
-        Self { selsize, orientation, handedness }
+    pub fn new(selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
     }
 }
 impl PhysicalComponent for Decoder {

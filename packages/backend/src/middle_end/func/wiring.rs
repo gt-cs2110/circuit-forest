@@ -13,8 +13,12 @@ pub struct Pin {
 }
 impl Pin{
     /// Creates a new instance of the pin with specified bitsize and whether it's an input or output.
-    pub fn new(bitsize: BitSize, is_input: bool, orientation:Orientation) -> Self {
-        Self { bitsize, is_input, orientation }
+    pub fn new(bitsize: u8, is_input: bool, orientation: Orientation) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            is_input,
+            orientation
+        }
     }
 }
 impl PhysicalComponent for Pin {
@@ -47,7 +51,7 @@ pub struct Constant {
 }
 impl Constant {
     /// Creates a new instance of the constant with specified value.
-    pub fn new(value: BitArray, orientation:Orientation) -> Self {
+    pub fn new(value: BitArray, orientation: Orientation) -> Self {
         Self { value, orientation }
     }
 }
@@ -74,15 +78,9 @@ impl PhysicalComponent for Constant {
 }
 
 /// Power (essentially a constant 1).
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Power;
-impl Power {
-    /// Creates a new instance of power.
-    pub fn new() -> Self {
-        Self
-    }
-}
 impl PhysicalComponent for Power {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![1]).into())
@@ -98,15 +96,9 @@ impl PhysicalComponent for Power {
 }
 
 /// Ground (essentially a constant 0).
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ground;
-impl Ground {
-    /// Creates a new instance of ground.
-    pub fn new() -> Self {
-        Self
-    }
-}
 impl PhysicalComponent for Ground {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(bitarr![0]).into())
@@ -131,8 +123,12 @@ pub struct Splitter {
 }
 impl Splitter {
     /// Creates a new instance of the splitter with specified bitsize.
-    pub fn new(bitsize: BitSize, orientation:Orientation, handedness:Handedness) -> Self {
-        Self { bitsize, orientation, handedness }
+    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation,
+            handedness
+        }
     }
 }
 impl PhysicalComponent for Splitter {
@@ -160,9 +156,10 @@ impl PhysicalComponent for Splitter {
 pub struct Tunnel {
     orientation: Orientation
 }
-impl Tunnel{
-    pub fn new(orientation:Orientation)->Self{
-        Self{orientation:orientation}
+impl Tunnel {
+    /// Creates a new instance of a tunnel with the specified orientation.
+    pub fn new(orientation: Orientation) -> Self {
+        Self{ orientation }
     }
 }
 impl PhysicalComponent for Tunnel {
@@ -188,8 +185,8 @@ pub struct Probe {
 }
 impl Probe{
     /// Creates a new instance of the probe with specified orientation.
-    pub fn new( orientation:Orientation)->Self{
-        Self{orientation:orientation}
+    pub fn new(orientation: Orientation) -> Self {
+        Self{ orientation }
     }
 }
 impl PhysicalComponent for Probe {

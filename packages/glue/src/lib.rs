@@ -1,8 +1,6 @@
-#![deny(clippy::all)]
-
 use std::{num::NonZero, str::FromStr, sync::{LazyLock, Mutex}};
 
-use circuitsim_engine::{bitarray::BitArray, engine::{ FunctionKey, func::{bitsize_from_u8, gateinputs_from_u8, selsize_from_u8}}, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}, wire::Wire}};
+use circuitsim_engine::{bitarray::BitArray, engine::FunctionKey, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}, wire::Wire}};
 use circuitsim_engine::engine::func::{GateKind};
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -38,8 +36,8 @@ pub fn create_circuit(name:String)-> Result<BigInt, napi::Error> {
 #[napi]
 pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error>{
    let mut rep = REPR.lock().unwrap();
-   let bitsize = bitsize_from_u8(args.bitsize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Invalid bit size"))?;
-   let selsize = selsize_from_u8(args.selsize.unwrap_or(1)).ok_or_else(|| napi::Error::from_reason("Missing sel size for Mux"))?;
+   let bitsize = args.bitsize.unwrap_or(1);
+   let selsize = args.selsize.unwrap_or(1);
 let orient:Orientation = match args.orientation.unwrap_or(2) {
     0 => Orientation::North,
     1 => Orientation::South,
@@ -60,19 +58,19 @@ let orient:Orientation = match args.orientation.unwrap_or(2) {
     _ => return Err(napi::Error::from_reason("Invalid handedness value")),
    };
    let bitArray = BitArray::from_str(args.constantValue.unwrap_or("0".to_string()).as_str()).map_err(|_| napi::Error::from_reason("Invalid Constant Value"))?;
-   let inputs = gateinputs_from_u8(args.inputs.unwrap_or(2)).ok_or_else(|| napi::Error::from_reason("Invalid gate inputs"))?;
+   let inputs = args.inputs.unwrap_or(2);
   let component:PhysicalComponentEnum = match args.componentType.as_str() {
     "PIN" => Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
     "CONSTANT" => Constant::new(bitArray, orient).into(),
     "SPLITTER" => Splitter::new(bitsize, orient, handedness).into(),
-    "POWER" => Power::new().into(),
-    "GROUND" => Ground::new().into(),
+    "POWER" => Power.into(),
+    "GROUND" => Ground.into(),
     "TUNNEL" => Tunnel::new(orient).into(),
     "PROBE" => Probe::new( orient).into(),
     "MUX" => Mux::new(bitsize, selsize, orient, handedness).into(),
     "DEMUX" => Demux::new(bitsize, selsize, orient, handedness).into(),
     "DECODER" => Decoder::new(selsize,orient, handedness).into(),
-    "TEXT" => Text::new().into(),
+    "TEXT" => Text.into(),
     "SUBCIRCUIT" => Subcircuit::new(bigint_to_key(&args.circuitKey).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?).into(),
     "NOT" => Not::new(bitsize,orient).into(),
     "BUFFER" => TriState::new(bitsize,orient, handedness).into(),

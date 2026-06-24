@@ -62,15 +62,9 @@ mod subcircuit_serde {
 }
 
 /// Text.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text;
-impl Text {
-    /// Creates a new instance of text.
-    pub fn new() -> Self {
-        Self
-    }
-}
 impl PhysicalComponent for Text {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         None

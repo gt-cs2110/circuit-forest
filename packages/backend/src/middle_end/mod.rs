@@ -332,7 +332,6 @@ impl MiddleCircuit<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::func::BitSize;
     use crate::middle_end::func::Pin;
 
     use super::*;
@@ -341,17 +340,16 @@ mod tests {
     fn middle_repr_connect_wire() {
         let mut repr = MiddleRepr::new();
         let circuit_key = repr.add_circuit("Debug");
-        let bitsize = BitSize::new(1).unwrap();
         let mut circuit = repr.circuit(circuit_key);
 
         let [p, q] = [(10, 10), (20, 10)];
 
         let left = circuit
-            .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, p)
+            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
             .unwrap();
 
         let right = circuit
-            .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, q)
+            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
             .unwrap();
 
         let w = Wire::from_endpoints(p, q).unwrap();
@@ -373,16 +371,15 @@ mod tests {
     fn middle_repr_connect_wire_not_endpoint() {
         let mut repr = MiddleRepr::new();
         let circuit_key = repr.add_circuit("Debug");
-        let bitsize = BitSize::new(1).unwrap();
         let mut circuit = repr.circuit(circuit_key);
 
         let [p, m1, m2, q] = [(10, 10), (15, 10), (25, 10), (30, 10)];
         let left = circuit
-            .add_component(Pin::new(bitsize, true, Orientation::East), "", Orientation::East, p)
+            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
             .unwrap();
 
         let right = circuit
-            .add_component(Pin::new(bitsize, false, Orientation::East), "", Orientation::East, q)
+            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
             .unwrap();
 
         circuit.add_wire(Wire::from_endpoints(p, m1).unwrap()).unwrap();

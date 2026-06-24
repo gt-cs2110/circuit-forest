@@ -156,10 +156,6 @@ impl Component for Decoder {
             .collect()
     }
 }
-/// Public Helper function to convert a u8 to a selsize
-pub fn selsize_from_u8(selsize: u8) -> Option<SelSize> {
-    SelSize::new(selsize)
-}
 
 #[cfg(test)]
 mod tests {
