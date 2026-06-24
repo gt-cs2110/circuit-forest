@@ -33,6 +33,6 @@ console.log(props.component)
 
                 text-anchor="middle"
                 dominant-baseline="middle"
-                class="pointer-events-none fill-black text-xs"
+                class="pointer-events-none select-none fill-black text-xs"
             >{{ component?component.componentValue:"" }}</text>
 </template>

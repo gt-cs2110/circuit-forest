@@ -1,5 +1,6 @@
 import { updateComponent } from "@/lib/store/circuit";
-import type { Location, Subcircuit } from "@/lib/types";
+import type { Subcircuit } from "@/lib/types";
+import { Location } from "circuitsim-glue";
 import { ComputedRef, Reactive, reactive } from "vue";
 
 export function useDrag(subcircuit: Reactive<Subcircuit>, selection: ComputedRef<Set<number>>) {

@@ -35,6 +35,7 @@ const emit = defineEmits<{
             stroke-width="6"
             stroke-linecap="round"
             @mousedown=" (e)=>emit('wiredrag', e)"
+            
         />
 
 

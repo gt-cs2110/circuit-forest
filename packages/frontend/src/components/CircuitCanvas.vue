@@ -5,7 +5,6 @@ import { addWire, deleteComponent, placeComponent, updateState } from "@/lib/sto
 import { clearSelection, getViewState, placingComponent, selection } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
 import { Subcircuit } from "@/lib/types";
-import { Location } from "circuitsim-glue";
 import { componentMap } from "./circuitry";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";

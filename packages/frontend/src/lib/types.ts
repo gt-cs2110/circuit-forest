@@ -1,4 +1,4 @@
-import { TransientComponentState, TransientWireState } from "circuitsim-glue";
+import { TransientComponentState, TransientWireState, Location } from "circuitsim-glue";
 import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
@@ -32,7 +32,7 @@ export const  Handedness = {
 export type Port = Location & {
     label?: string;
     value?: string;
-    issues: string[];
+    issues?: string[];
 };
 
 export type ComponentMetadata = {

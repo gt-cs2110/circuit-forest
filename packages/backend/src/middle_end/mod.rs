@@ -305,7 +305,6 @@ impl MiddleCircuit<'_> {
     pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
        return circ!(self.physical).wires.wires().map(|wire| {
         let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
-        println!("getwirestate");
         return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
             match issue{
                 ShortCircuit =>"ShortCircuit".to_string(),

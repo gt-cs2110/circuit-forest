@@ -73,7 +73,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         frontendId:frontendId,
         type: type,
         label: "",
-        bitsize: 2,
+        bitsize: 1,
         inputs:2,
         ports:[],
         bounds:[],
@@ -102,6 +102,7 @@ export function addWire(start:Location, end:Location, length:number, isHorizonta
     console.log("adding")
     console.log([start, end, length, isHorizontal])
     console.log(window.api.core.addWire(BigInt(currentSubcircuit.value.backendKey), {endpoints:[start, end], isHorizontal,length, value:"", issues:[]  }))
+    updateState();
 }
 export function newSubcircuit(name?:string) {
     const frontendId = generateFrontendId();
@@ -120,6 +121,7 @@ export function deleteSubcircuit(frontendId: number) {
     //TODO REMOVE on backend. TBH removing circuits is only an issue if you are using subcircuits, but honestly that could be checked and prevented in frontend
     circuits.delete(frontendId);
     deleteViewState(frontendId);
+    updateState();
 }
 
 export function updateState() {
@@ -133,6 +135,7 @@ export function updateState() {
         }
     })
     currentSubcircuit.value.wires=transientWireState
+
     console.log(currentSubcircuit.value)
     console.log("backend updates" )
     console.log(transientComponentStates)
