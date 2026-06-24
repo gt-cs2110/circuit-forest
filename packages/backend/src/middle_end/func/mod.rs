@@ -30,9 +30,9 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
     match orientation {
         // To transform east to north, we rotate 90 deg CCW,
         // which transforms (x, y) to (-y, x)
-        Orientation::North => (y,  -x),
+        Orientation::North => ( y, -x),
         Orientation::East  => ( x,  y),
-        Orientation::South => ( -y, x),
+        Orientation::South => (-y,  x),
         Orientation::West  => (-x, -y)
     }
 }
@@ -156,7 +156,7 @@ impl RelativeComponentBounds {
             // If two bits, use a 2 x 2 tile
             ..=2 => Self::single_port(2, height),
             // If 2-8 bits, use a n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port( w, height),
+            w @ ..=MAX_COLS => Self::single_port(w, height),
             // If 9+ bits, use a 16 x h tile
             _ => Self::single_port( MAX_COLS, height)
         }

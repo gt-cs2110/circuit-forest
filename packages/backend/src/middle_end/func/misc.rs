@@ -10,7 +10,7 @@ pub struct Subcircuit {
 impl Subcircuit {
     /// Creates a new instance of the subcircuit with specified circuit key.
     pub fn new(key: CircuitKey) -> Self {
-        Self { key}
+        Self { key }
     }
 }
 impl PhysicalComponent for Subcircuit {

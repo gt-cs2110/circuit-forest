@@ -150,7 +150,7 @@ impl PhysicalComponent for Splitter {
     }
 }
 
-/// A tunnel. TO DO names for linking tunnels
+/// A tunnel. TODO names for linking tunnels
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tunnel {
@@ -159,7 +159,7 @@ pub struct Tunnel {
 impl Tunnel {
     /// Creates a new instance of a tunnel with the specified orientation.
     pub fn new(orientation: Orientation) -> Self {
-        Self{ orientation }
+        Self { orientation }
     }
 }
 impl PhysicalComponent for Tunnel {
@@ -183,10 +183,10 @@ impl PhysicalComponent for Tunnel {
 pub struct Probe {
     orientation: Orientation
 }
-impl Probe{
+impl Probe {
     /// Creates a new instance of the probe with specified orientation.
     pub fn new(orientation: Orientation) -> Self {
-        Self{ orientation }
+        Self { orientation }
     }
 }
 impl PhysicalComponent for Probe {
