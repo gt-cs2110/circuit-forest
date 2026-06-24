@@ -5,15 +5,13 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
-use serde::de::value;
 use slotmap::{SecondaryMap, SlotMap};
 use thiserror::Error;
 
 use crate::bitarray::{BitArray};
-use crate::engine::graph::ValueNode;
 use crate::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
-use crate::engine::state::{FunctionState, ValueState};
-use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort, ValueKey};
+use crate::engine::state::FunctionState;
+use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{MeshKey, Wire, WireSet};
@@ -288,7 +286,7 @@ impl MiddleCircuit<'_> {
     }
 
     /// Get the states of all components in the circuit.
-    pub fn get_component_states<'a>(&'a self) -> Vec<(FunctionKey, &'a FunctionState)> {
+    pub fn get_component_states(&self) -> Vec<(FunctionKey, &FunctionState)> {
         circ!(self.state)
             .functions
             .iter()
@@ -311,7 +309,7 @@ impl MiddleCircuit<'_> {
         &circ!(self.physical).wires
     }
     pub fn get_circuit_state(&self)->&CircuitState{
-        &circ!(self.state)
+        circ!(self.state)
     }
       /// get the component properties for a given component key, returns an error if the component does not exist
     pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {

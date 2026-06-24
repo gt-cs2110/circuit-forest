@@ -54,13 +54,13 @@ impl Constant {
     pub fn new(value: BitArray, orientation: Orientation) -> Self {
         Self { value, orientation }
     }
-}
-impl Constant
-{
-    pub fn getValue(&self) -> BitArray {
+
+    /// Gets the value associated with this constant.
+    pub fn get_value(&self) -> BitArray {
         self.value
     }
 }
+
 impl PhysicalComponent for Constant {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(self.value).into())

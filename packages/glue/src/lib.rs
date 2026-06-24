@@ -1,11 +1,17 @@
-use std::{num::NonZero, str::FromStr, sync::{LazyLock, Mutex}};
+use std::num::NonZero;
+use std::str::FromStr;
+use std::sync::{LazyLock, Mutex};
 
-use circuitsim_engine::{bitarray::BitArray, engine::FunctionKey, middle_end::{ComponentKey, MiddleRepr, UIKey, func::{ Constant, Decoder, Demux, Gate, Ground, Handedness, Mux, Not, Orientation, PhysicalComponentEnum, Pin, Power, Probe, Splitter, Subcircuit, Text, TriState, Tunnel}, wire::Wire}};
-use circuitsim_engine::engine::func::{GateKind};
+use circuitsim_engine::bitarray::BitArray;
+use circuitsim_engine::engine::FunctionKey;
+use circuitsim_engine::engine::func::GateKind;
+use circuitsim_engine::engine::state::ValueIssue;
+use circuitsim_engine::middle_end::wire::Wire;
+use circuitsim_engine::middle_end::{ComponentKey, MiddleRepr, UIKey};
+use circuitsim_engine::middle_end::func::{Handedness, Orientation, PhysicalComponentEnum, self};
+use napi::bindgen_prelude::BigInt;
 use napi_derive::napi;
 use slotmap::KeyData;
-use napi::bindgen_prelude::BigInt;
-use circuitsim_engine::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
 
 static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
 
@@ -17,21 +23,6 @@ pub fn create_circuit(name:String)-> Result<BigInt, napi::Error> {
   let key = repr.add_circuit(&name);
   Ok(key_to_bigint(key))
 }
-
-/**
- * Pin, Constant, Splitter, Power, Ground, Tunnel, Probe,
-    // Muxes
-    Mux, Demux, Decoder,
-    // Misc
-    Text, Subcircuit,
-    //Gates
-    Gate, Not, TriState,
- */
-
-
- /**
-  * constant_value, is input for pin, selsize, text content, 
-  */
 
 #[napi]
 pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error>{
@@ -60,26 +51,26 @@ let orient:Orientation = match args.orientation.unwrap_or(2) {
    let bitArray = BitArray::from_str(args.constantValue.unwrap_or("0".to_string()).as_str()).map_err(|_| napi::Error::from_reason("Invalid Constant Value"))?;
    let inputs = args.inputs.unwrap_or(2);
   let component:PhysicalComponentEnum = match args.componentType.as_str() {
-    "PIN" => Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
-    "CONSTANT" => Constant::new(bitArray, orient).into(),
-    "SPLITTER" => Splitter::new(bitsize, orient, handedness).into(),
-    "POWER" => Power.into(),
-    "GROUND" => Ground.into(),
-    "TUNNEL" => Tunnel::new(orient).into(),
-    "PROBE" => Probe::new( orient).into(),
-    "MUX" => Mux::new(bitsize, selsize, orient, handedness).into(),
-    "DEMUX" => Demux::new(bitsize, selsize, orient, handedness).into(),
-    "DECODER" => Decoder::new(selsize,orient, handedness).into(),
-    "TEXT" => Text.into(),
-    "SUBCIRCUIT" => Subcircuit::new(bigint_to_key(&args.circuitKey).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?).into(),
-    "NOT" => Not::new(bitsize,orient).into(),
-    "BUFFER" => TriState::new(bitsize,orient, handedness).into(),
-    "AND" => Gate::new(GateKind::And, bitsize, inputs, orient).into(),
-    "OR" => Gate::new(GateKind::Or, bitsize, inputs, orient).into(),
-    "NAND" => Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
-    "NOR" => Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
-    "XOR" => Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
-    "XNOR" => Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
+    "PIN" => func::Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
+    "CONSTANT" => func::Constant::new(bitArray, orient).into(),
+    "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
+    "POWER" => func::Power.into(),
+    "GROUND" => func::Ground.into(),
+    "TUNNEL" => func::Tunnel::new(orient).into(),
+    "PROBE" => func::Probe::new( orient).into(),
+    "MUX" => func::Mux::new(bitsize, selsize, orient, handedness).into(),
+    "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
+    "DECODER" => func::Decoder::new(selsize,orient, handedness).into(),
+    "TEXT" => func::Text.into(),
+    "SUBCIRCUIT" => func::Subcircuit::new(bigint_to_key(&args.circuitKey).ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?).into(),
+    "NOT" => func::Not::new(bitsize,orient).into(),
+    "BUFFER" => func::TriState::new(bitsize,orient, handedness).into(),
+    "AND" => func::Gate::new(GateKind::And, bitsize, inputs, orient).into(),
+    "OR" => func::Gate::new(GateKind::Or, bitsize, inputs, orient).into(),
+    "NAND" => func::Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
+    "NOR" => func::Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
+    "XOR" => func::Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
+    "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
     _ => return Err(napi::Error::from_reason("Unknown gate type")),
    };
   
@@ -164,9 +155,9 @@ pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
         let valueKey: circuitsim_engine::engine::ValueKey = circuit.get_wire_set().find_key((ComponentKey::Function(key), i)).unwrap();
         let issues  = circuit.get_circuit_state().get_issues(valueKey).iter().map(|issue| {
             match issue{
-                ShortCircuit =>"ShortCircuit".to_string(),
-                OscillationDetected => "OscillationDetected".to_string(),
-                MismatchedBitsizes => "MismatchedBitsize".to_string()
+                ValueIssue::ShortCircuit =>"ShortCircuit".to_string(),
+                ValueIssue::OscillationDetected => "OscillationDetected".to_string(),
+                ValueIssue::MismatchedBitsizes => "MismatchedBitsize".to_string()
             }
         }).collect();
         PortTransientState { x, y,  value, issues }
@@ -174,7 +165,7 @@ pub fn add_wire(cricuit_key: BigInt, wire:TransientWireState)->String{
       //check to see if component is a probe or constant to get value for component value field
       let component_value = match component.inner {
         PhysicalComponentEnum::Probe(probe) => Some("0".to_string()), // Need to figure out how to get the actual value of the probe
-        PhysicalComponentEnum::Constant(constant) => Some(constant.getValue().to_string()),
+        PhysicalComponentEnum::Constant(constant) => Some(constant.get_value().to_string()),
         _ => None,
       };
       component_states.push(TransientComponentState { backendKey: big_int.get_i128().0.to_string(), ports, bounds: vec![ Location{x:component.bounds[0].0, y: component.bounds[0].1 }, Location{x:component.bounds[1].0, y: component.bounds[1].1 } ], componentValue: component_value });
