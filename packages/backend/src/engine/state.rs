@@ -16,7 +16,7 @@ use crate::engine::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, Valu
 use crate::engine::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
 /// Issues which can occur to a value node.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, strum::Display)]
 pub enum ValueIssue {
     /// Represents a collision of bit values (short circuit).
     ShortCircuit,

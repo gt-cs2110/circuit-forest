@@ -5,15 +5,12 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
-use serde::de::value;
 use slotmap::{SecondaryMap, SlotMap};
 use thiserror::Error;
 
 use crate::bitarray::{BitArray};
-use crate::engine::graph::ValueNode;
-use crate::engine::state::ValueIssue::{MismatchedBitsizes, OscillationDetected, ShortCircuit};
-use crate::engine::state::{FunctionState, ValueState};
-use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort, ValueKey};
+use crate::engine::state::{FunctionState, ValueIssue};
+use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort};
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{MeshKey, Wire, WireSet};
@@ -129,8 +126,8 @@ impl MiddleRepr {
 /// because this is returning a place rather than a value.
 macro_rules! circ {
     ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.engine.graph($self.key) };
-    ($self:ident.state)    => { $self.repr.engine.top_level_state($self.key) };
+    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
+    ($self:ident.state)    => { $self.repr.engine.states[$self.key] };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
 impl MiddleCircuit<'_> {
@@ -229,14 +226,7 @@ impl MiddleCircuit<'_> {
             .ok_or(ReprEditErr::CannotAddWire)?;
         match result {
             wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, k1, mut keys) => {
-                //we call floodfill using k1 the valueKey that has been selected to become the valueKey
-                //but when we call .join on the keys vector it takes the first key in the keys array to be used. But keys[0]isnt necessarliy k1, so we have to ensure we are using the same vauekey to flodfill that we are updating the abckend with
-                keys.sort_by_key(|&k|k!=k1);
-                //The print statment show how without the patch the keys are different
-                // println!("JOINING");
-                // println!("join k1/post_fill_key: {:?}", k1);
-                // println!("join keys: {:?}", keys);
+            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
                 circ!(self.engine).join(&keys);
                 circ!(self.physical).wires.flood_fill(c, k1);
             },
@@ -295,29 +285,27 @@ impl MiddleCircuit<'_> {
     }
 
     /// Get the states of all components in the circuit.
-    pub fn get_component_states<'a>(&'a self) -> Vec<(FunctionKey, &'a FunctionState)> {
+    pub fn get_component_states(&self) -> Vec<(FunctionKey, &FunctionState)> {
         circ!(self.state)
             .functions
             .iter()
             .collect() 
     } 
 
-    pub fn get_wire_states(&self)->Vec<(Wire, BitArray, Vec<String>)>{
-       return circ!(self.physical).wires.wires().map(|wire| {
-        let valueKey = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
-        return (wire, circ!(self.state).get_node_value(valueKey), circ!(self.state).get_issues(valueKey).iter().map(|issue| {
-            match issue{
-                ShortCircuit =>"ShortCircuit".to_string(),
-                OscillationDetected => "OscillationDetected".to_string(),
-                MismatchedBitsizes => "MismatchedBitsize".to_string()
-            }
-        }).collect())
-    }).collect();
+    pub fn get_wire_states(&self) -> Vec<(Wire, BitArray, Vec<ValueIssue>)> {
+        circ!(self.physical).wires.wires().map(|wire| {
+            let value_key = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
+            let bit_value = circ!(self.state).get_node_value(value_key);
+            let issues = circ!(self.state).get_issues(value_key).iter().copied().collect();
+
+            (wire, bit_value, issues)
+        }).collect()
     }
-     pub fn get_wire_set(&self)->&WireSet{
+
+    pub fn get_wire_set(&self) -> &WireSet {
         &circ!(self.physical).wires
     }
-    pub fn get_circuit_state(&self)->&CircuitState{
+    pub fn get_circuit_state(&self) -> &CircuitState {
         &circ!(self.state)
     }
       /// get the component properties for a given component key, returns an error if the component does not exist
@@ -335,7 +323,74 @@ impl MiddleCircuit<'_> {
             ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
         }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use crate::middle_end::func::Pin;
 
+    use super::*;
+
+    #[test]
+    fn middle_repr_connect_wire() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        let [p, q] = [(10, 10), (20, 10)];
+
+        let left = circuit
+            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
+            .unwrap();
+
+        let right = circuit
+            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
+            .unwrap();
+
+        let w = Wire::from_endpoints(p, q).unwrap();
+        circuit.add_wire(w).unwrap();
+
+        let [lk, rk] = [left, right].map(|key| {
+            let ComponentKey::Function(gate) = key else {
+                panic!("expected function component");
+            };
     
+            circuit.get_wire_set()
+                .find_key((ComponentKey::Function(gate), 0))
+                .unwrap()
+        });
+
+        assert_eq!(lk, rk);
+    }
+    #[test]
+    fn middle_repr_connect_wire_not_endpoint() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        let [p, m1, m2, q] = [(10, 10), (15, 10), (25, 10), (30, 10)];
+        let left = circuit
+            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
+            .unwrap();
+
+        let right = circuit
+            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
+            .unwrap();
+
+        circuit.add_wire(Wire::from_endpoints(p, m1).unwrap()).unwrap();
+        circuit.add_wire(Wire::from_endpoints(m2, q).unwrap()).unwrap();
+        circuit.add_wire(Wire::from_endpoints(m1, m2).unwrap()).unwrap();
+
+        let [lk, rk] = [left, right].map(|key| {
+            let ComponentKey::Function(gate) = key else {
+                panic!("expected function component");
+            };
+    
+            circuit.get_wire_set()
+                .find_key((ComponentKey::Function(gate), 0))
+                .unwrap()
+        });
+
+        assert_eq!(lk, rk);
+    }
 }

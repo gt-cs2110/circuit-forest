@@ -14,8 +14,13 @@ pub struct Gate {
 }
 impl Gate {
     /// Creates a new instance of the gate with specified kind, bitsize, and input count.
-    pub fn new(kind: GateKind, bitsize: BitSize, inputs: GateInputs,orientation: Orientation) -> Self {
-        Self { kind, bitsize: bitsize, n_inputs: inputs, orientation: orientation }
+    pub fn new(kind: GateKind, bitsize: u8, n_inputs: u8, orientation: Orientation) -> Self {
+        Self {
+            kind,
+            bitsize: BitSize::new_clamped(bitsize),
+            n_inputs: GateInputs::new_clamped(n_inputs),
+            orientation
+        }
     }
 }
 impl PhysicalComponent for Gate {
@@ -53,8 +58,11 @@ pub struct Not {
 }
 impl Not {
     /// Creates a new instance of the NOT gate with specified bitsize.
-    pub fn new(bitsize: BitSize, orientation:Orientation) -> Self {
-        Self { bitsize, orientation }
+    pub fn new(bitsize: u8, orientation: Orientation) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation
+        }
     }
 }
 
@@ -85,8 +93,12 @@ pub struct TriState {
 }
 impl TriState {
     /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(bitsize: BitSize, orientation:Orientation, handedness:Handedness) -> Self {
-        Self { bitsize, orientation, handedness }
+    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation,
+            handedness
+        }
     }
 }
 
@@ -101,12 +113,8 @@ impl PhysicalComponent for TriState {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (2, 1);
-        // AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
-        //     .into_relative(origin)
-        //     .orient(self.orientation, Default::default())
         AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
         .into_relative(origin)
         .orient(self.orientation, self.handedness)
-            
     }
 }

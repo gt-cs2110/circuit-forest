@@ -30,12 +30,17 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
     match orientation {
         // To transform east to north, we rotate 90 deg CCW,
         // which transforms (x, y) to (-y, x)
-        Orientation::North => (y,  -x),
+        Orientation::North => ( y, -x),
         Orientation::East  => ( x,  y),
-        Orientation::South => ( -y, x),
+        Orientation::South => (-y,  x),
         Orientation::West  => (-x, -y)
     }
 }
+
+/// Cast from number to [`Orientation`] or [`Handedness`] failed.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot convert number to type")]
+pub struct InvalidNum(());
 
 /// Orientation.
 /// 
@@ -45,6 +50,19 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Orientation {
     North, South, #[default] East, West
+}
+impl TryFrom<u8> for Orientation {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Orientation::North),
+            1 => Ok(Orientation::South),
+            2 => Ok(Orientation::East),
+            3 => Ok(Orientation::West),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// The handedness (or mirror orientation).
@@ -73,6 +91,17 @@ pub enum Handedness {
     /// For north-oriented components, the chiral port is pointed eastwards (right).
     #[default]
     DownRight
+}
+impl TryFrom<u8> for Handedness {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Handedness::TopLeft),
+            1 => Ok(Handedness::DownRight),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// Context available during [`PhysicalComponent`] initialization.
@@ -156,7 +185,7 @@ impl RelativeComponentBounds {
             // If two bits, use a 2 x 2 tile
             ..=2 => Self::single_port(2, height),
             // If 2-8 bits, use a n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port( w, height),
+            w @ ..=MAX_COLS => Self::single_port(w, height),
             // If 9+ bits, use a 16 x h tile
             _ => Self::single_port( MAX_COLS, height)
         }
