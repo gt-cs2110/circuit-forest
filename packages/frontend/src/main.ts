@@ -97,9 +97,9 @@ const createMenu = () => {
             submenu: [
                 ...(enableDevTools
                     ? ([
-                          { role: "toggleDevTools" },
-                          { type: "separator" },
-                      ] satisfies Electron.MenuItemConstructorOptions[])
+                        { role: "toggleDevTools" },
+                        { type: "separator" },
+                    ] satisfies Electron.MenuItemConstructorOptions[])
                     : []),
                 { role: "resetZoom" },
                 { role: "zoomIn" },

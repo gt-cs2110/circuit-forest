@@ -29,79 +29,61 @@ function handleMouseDown(e: MouseEvent) {
     }
     emit("dragstart", e);
 }
-function onPortDrag(e: MouseEvent){
+function onPortDrag(e: MouseEvent) {
     emit("wiredrag", e)
 }
 const metadata = computed(() => componentMap[props.component.type]);
 
 
 
-const ports = computed(() =>props.component.ports);
+const ports = computed(() => props.component.ports);
 const rotation = computed(() => {
-  switch (props.component.orientation) {
-    case 0: return 270;//n
-    case 1: return 90;//s
-    case 2: return 0;//e
-    default: return 180;; // w
-  }
+    switch (props.component.orientation) {
+        case 0: return 270;//n
+        case 1: return 90;//s
+        case 2: return 0;//e
+        default: return 180;; // w
+    }
 });
 
 const transform = computed(() => {
-  const ShiftToWorldCoordinates = {x:props.component.x*GRID_SIZE, y:props.component.y*GRID_SIZE};
- 
-  const OriginRelativeToFixedPortRelative = {x:metadata.value.getOriginToFixedPortOffset(props.component).x*GRID_SIZE, y:metadata.value.getOriginToFixedPortOffset(props.component).y*GRID_SIZE};
-  const angle = rotation.value;
+    const ShiftToWorldCoordinates = { x: props.component.x * GRID_SIZE, y: props.component.y * GRID_SIZE };
 
-  //Trnaformations are applied right to left, first we shift so output port to be at 0,0 using the fixed to origin offset
-  //rotate has to be next bc it rotates about world 0,0, so once we have fixed port on world 0,0 it rotates about ixed port
-  //then we shift output port to be at the coordinates x,y
-  return `
+    const OriginRelativeToFixedPortRelative = { x: metadata.value.getOriginToFixedPortOffset(props.component).x * GRID_SIZE, y: metadata.value.getOriginToFixedPortOffset(props.component).y * GRID_SIZE };
+    const angle = rotation.value;
+
+    //Trnaformations are applied right to left, first we shift so output port to be at 0,0 using the fixed to origin offset
+    //rotate has to be next bc it rotates about world 0,0, so once we have fixed port on world 0,0 it rotates about ixed port
+    //then we shift output port to be at the coordinates x,y
+    return `
     translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})
     rotate(${angle})
     translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})
   `;
 });
-computed(()=>console.log(props.component))
+computed(() => console.log(props.component))
 
 </script>
 
 <template>
     ///Translation
-    <g 
-    :transform="transform"
-     @mousedown="handleMouseDown">
-    
-        <!-- <g :transform="rotate"> -->
-            <component :is="metadata.component" :component="props.component" />
-            
-        <!-- </g> -->
-          
-    </g>
-        <rect
-    v-if="isSelected(props.component.frontendId)"
-            :x="props.component.bounds[0].x * GRID_SIZE"
-            :y="props.component.bounds[0].y * GRID_SIZE"
-            :width="metadata.getDimensions(props.component).width * GRID_SIZE"
-            :height="metadata.getDimensions(props.component).height * GRID_SIZE"
-            fill="none"
-            stroke="#3b82f6"
-            stroke-width="2"
-    />
-     <!-- transparent stroke enlarges hitbox -->
-  <circle
-      v-for="(point,index) in ports"
-      :key="`${index}`"
-      :cx="point.x  * GRID_SIZE"
-      :cy="(point.y) * GRID_SIZE"
-      r="2"
-      :fill="point.value.includes('Z')?'rgb(255,0,0)':(point.value.includes('X')?'rgb(0,0,255)':(point.value.includes('1')?'rgb(0,255,0)':'#006400'))"
-      stroke="transparent"
-      stroke-width="4"
-      draggable="true"
-      @mousedown="onPortDrag"
-      
-      class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+    <g :transform="transform" @mousedown="handleMouseDown">
 
-  />
+        <!-- <g :transform="rotate"> -->
+        <component :is="metadata.component" :component="props.component" />
+
+        <!-- </g> -->
+
+    </g>
+    <rect v-if="isSelected(props.component.frontendId)" :x="props.component.bounds[0].x * GRID_SIZE"
+        :y="props.component.bounds[0].y * GRID_SIZE" :width="metadata.getDimensions(props.component).width * GRID_SIZE"
+        :height="metadata.getDimensions(props.component).height * GRID_SIZE" fill="none" stroke="#3b82f6"
+        stroke-width="2" />
+    <!-- transparent stroke enlarges hitbox -->
+    <circle v-for="(point, index) in ports" :key="`${index}`" :cx="point.x * GRID_SIZE" :cy="(point.y) * GRID_SIZE"
+        r="2"
+        :fill="point.value.includes('Z') ? 'rgb(255,0,0)' : (point.value.includes('X') ? 'rgb(0,0,255)' : (point.value.includes('1') ? 'rgb(0,255,0)' : '#006400'))"
+        stroke="transparent" stroke-width="4" draggable="true"
+        class="rounded-full text-orange-500 outline-orange-500 hover:outline-2" @mousedown="onPortDrag" />
 
 </template>

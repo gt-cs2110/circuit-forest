@@ -3,7 +3,7 @@ import { computed, reactive, ref } from "vue";
 import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
-import { Location} from 'circuitsim-glue'
+import { Location } from 'circuitsim-glue'
 
 export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -31,31 +31,32 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     if (!component) return;
     console.log(`Updating component with frontend id ${frontendId}`);
     console.log(updates);
-   
+
     //Apply the changes in the Partial<Circuit Component>
     Object.assign(component, updates);
-    
+
     //To Update the component we delete the old and add a new identical component with the changes applied
 
     //Remove the Old Component with this id
-    window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
+    window.api.core.removeComponent(BigInt(currentSubcircuit.value.backendKey), BigInt(component.backendKey));
 
     //Add New component with changes applied
-    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(component.type).toUpperCase(), bitsize: component.bitsize, inputs: component.inputs, orientation: component.orientation, label: component.label, x: component.x, y: component.y, labelOrientation: component.labelOrientation, handedness:component.handedness, constantValue:component.componentValue, selsize:component.selsize });
-    
+    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(component.type).toUpperCase(), bitsize: component.bitsize, inputs: component.inputs, orientation: component.orientation, label: component.label, x: component.x, y: component.y, labelOrientation: component.labelOrientation, handedness: component.handedness, constantValue: component.componentValue, selsize: component.selsize });
+
     //update backend key
     const state = currentSubcircuit.value.components.get(frontendId);
-    if(state){
+    if (state) {
         state.backendKey = String(backendKey);
     }
-    updateState();}
+    updateState();
+}
 
-export function deleteComponent(frontendId: number){
+export function deleteComponent(frontendId: number) {
     const circuit = circuits.get(currentSubcircuitId.value);
     if (!circuit) return;
     const component = circuit?.components.get(frontendId);
     if (!component) return;
-    window.api.core.removeComponent( BigInt(currentSubcircuit.value.backendKey),BigInt(component.backendKey));
+    window.api.core.removeComponent(BigInt(currentSubcircuit.value.backendKey), BigInt(component.backendKey));
     circuit.components.delete(frontendId);
     updateState();
 }
@@ -68,28 +69,28 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     }
 
     const frontendId = generateFrontendId();
-    const new_component:CircuitComponent = {
+    const new_component: CircuitComponent = {
         backendKey: "",
-        frontendId:frontendId,
+        frontendId: frontendId,
         type: type,
         label: "",
         bitsize: 1,
-        inputs:2,
-        ports:[],
-        bounds:[],
-        orientation:Orientation["EAST"],
-        handedness:type=="buffer"?Handedness["TOPLEFT"]:Handedness["N/A"],
-        labelOrientation:Orientation["EAST"],
-        x:x,
-        y:y, 
-        selsize:1, 
-        isInput:false,
-        textContent:"",
-        constantValue:"0"
-        
+        inputs: 2,
+        ports: [],
+        bounds: [],
+        orientation: Orientation["EAST"],
+        handedness: type == "buffer" ? Handedness["TOPLEFT"] : Handedness["N/A"],
+        labelOrientation: Orientation["EAST"],
+        x: x,
+        y: y,
+        selsize: 1,
+        isInput: false,
+        textContent: "",
+        constantValue: "0"
+
 
     }
-    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType:String(type).toUpperCase(),  x: new_component.x, y: new_component.y });
+    const backendKey = window.api.core.addComponent({ circuitKey: BigInt(currentSubcircuit.value.backendKey), componentType: String(type).toUpperCase(), x: new_component.x, y: new_component.y });
     new_component.backendKey = String(backendKey);
 
     currentSubcircuit.value.components.set(frontendId, new_component);
@@ -98,13 +99,13 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     placingComponent.value = null;
 }
-export function addWire(start:Location, end:Location, length:number, isHorizontal:boolean){
+export function addWire(start: Location, end: Location, length: number, isHorizontal: boolean) {
     console.log("adding")
     console.log([start, end, length, isHorizontal])
-    console.log(window.api.core.addWire(BigInt(currentSubcircuit.value.backendKey), {endpoints:[start, end], isHorizontal,length, value:"", issues:[]  }))
+    console.log(window.api.core.addWire(BigInt(currentSubcircuit.value.backendKey), { endpoints: [start, end], isHorizontal, length, value: "", issues: [] }))
     updateState();
 }
-export function newSubcircuit(name?:string) {
+export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
     const backendKey = String(window.api.core.createCircuit(name ?? ("Circuit" + circuits.size)));
     circuits.set(frontendId, {
@@ -128,20 +129,20 @@ export function updateState() {
     //call glue functions to propagate changes to backend and update frontend state based on backend state
     window.api.core.propagate(BigInt(currentSubcircuit.value.backendKey));
     const [transientComponentStates, transientWireState] = window.api.core.getTransientState(BigInt(currentSubcircuit.value.backendKey));
-    transientComponentStates.forEach(state=>{
-        const corresponding_object = currentSubcircuit.value.components.values().find(component=>component.backendKey === String(state.backendKey));
-        if(corresponding_object){
+    transientComponentStates.forEach(state => {
+        const corresponding_object = currentSubcircuit.value.components.values().find(component => component.backendKey === String(state.backendKey));
+        if (corresponding_object) {
             Object.assign(corresponding_object, state);
         }
     })
-    currentSubcircuit.value.wires=transientWireState
+    currentSubcircuit.value.wires = transientWireState
 
     console.log(currentSubcircuit.value)
-    console.log("backend updates" )
+    console.log("backend updates")
     console.log(transientComponentStates)
     console.log(transientWireState)
 }
 //TODO Update Circuit State
 export function generateFrontendId() {
-  return nextFrontendId++;
+    return nextFrontendId++;
 }
