@@ -6,7 +6,6 @@ use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{ComponentKey, MiddleRepr, UIKey};
-use napi::Error;
 use napi::bindgen_prelude::BigInt;
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -129,7 +128,7 @@ pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<()
 }
 #[napi]
 
-pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), Error> {
+pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), napi::Error> {
     let mut rep = REPR.lock().unwrap();
     let key = bigint_to_key(&circuit_key).unwrap();
     if !rep.has_circuit(key) {
@@ -144,10 +143,9 @@ pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), Err
     let res = circuit.add_wire(Wire::new(x, y, wire.length, wire.isHorizontal).unwrap());
     if let Err(err) = res {
         println!("Error creating wire: {}", err);
-        return Err(Error::from_reason(err.to_string())); 
+        return Err(napi::Error::from_reason(err.to_string()));
     }
     Ok(())
-
 }
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit

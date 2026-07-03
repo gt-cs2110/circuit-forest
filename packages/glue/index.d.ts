@@ -2,7 +2,7 @@
 /* eslint-disable */
 export declare function addComponent(args: CreateComponentArgs): bigint
 
-export declare function addWire(circuitKey: bigint, wire: TransientWireState): string
+export declare function addWire(circuitKey: bigint, wire: TransientWireState): void
 
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(name: string): bigint
