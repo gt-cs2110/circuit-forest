@@ -30,7 +30,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
             .map_err(|_| napi::Error::from_reason("Invalid orientation value"))?,
         None => Default::default(),
     };
-    let label_orient = match args.labelOrientation {
+    let label_orient = match args.label_orientation {
         Some(i) => Orientation::try_from(i)
             .map_err(|_| napi::Error::from_reason("Invalid label orientation value"))?,
         None => Default::default(),
@@ -40,7 +40,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
             .map_err(|_| napi::Error::from_reason("Invalid handedness value"))?,
         None => Default::default(),
     };
-    let bit_array = match args.constantValue {
+    let bit_array = match args.constant_value {
         Some(s) => s
             .parse()
             .map_err(|_| napi::Error::from_reason("Invalid constant value"))?,
@@ -48,8 +48,8 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
     };
 
     let inputs = args.inputs.unwrap_or(2);
-    let component: PhysicalComponentEnum = match args.componentType.as_str() {
-        "PIN" => func::Pin::new(bitsize, args.isInput.unwrap_or(false), orient).into(),
+    let component: PhysicalComponentEnum = match args.component_type.as_str() {
+        "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
         "CONSTANT" => func::Constant::new(bit_array, orient).into(),
         "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
         "POWER" => func::Power.into(),
@@ -61,7 +61,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
         "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
         "TEXT" => func::Text.into(),
         "SUBCIRCUIT" => func::Subcircuit::new(
-            bigint_to_key(&args.circuitKey)
+            bigint_to_key(&args.circuit_key)
                 .ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?,
         )
         .into(),
@@ -77,7 +77,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
     };
 
     let mut circuit = rep.circuit(
-        bigint_to_key(&args.circuitKey)
+        bigint_to_key(&args.circuit_key)
             .ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?,
     );
 
@@ -140,7 +140,7 @@ pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), nap
     let x = std::cmp::min(wire.endpoints[0].x, wire.endpoints[1].x);
     let y = std::cmp::min(wire.endpoints[0].y, wire.endpoints[1].y);
     // circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizantal}).map_err(|op| napi::Error::from_reason(op.to_string()))
-    let res = circuit.add_wire(Wire::new(x, y, wire.length, wire.isHorizontal).unwrap());
+    let res = circuit.add_wire(Wire::new(x, y, wire.length, wire.is_horizontal).unwrap());
     if let Err(err) = res {
         println!("Error creating wire: {}", err);
         return Err(napi::Error::from_reason(err.to_string()));
@@ -200,7 +200,7 @@ pub fn get_transient_state(
             _ => None,
         };
         component_states.push(TransientComponentState {
-            backendKey: big_int.get_i128().0.to_string(),
+            backend_key: big_int.get_i128().0.to_string(),
             ports,
             bounds: vec![
                 Location {
@@ -212,7 +212,7 @@ pub fn get_transient_state(
                     y: component.bounds[1].1,
                 },
             ],
-            componentValue: component_value,
+            component_value,
         });
     }
 
@@ -227,7 +227,7 @@ pub fn get_transient_state(
         let [(lx, ly), (rx, ry)] = wire.endpoints();
         wire_states.push(TransientWireState {
             endpoints: vec![Location { x: lx, y: ly }, Location { x: rx, y: ry }],
-            isHorizontal: wire.horizontal(),
+            is_horizontal: wire.horizontal(),
             length: wire.length(),
             value: value.to_string(),
             issues: issues.into_iter().map(|s| s.to_string()).collect(),
@@ -278,32 +278,32 @@ fn bigint_to_key<K: slotmap::Key>(b: &BigInt) -> Option<K> {
 
 #[napi(object)]
 pub struct CreateComponentArgs {
-    pub circuitKey: BigInt,
-    pub componentType: String,
+    pub circuit_key: BigInt,
+    pub component_type: String,
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
     pub orientation: Option<u8>,
     pub label: Option<String>,
     pub x: u32,
     pub y: u32,
-    pub labelOrientation: Option<u8>,
-    pub constantValue: Option<String>,
-    pub isInput: Option<bool>,
+    pub label_orientation: Option<u8>,
+    pub constant_value: Option<String>,
+    pub is_input: Option<bool>,
     pub selsize: Option<u8>,
-    pub textContent: Option<String>,
+    pub text_content: Option<String>,
     pub handedness: Option<u8>,
 }
 #[napi(object)]
 pub struct TransientComponentState {
-    pub backendKey: String,
+    pub backend_key: String,
     pub ports: Vec<PortTransientState>,
     pub bounds: Vec<Location>,
-    pub componentValue: Option<String>, //only for probes and constants
+    pub component_value: Option<String>, //only for probes and constants
 }
 #[napi(object)]
 pub struct TransientWireState {
     pub endpoints: Vec<Location>,
-    pub isHorizontal: bool,
+    pub is_horizontal: bool,
     pub length: u32,
     pub value: String,
     pub issues: Vec<String>,
