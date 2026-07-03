@@ -3,12 +3,12 @@ import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
 export const wiringTypes = ["constant"] as const;
-export const selctionTypes = ["mux", "demux", "decoder"];
+export const selectionTypes = ["mux", "demux", "decoder"];
 
 export const componentCategories = {
     wiring: wiringTypes,
     gates: gateTypes,
-    selctionTypes: selctionTypes
+    plexers: selectionTypes
 
 };
 export type Dimensions = { width: number; height: number };
