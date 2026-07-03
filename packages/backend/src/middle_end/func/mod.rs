@@ -353,10 +353,10 @@ mod tests {
         assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
 
         let north = base.clone().orient(Orientation::North, Handedness::DownRight);
-        assert_eq!(north.ports, vec![(0, -1), (-1, 0), (3, 2)]);
+        assert_eq!(north.ports, vec![(0, 1), (1, 0), (-3, -2)]);
 
         let south = base.clone().orient(Orientation::South, Handedness::DownRight);
-        assert_eq!(south.ports, vec![(0, 1), (1, 0), (-3, -2)]);
+        assert_eq!(south.ports, vec![(0, -1), (-1, 0), (3, 2)]);
 
         let west = base.clone().orient(Orientation::West, Handedness::DownRight);
         assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
@@ -365,10 +365,10 @@ mod tests {
         assert_eq!(east.ports, vec![(-1, 0), (0, -1), (2, 3)]);
 
         let north = base.clone().orient(Orientation::North, Handedness::TopLeft);
-        assert_eq!(north.ports, vec![(0, -1), (1, 0), (-3, 2)]);
+        assert_eq!(north.ports, vec![(0, 1), (-1, 0), (3, -2)]);
 
         let south = base.clone().orient(Orientation::South, Handedness::TopLeft);
-        assert_eq!(south.ports, vec![(0, 1), (-1, 0), (3, -2)]);
+        assert_eq!(south.ports, vec![(0, -1), (1, 0), (-3, 2)]);
 
         let west = base.orient(Orientation::West, Handedness::TopLeft);
         assert_eq!(west.ports, vec![(1, 0), (0, 1), (-2, -3)]);
