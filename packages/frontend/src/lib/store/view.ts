@@ -10,18 +10,18 @@ type CircuitViewState = {
 
 const viewStates = reactive<Map<number, CircuitViewState>>(new Map());
 
-export function getViewState(cricuitFrontEndId: number): CircuitViewState {
-    if (!viewStates.has(cricuitFrontEndId)) {
-        viewStates.set(cricuitFrontEndId, {
+export function getViewState(circuitFrontendId: number): CircuitViewState {
+    if (!viewStates.has(circuitFrontendId)) {
+        viewStates.set(circuitFrontendId, {
             selection: new Set(),
             offset: { x: 0, y: 0 },
         });
     }
-    return viewStates.get(cricuitFrontEndId)!;
+    return viewStates.get(circuitFrontendId)!;
 }
 
-export function deleteViewState(cricuitFrontEndId: number) {
-    viewStates.delete(cricuitFrontEndId);
+export function deleteViewState(circuitFrontendId: number) {
+    viewStates.delete(circuitFrontendId);
 }
 
 export const currentViewState = computed(() => getViewState(currentSubcircuitId.value));
@@ -29,13 +29,13 @@ export const selection = computed(() => currentViewState.value.selection);
 
 // SELECTION
 
-export function selectComponent(componentFrontEndId: number, additive: boolean) {
+export function selectComponent(componentFrontendId: number, additive: boolean) {
     if (!additive) selection.value.clear();
-    selection.value.add(componentFrontEndId);
+    selection.value.add(componentFrontendId);
 }
 
-export function deselectComponent(componentFrontEndId: number) {
-    selection.value.delete(componentFrontEndId);
+export function deselectComponent(componentFrontendId: number) {
+    selection.value.delete(componentFrontendId);
 }
 
 export function clearSelection() {
