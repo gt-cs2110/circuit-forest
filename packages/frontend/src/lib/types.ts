@@ -1,4 +1,4 @@
-import { TransientComponentState, TransientWireState, Location } from "circuitsim-glue";
+import { TransientComponentState, TransientWireState, Location, Key } from "circuitsim-glue";
 import { Component } from "vue";
 
 export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
@@ -72,7 +72,7 @@ export type Wire = TransientWireState;
 
 export type Subcircuit = {
     frontendId: number;
-    backendKey: string;
+    backendKey: Key;
     name: string;
     components: Map<number, CircuitComponent>;
     wires: Wire[];

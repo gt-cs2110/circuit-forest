@@ -6,47 +6,99 @@ use circuitsim_engine::engine::{CircuitKey, FunctionKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{ComponentKey, MiddleCircuit, MiddleRepr, UIKey};
-use napi::bindgen_prelude::BigInt;
 use napi_derive::napi;
 use slotmap::KeyData;
 
 static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
 
-fn key_to_bigint<K: slotmap::Key>(k: K) -> BigInt {
-    let raw = k.data().as_ffi(); // u64
-    BigInt::from(raw)
+#[napi(string_enum)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum KeyKind {
+    Circuit,
+    Function,
+    UI,
 }
-fn bigint_to_key<K: slotmap::Key>(b: &BigInt) -> Option<K> {
-    let (sign, raw, lossless) = b.get_u64();
-    if sign || !lossless {
-        return None;
+#[napi(object, js_name = "Key")]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub struct JsKey {
+    pub kind: KeyKind,
+    pub id: (u32, u32),
+}
+impl JsKey {
+    fn into_key<K: CastKey>(self) -> napi::Result<K> {
+        K::try_from_js(self)
+    }
+}
+trait CastKeyByKind: slotmap::Key {
+    const KIND: KeyKind;
+}
+impl<K: CastKeyByKind> CastKey for K {
+    fn try_from_js(k: JsKey) -> napi::Result<Self> {
+        let JsKey { kind, id } = k;
+        match kind == Self::KIND {
+            true => {
+                let raw = u64::from(id.0) << 32 | (u64::from(id.1));
+                Ok(Self::from(KeyData::from_ffi(raw)))
+            }
+            false => Err(napi::Error::from_reason(format!(
+                "Expected key of kind {:?}, but got {kind:?}",
+                Self::KIND
+            ))),
+        }
+    }
+    fn into_js(self) -> JsKey {
+        let raw = self.data().as_ffi();
+        let id = ((raw >> 32) as u32, raw as u32);
+
+        JsKey {
+            kind: Self::KIND,
+            id,
+        }
+    }
+}
+trait CastKey: Sized {
+    fn try_from_js(k: JsKey) -> napi::Result<Self>;
+    fn into_js(self) -> JsKey;
+}
+impl CastKeyByKind for CircuitKey {
+    const KIND: KeyKind = KeyKind::Circuit;
+}
+impl CastKeyByKind for FunctionKey {
+    const KIND: KeyKind = KeyKind::Function;
+}
+impl CastKeyByKind for UIKey {
+    const KIND: KeyKind = KeyKind::UI;
+}
+impl CastKey for ComponentKey {
+    fn try_from_js(k: JsKey) -> napi::Result<Self> {
+        Ok(match k.kind == KeyKind::UI {
+            true => UIKey::try_from_js(k)?.into(),
+            false => FunctionKey::try_from_js(k)?.into(),
+        })
     }
 
-    Some(K::from(KeyData::from_ffi(raw)))
+    fn into_js(self) -> JsKey {
+        match self {
+            ComponentKey::Function(k) => k.into_js(),
+            ComponentKey::UI(k) => k.into_js(),
+        }
+    }
 }
-fn get_circuit<'r>(
-    repr: &'r mut MiddleRepr,
-    key: &BigInt,
-) -> Result<(CircuitKey, MiddleCircuit<'r>), napi::Error> {
-    let key = bigint_to_key(key)
-        .ok_or_else(|| napi::Error::from_reason("invalid circuit key"))?;
-    
-    let circuit = repr.try_circuit(key)
-        .ok_or_else(|| napi::Error::from_reason("circuit does not exist"))?;
 
-    Ok((key, circuit))
+fn get_circuit<'r>(repr: &'r mut MiddleRepr, key: JsKey) -> Result<MiddleCircuit<'r>, napi::Error> {
+    repr.try_circuit(key.into_key()?)
+        .ok_or_else(|| napi::Error::from_reason("circuit does not exist"))
 }
 /// Creates a new circuit and returns its key as an i64 for JS.
 #[napi]
-pub fn create_circuit(name: String) -> Result<BigInt, napi::Error> {
+pub fn create_circuit(name: String) -> JsKey {
     let mut repr = REPR.lock().unwrap();
-    let key = repr.add_circuit(&name);
-    Ok(key_to_bigint(key))
+    repr.add_circuit(&name).into_js()
 }
 
 #[napi]
-pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
-    let mut rep = REPR.lock().unwrap();
+pub fn add_component(args: CreateComponentArgs) -> Result<JsKey, napi::Error> {
+    let mut repr = REPR.lock().unwrap();
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
     let orient = match args.orientation {
@@ -72,6 +124,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
     };
 
     let inputs = args.inputs.unwrap_or(2);
+    let circuit_key = args.circuit_key.into_key()?;
 
     let component: PhysicalComponentEnum = match args.component_type.as_str() {
         "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
@@ -85,11 +138,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
         "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
         "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
         "TEXT" => func::Text.into(),
-        "SUBCIRCUIT" => func::Subcircuit::new(
-            bigint_to_key(&args.circuit_key)
-                .ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?,
-        )
-        .into(),
+        "SUBCIRCUIT" => func::Subcircuit::new(circuit_key).into(), // TODO: I don't believe this is correct
         "NOT" => func::Not::new(bitsize, orient).into(),
         "BUFFER" => func::TriState::new(bitsize, orient, handedness).into(),
         "AND" => func::Gate::new(GateKind::And, bitsize, inputs, orient).into(),
@@ -101,12 +150,9 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
         _ => return Err(napi::Error::from_reason("Unknown gate type")),
     };
 
-    let mut circuit = rep.circuit(
-        bigint_to_key(&args.circuit_key)
-            .ok_or_else(|| napi::Error::from_reason("Invalid circuit key"))?,
-    );
+    let mut circuit = repr.circuit(circuit_key);
 
-    let cmpkey = circuit
+    let comp_key = circuit
         .add_component(
             component,
             &args.label.unwrap_or_default(),
@@ -114,45 +160,25 @@ pub fn add_component(args: CreateComponentArgs) -> Result<BigInt, napi::Error> {
             (args.x, args.y),
         )
         .map_err(|_| napi::Error::from_reason("Component edit failed"))?;
-    let big = match cmpkey {
-        //unwrap the component key into either type and convert to bigint
-        ComponentKey::Function(k) => key_to_bigint(k),
-        ComponentKey::UI(k) => key_to_bigint(k),
-    };
-    Ok(big)
+    Ok(comp_key.into_js())
 }
 #[napi]
-pub fn remove_component(circuit_key: BigInt, component_key: BigInt) -> Result<(), napi::Error> {
+pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> Result<(), napi::Error> {
     let mut repr = REPR.lock().unwrap();
-    
-    let (_, mut circuit) = get_circuit(&mut repr, &circuit_key)?;
-
-    if let Some(fk) = bigint_to_key::<FunctionKey>(&component_key) {
-        if !circuit.has_component(ComponentKey::Function(fk)) {
-            return Err(napi::Error::from_reason("Component not found"));
-        }
-        if circuit.remove_component(ComponentKey::Function(fk)).is_ok() {
-            return Ok(());
-        }
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
+    let key = component_key.into_key()?;
+    if !circuit.has_component(key) {
+        return Err(napi::Error::from_reason("Component not found"));
     }
 
-    if let Some(uk) = bigint_to_key::<UIKey>(&component_key) {
-        if !circuit.has_component(ComponentKey::UI(uk)) {
-            return Err(napi::Error::from_reason("Component not found"));
-        }
-        return circuit
-            .remove_component(ComponentKey::UI(uk))
-            .map_err(|_| napi::Error::from_reason("Component removal failed"));
-    }
-
-    Err(napi::Error::from_reason("Invalid component key"))
+    circuit.remove_component(key)
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
 #[napi]
-pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), napi::Error> {
+pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> Result<(), napi::Error> {
     let mut repr = REPR.lock().unwrap();
-
-    let (_, mut circuit) = get_circuit(&mut repr, &circuit_key)?;
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
     //coordinates are loermost  x and y so smallest value
     let x = std::cmp::min(wire.endpoints[0].x, wire.endpoints[1].x);
@@ -170,15 +196,13 @@ pub fn add_wire(circuit_key: BigInt, wire: TransientWireState) -> Result<(), nap
 
 #[napi]
 pub fn get_transient_state(
-    circuit_key: BigInt,
+    circuit_key: JsKey,
 ) -> Result<(Vec<TransientComponentState>, Vec<TransientWireState>), napi::Error> {
     let mut component_states: Vec<TransientComponentState> = Vec::new();
     let mut repr = REPR.lock().unwrap();
-
-    let (_, circuit) = get_circuit(&mut repr, &circuit_key)?;
+    let circuit = get_circuit(&mut repr, circuit_key)?;
 
     for (key, state) in circuit.get_component_states() {
-        let big_int = key_to_bigint(key);
         let component = circuit
             .get_component(ComponentKey::Function(key))
             .map_err(|_| napi::Error::from_reason("Component not found"))?;
@@ -207,7 +231,7 @@ pub fn get_transient_state(
                 }
             })
             .collect();
-        
+
         // Get value for component value field for Probe or Constant
         let bitvalue = match component.inner {
             PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
@@ -216,7 +240,7 @@ pub fn get_transient_state(
         };
 
         component_states.push(TransientComponentState {
-            backend_key: big_int.get_i128().0.to_string(),
+            backend_key: key.into_js(),
             ports,
             bounds: vec![
                 Location {
@@ -254,24 +278,24 @@ pub fn get_transient_state(
 }
 
 #[napi]
-pub fn propagate(circuit_key: BigInt) -> Result<(), napi::Error> {
+pub fn propagate(circuit_key: JsKey) -> Result<(), napi::Error> {
     let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let (_, mut circuit) = get_circuit(&mut repr, &circuit_key)?;
     circuit.propagate();
     Ok(())
 }
 #[napi]
-pub fn print_circuit(circuit_key: BigInt) -> Result<String, napi::Error> {
+pub fn print_circuit(circuit_key: JsKey) -> Result<String, napi::Error> {
     let mut repr = REPR.lock().unwrap();
+    let circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let (_, circuit) = get_circuit(&mut repr, &circuit_key)?;
     Ok(format!("Circuit:{:?}", circuit))
 }
 
 #[napi(object)]
 pub struct CreateComponentArgs {
-    pub circuit_key: BigInt,
+    pub circuit_key: JsKey,
     pub component_type: String,
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
@@ -288,7 +312,7 @@ pub struct CreateComponentArgs {
 }
 #[napi(object)]
 pub struct TransientComponentState {
-    pub backend_key: String,
+    pub backend_key: JsKey,
     pub ports: Vec<PortTransientState>,
     pub bounds: Vec<Location>,
     pub component_value: Option<String>, //only for probes and constants
