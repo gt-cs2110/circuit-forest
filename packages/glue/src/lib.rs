@@ -207,12 +207,14 @@ pub fn get_transient_state(
                 }
             })
             .collect();
-        //check to see if component is a probe or constant to get value for component value field
-        let component_value = match component.inner {
-            PhysicalComponentEnum::Probe(probe) => Some("0".to_string()), // Need to figure out how to get the actual value of the probe
-            PhysicalComponentEnum::Constant(constant) => Some(constant.get_value().to_string()),
+        
+        // Get value for component value field for Probe or Constant
+        let bitvalue = match component.inner {
+            PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
+            PhysicalComponentEnum::Constant(constant) => Some(constant.get_value()),
             _ => None,
         };
+
         component_states.push(TransientComponentState {
             backend_key: big_int.get_i128().0.to_string(),
             ports,
@@ -226,7 +228,7 @@ pub fn get_transient_state(
                     y: component.bounds[1].1,
                 },
             ],
-            component_value,
+            component_value: bitvalue.map(|s| s.to_string()),
         });
     }
 
