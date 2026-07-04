@@ -138,12 +138,14 @@ impl NotTwoValuedErr {
 }
 
 /// An error which occurs when trying to set to a bitarray using one of a different length.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("cannot set bitarray to another bitarray of a different bitsize")]
 pub struct MismatchedBitsizes(());
 
 /// This error can occur when converting a [`char`] to a [`BitState`]
 /// if the [`char`] does not map to any [`BitState`] character.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("character does not correspond to valid bitstate")]
 pub struct InvalidStateErr(());
 
 impl TryFrom<BitState> for bool {

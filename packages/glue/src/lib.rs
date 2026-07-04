@@ -1,5 +1,6 @@
 use std::sync::{LazyLock, Mutex};
 
+use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarr;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::{CircuitKey, FunctionKey};
@@ -25,7 +26,7 @@ pub struct JsKey {
     pub id: (u32, u32),
 }
 impl JsKey {
-    fn into_key<K: CastKey>(self) -> napi::Result<K> {
+    fn into_key<K: CastKey>(self) -> anyhow::Result<K> {
         K::try_from_js(self)
     }
 }
@@ -33,17 +34,17 @@ trait CastKeyByKind: slotmap::Key {
     const KIND: KeyKind;
 }
 impl<K: CastKeyByKind> CastKey for K {
-    fn try_from_js(k: JsKey) -> napi::Result<Self> {
+    fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
         let JsKey { kind, id } = k;
         match kind == Self::KIND {
             true => {
                 let raw = u64::from(id.0) << 32 | (u64::from(id.1));
                 Ok(Self::from(KeyData::from_ffi(raw)))
             }
-            false => Err(napi::Error::from_reason(format!(
+            false => Err(anyhow!(
                 "Expected key of kind {:?}, but got {kind:?}",
                 Self::KIND
-            ))),
+            )),
         }
     }
     fn into_js(self) -> JsKey {
@@ -57,7 +58,7 @@ impl<K: CastKeyByKind> CastKey for K {
     }
 }
 trait CastKey: Sized {
-    fn try_from_js(k: JsKey) -> napi::Result<Self>;
+    fn try_from_js(k: JsKey) -> anyhow::Result<Self>;
     fn into_js(self) -> JsKey;
 }
 impl CastKeyByKind for CircuitKey {
@@ -70,7 +71,7 @@ impl CastKeyByKind for UIKey {
     const KIND: KeyKind = KeyKind::UI;
 }
 impl CastKey for ComponentKey {
-    fn try_from_js(k: JsKey) -> napi::Result<Self> {
+    fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
         Ok(match k.kind == KeyKind::UI {
             true => UIKey::try_from_js(k)?.into(),
             false => FunctionKey::try_from_js(k)?.into(),
@@ -102,9 +103,9 @@ impl From<Location> for (u32, u32) {
     }
 }
 
-fn get_circuit<'r>(repr: &'r mut MiddleRepr, key: JsKey) -> Result<MiddleCircuit<'r>, napi::Error> {
+fn get_circuit<'r>(repr: &'r mut MiddleRepr, key: JsKey) -> anyhow::Result<MiddleCircuit<'r>> {
     repr.try_circuit(key.into_key()?)
-        .ok_or_else(|| napi::Error::from_reason("circuit does not exist"))
+        .ok_or_else(|| anyhow!("Circuit does not exist"))
 }
 /// Creates a new circuit and returns its key as an i64 for JS.
 #[napi]
@@ -114,29 +115,29 @@ pub fn create_circuit(name: String) -> JsKey {
 }
 
 #[napi]
-pub fn add_component(args: CreateComponentArgs) -> Result<JsKey, napi::Error> {
+pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let mut repr = REPR.lock().unwrap();
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
     let orient = match args.orientation {
         Some(i) => Orientation::try_from(i)
-            .map_err(|_| napi::Error::from_reason("Invalid orientation value"))?,
+            .context("Could not parse orientation value")?,
         None => Default::default(),
     };
     let label_orient = match args.label_orientation {
         Some(i) => Orientation::try_from(i)
-            .map_err(|_| napi::Error::from_reason("Invalid label orientation value"))?,
+            .context("Could not parse label orientation value")?,
         None => Default::default(),
     };
     let handedness = match args.handedness {
         Some(i) => Handedness::try_from(i)
-            .map_err(|_| napi::Error::from_reason("Invalid handedness value"))?,
+            .context("Could not parse handedness value")?,
         None => Default::default(),
     };
     let bit_array = match args.constant_value {
         Some(s) => s
             .parse()
-            .map_err(|_| napi::Error::from_reason("Invalid constant value"))?,
+            .context("Could not parse constant value")?,
         None => bitarr![0],
     };
 
@@ -164,7 +165,7 @@ pub fn add_component(args: CreateComponentArgs) -> Result<JsKey, napi::Error> {
         "NOR" => func::Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
         "XOR" => func::Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
         "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
-        _ => return Err(napi::Error::from_reason("Unknown gate type")),
+        _ => bail!("Unknown gate type"),
     };
 
     let mut circuit = repr.circuit(circuit_key);
@@ -176,36 +177,34 @@ pub fn add_component(args: CreateComponentArgs) -> Result<JsKey, napi::Error> {
             label_orient,
             (args.x, args.y),
         )
-        .map_err(|_| napi::Error::from_reason("Component edit failed"))?;
+        .context("Component addition failed")?;
     Ok(comp_key.into_js())
 }
 #[napi]
-pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> Result<(), napi::Error> {
+pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> anyhow::Result<()> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
     let key = component_key.into_key()?;
-    if !circuit.has_component(key) {
-        return Err(napi::Error::from_reason("Component not found"));
-    }
 
+    ensure!(circuit.has_component(key), "Component not found");
     circuit
         .remove_component(key)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))
+        .context("Component removal failed")
 }
 
 #[napi]
-pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> Result<(), napi::Error> {
+pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> anyhow::Result<()> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
     let (p, q) = wire.endpoints;
     let w = Wire::from_endpoints(p.into(), q.into()).ok_or_else(|| {
-        napi::Error::from_reason("Could not construct wire: Wire is not straight")
+        anyhow!("Could not construct wire: Wire is not straight")
     })?;
 
     circuit
         .add_wire(w)
-        .map_err(|e| napi::Error::from_reason(format!("Could not construct wire: {e}")))
+        .context("Could not construct wire")
 }
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
@@ -213,7 +212,7 @@ pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> Result<(), napi
 #[napi]
 pub fn get_transient_state(
     circuit_key: JsKey,
-) -> Result<(Vec<TransientComponentState>, Vec<TransientWireState>), napi::Error> {
+) -> anyhow::Result<(Vec<TransientComponentState>, Vec<TransientWireState>)> {
     let mut component_states: Vec<TransientComponentState> = Vec::new();
     let mut repr = REPR.lock().unwrap();
     let circuit = get_circuit(&mut repr, circuit_key)?;
@@ -221,7 +220,7 @@ pub fn get_transient_state(
     for (key, state) in circuit.get_component_states() {
         let component = circuit
             .get_component(ComponentKey::Function(key))
-            .map_err(|_| napi::Error::from_reason("Component not found"))?;
+            .context("Component not found")?;
         //get num ports and iterate through them to get values and states
         let num_ports = state.get_num_ports();
         let ports: Vec<PortTransientState> = (0..num_ports)
@@ -286,7 +285,7 @@ pub fn get_transient_state(
 }
 
 #[napi]
-pub fn propagate(circuit_key: JsKey) -> Result<(), napi::Error> {
+pub fn propagate(circuit_key: JsKey) -> anyhow::Result<()> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
@@ -294,7 +293,7 @@ pub fn propagate(circuit_key: JsKey) -> Result<(), napi::Error> {
     Ok(())
 }
 #[napi]
-pub fn print_circuit(circuit_key: JsKey) -> Result<String, napi::Error> {
+pub fn print_circuit(circuit_key: JsKey) -> anyhow::Result<String> {
     let mut repr = REPR.lock().unwrap();
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
