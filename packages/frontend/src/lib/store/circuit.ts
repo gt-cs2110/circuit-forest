@@ -1,4 +1,4 @@
-import { computed, markRaw, reactive, ref, toRaw } from "vue";
+import { computed, reactive, ref, toRaw } from "vue";
 
 import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
@@ -40,18 +40,16 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     //To Update the component we delete the old and add a new identical component with the changes applied
 
     //Remove the Old Component with this id
-    // FIXME: Why do we need toRaw here?
-    window.api.core.removeComponent(currentSubcircuit.value.backendKey, toRaw(component.backendKey));
+    window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
 
     ///Add new component with changes applied & update backend key
     const state = currentSubcircuit.value.components.get(frontendId);
     if (state) {
-        state.backendKey = markRaw(window.api.core.addComponent({
+        state.backendKey = window.api.core.addComponent({
             ...toRaw(component),
             circuitKey: currentSubcircuit.value.backendKey,
             componentType: String(component.type).toUpperCase()
-        }));
-        console.log(state.backendKey);
+        });
     }
     updateState();
 }
@@ -75,11 +73,11 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
-        backendKey: markRaw(window.api.core.addComponent({
+        backendKey: window.api.core.addComponent({
             circuitKey: currentSubcircuit.value.backendKey,
             componentType: String(type).toUpperCase(),
             x, y
-        })),
+        }),
         frontendId: frontendId,
         type: type,
         label: "",
@@ -112,7 +110,7 @@ export function addWire(start: Location, end: Location, length: number, isHorizo
 }
 export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
-    const backendKey = markRaw(window.api.core.createCircuit(name ?? ("Circuit" + circuits.size)));
+    const backendKey = window.api.core.createCircuit(name ?? ("Circuit" + circuits.size));
     circuits.set(frontendId, {
         frontendId,
         backendKey,

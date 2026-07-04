@@ -1,4 +1,3 @@
-import { markRaw } from "vue";
 import type { Subcircuit, CircuitComponent } from "../types";
 
 export function createTwoAndGateCircuit(): Map<number, Subcircuit> {
@@ -6,7 +5,7 @@ export function createTwoAndGateCircuit(): Map<number, Subcircuit> {
 
   const subcircuit: Subcircuit = {
     frontendId: 0,
-    backendKey: markRaw(circuitKey),
+    backendKey: circuitKey,
     name: "A AND B",
     components: new Map<number, CircuitComponent>(),
     wires: [],

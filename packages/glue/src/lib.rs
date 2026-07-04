@@ -24,6 +24,9 @@ pub enum KeyKind {
 pub struct JsKey {
     pub kind: KeyKind,
     pub id: (u32, u32),
+    // HACK: Vue's markRaw assigns this field to indicate it shouldn't be reactive.
+    #[napi(js_name="__v_skip")]
+    pub __v_skip: bool,
 }
 impl JsKey {
     fn into_key<K: CastKey>(self) -> anyhow::Result<K> {
@@ -35,7 +38,7 @@ trait CastKeyByKind: slotmap::Key {
 }
 impl<K: CastKeyByKind> CastKey for K {
     fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
-        let JsKey { kind, id } = k;
+        let JsKey { kind, id, __v_skip: _ } = k;
         match kind == Self::KIND {
             true => {
                 let raw = u64::from(id.0) << 32 | (u64::from(id.1));
@@ -54,6 +57,7 @@ impl<K: CastKeyByKind> CastKey for K {
         JsKey {
             kind: Self::KIND,
             id,
+            __v_skip: true,
         }
     }
 }

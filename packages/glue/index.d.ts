@@ -30,6 +30,7 @@ export declare function getTransientState(circuitKey: Key): [Array<TransientComp
 export interface Key {
   kind: KeyKind
   id: [number, number]
+  __v_skip: boolean
 }
 
 export declare const enum KeyKind {
