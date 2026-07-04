@@ -110,14 +110,21 @@ impl MiddleRepr {
         ck
     }
 
-    /// Creates a mutable view for a given subcircuit.
+    /// Creates a mutable view for a given subcircuit,
+    /// panicking if the circuit does not exist.
     pub fn circuit(&mut self, key: CircuitKey) -> MiddleCircuit<'_> {
-        MiddleCircuit { repr: self, key }
+        self.try_circuit(key)
+            .unwrap_or_else(|| panic!("circuit of key {key:?} does not exist"))
     } 
-    //checks to see if a circuit with the given key exists in the middle end
-    pub fn has_circuit(&self, key: CircuitKey) -> bool {
-        self.physical.contains_key(key)
-    }   
+
+    /// Tries to create a mutable view for a given subcircuit,
+    /// returning None if the circuit does not exist.
+    pub fn try_circuit(&mut self, key: CircuitKey) -> Option<MiddleCircuit<'_>> {
+        match self.physical.contains_key(key) {
+            true => Some(MiddleCircuit { repr: self, key }),
+            false => None
+        }
+    }
 }
 
 /// Basic macro to pretend Circuit has the "graph" and "state" fields.
