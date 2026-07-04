@@ -85,6 +85,23 @@ impl CastKey for ComponentKey {
     }
 }
 
+#[napi(object)]
+pub struct Location {
+    pub x: u32,
+    pub y: u32,
+}
+impl From<(u32, u32)> for Location {
+    fn from(value: (u32, u32)) -> Self {
+        let (x, y) = value;
+        Self { x, y }
+    }
+}
+impl From<Location> for (u32, u32) {
+    fn from(value: Location) -> Self {
+        (value.x, value.y)
+    }
+}
+
 fn get_circuit<'r>(repr: &'r mut MiddleRepr, key: JsKey) -> Result<MiddleCircuit<'r>, napi::Error> {
     repr.try_circuit(key.into_key()?)
         .ok_or_else(|| napi::Error::from_reason("circuit does not exist"))
@@ -171,7 +188,8 @@ pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> Result<(), 
         return Err(napi::Error::from_reason("Component not found"));
     }
 
-    circuit.remove_component(key)
+    circuit
+        .remove_component(key)
         .map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
@@ -180,16 +198,14 @@ pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> Result<(), napi
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    //coordinates are loermost  x and y so smallest value
-    let x = std::cmp::min(wire.endpoints[0].x, wire.endpoints[1].x);
-    let y = std::cmp::min(wire.endpoints[0].y, wire.endpoints[1].y);
-    // circuit.add_wire(Wire{x, y, length:NonZero::new(wire.length).unwrap(), horizontal:wire.isHorizantal}).map_err(|op| napi::Error::from_reason(op.to_string()))
-    let res = circuit.add_wire(Wire::new(x, y, wire.length, wire.is_horizontal).unwrap());
-    if let Err(err) = res {
-        println!("Error creating wire: {}", err);
-        return Err(napi::Error::from_reason(err.to_string()));
-    }
-    Ok(())
+    let (p, q) = wire.endpoints;
+    let w = Wire::from_endpoints(p.into(), q.into()).ok_or_else(|| {
+        napi::Error::from_reason("Could not construct wire: Wire is not straight")
+    })?;
+
+    circuit
+        .add_wire(w)
+        .map_err(|e| napi::Error::from_reason(format!("Could not construct wire: {e}")))
 }
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
@@ -232,6 +248,7 @@ pub fn get_transient_state(
             })
             .collect();
 
+        let bounds = component.bounds.map(Into::into).into();
         // Get value for component value field for Probe or Constant
         let bitvalue = match component.inner {
             PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
@@ -242,16 +259,7 @@ pub fn get_transient_state(
         component_states.push(TransientComponentState {
             backend_key: key.into_js(),
             ports,
-            bounds: vec![
-                Location {
-                    x: component.bounds[0].0,
-                    y: component.bounds[0].1,
-                },
-                Location {
-                    x: component.bounds[1].0,
-                    y: component.bounds[1].1,
-                },
-            ],
+            bounds,
             component_value: bitvalue.map(|s| s.to_string()),
         });
     }
@@ -264,9 +272,9 @@ pub fn get_transient_state(
     let mut wire_states: Vec<TransientWireState> = Vec::new();
 
     for (wire, value, issues) in circuit.get_wire_states() {
-        let [(lx, ly), (rx, ry)] = wire.endpoints();
+        let [p, q] = wire.endpoints();
         wire_states.push(TransientWireState {
-            endpoints: vec![Location { x: lx, y: ly }, Location { x: rx, y: ry }],
+            endpoints: (p.into(), q.into()),
             is_horizontal: wire.horizontal(),
             length: wire.length(),
             value: value.to_string(),
@@ -301,7 +309,7 @@ pub struct CreateComponentArgs {
     pub label_orientation: Option<u8>,
     pub x: u32,
     pub y: u32,
-    
+
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
     pub orientation: Option<u8>,
@@ -315,12 +323,12 @@ pub struct CreateComponentArgs {
 pub struct TransientComponentState {
     pub backend_key: JsKey,
     pub ports: Vec<PortTransientState>,
-    pub bounds: Vec<Location>,
+    pub bounds: (Location, Location),
     pub component_value: Option<String>, //only for probes and constants
 }
 #[napi(object)]
 pub struct TransientWireState {
-    pub endpoints: Vec<Location>,
+    pub endpoints: (Location, Location),
     pub is_horizontal: bool,
     pub length: u32,
     pub value: String,
@@ -332,9 +340,4 @@ pub struct PortTransientState {
     pub y: u32,
     pub value: String,
     pub issues: Vec<String>,
-}
-#[napi(object)]
-pub struct Location {
-    pub x: u32,
-    pub y: u32,
 }

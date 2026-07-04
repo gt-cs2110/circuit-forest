@@ -59,12 +59,12 @@ export declare function removeComponent(circuitKey: Key, componentKey: Key): voi
 export interface TransientComponentState {
   backendKey: Key
   ports: Array<PortTransientState>
-  bounds: Array<Location>
+  bounds: [Location, Location]
   componentValue?: string
 }
 
 export interface TransientWireState {
-  endpoints: Array<Location>
+  endpoints: [Location, Location]
   isHorizontal: boolean
   length: number
   value: string
