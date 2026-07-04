@@ -10,13 +10,13 @@ export declare function createCircuit(name: string): Key
 export interface CreateComponentArgs {
   circuitKey: Key
   componentType: string
+  label?: string
+  labelOrientation?: number
+  x: number
+  y: number
   bitsize?: number
   inputs?: number
   orientation?: number
-  label?: string
-  x: number
-  y: number
-  labelOrientation?: number
   constantValue?: string
   isInput?: boolean
   selsize?: number

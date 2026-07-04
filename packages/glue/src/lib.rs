@@ -297,13 +297,14 @@ pub fn print_circuit(circuit_key: JsKey) -> Result<String, napi::Error> {
 pub struct CreateComponentArgs {
     pub circuit_key: JsKey,
     pub component_type: String,
+    pub label: Option<String>,
+    pub label_orientation: Option<u8>,
+    pub x: u32,
+    pub y: u32,
+    
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
     pub orientation: Option<u8>,
-    pub label: Option<String>,
-    pub x: u32,
-    pub y: u32,
-    pub label_orientation: Option<u8>,
     pub constant_value: Option<String>,
     pub is_input: Option<bool>,
     pub selsize: Option<u8>,
