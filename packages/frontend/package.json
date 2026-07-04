@@ -10,8 +10,7 @@
         "make": "electron-forge make",
         "publish": "electron-forge publish",
         "format": "prettier --write .",
-        "lint": "eslint .",
-        "build-glue": "cd ../glue && pnpm run build"
+        "lint": "eslint ."
     },
     "keywords": [],
     "author": {
