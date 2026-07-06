@@ -1,9 +1,9 @@
 import { computed, reactive, ref, toRaw } from "vue";
 
-import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit } from "../types";
+import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit, Wire } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
-import { deleteViewState, placingComponent, selectComponent } from "./view";
-import { Key, Location } from 'circuitsim-glue'
+import { deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
+import { Key, Location } from "circuitsim-glue";
 
 export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -61,6 +61,28 @@ export function deleteComponent(frontendId: number) {
     if (!component) return;
     window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
     circuit.components.delete(frontendId);
+    updateState();
+}
+//wires have to be delted in batches
+export function deleteWires(ids: number[]) {
+    const circuit = circuits.get(currentSubcircuitId.value);
+    if (!circuit) return;
+    ids.forEach(wireId => {
+        const wire = circuit?.wires.at(wireId);
+        if (!wire) return;
+        window.api.core.removeWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
+
+    })
+    wireSelection.value.clear();
+    updateState();
+}
+export function addWires(wires: Wire[]) {
+    const circuit = circuits.get(currentSubcircuitId.value);
+    if (!circuit) return;
+    wires.forEach(wire => {
+        window.api.core.addWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
+    })
+    wireSelection.value.clear();
     updateState();
 }
 
@@ -139,10 +161,14 @@ export function updateState() {
     })
     currentSubcircuit.value.wires = transientWireState
 
-    console.log(currentSubcircuit.value)
+
+
+    console.log("______UPDATING STATE_____")
+    console.log(toRaw(currentSubcircuit.value))
     console.log("backend updates")
     console.log(transientComponentStates)
     console.log(transientWireState)
+    console.log("____________")
 }
 //TODO Update Circuit State
 export function generateFrontendId() {

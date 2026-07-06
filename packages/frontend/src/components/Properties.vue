@@ -4,7 +4,7 @@ import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circui
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
-import { selection } from "@/lib/store/view";
+import { componentSelection } from "@/lib/store/view";
 import { componentPropertiesMap } from "@/lib/types";
 
 const nameReset = ref(0);
@@ -40,7 +40,7 @@ const handidnesses = [
 ] as const;
 
 const selectedComponents = computed(() =>
-    [...selection.value].map((id) => currentSubcircuit.value.components.get(id))
+    [...componentSelection.value].map((id) => currentSubcircuit.value.components.get(id))
 );
 
 const sections = ["global", "circuit", "component"] as const;
@@ -167,7 +167,7 @@ const properties = computed(() => {
             <AccordionHeader>
 
                 {{ selectedComponents.length > 1 ? "Component Group" : (selectedComponents[0].label
-                    != "" ? selectedComponents[0].label : selectedComponents[0].type.toUpperCase())}}
+                    != "" ? selectedComponents[0].label : selectedComponents[0].type.toUpperCase()) }}
             </AccordionHeader>
 
             <!-- LABEL -->
@@ -184,13 +184,13 @@ const properties = computed(() => {
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <button v-for="option in orientations" :key="option.value" type="button"
                             class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].labelOrientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
                                 " @click="
-                            updateComponent(selectedComponents[0].frontendId, {
-                                labelOrientation: option.value,
-                            })
-                            ">
+                                    updateComponent(selectedComponents[0].frontendId, {
+                                        labelOrientation: option.value,
+                                    })
+                                    ">
                             {{ option.label }}
                         </button>
                     </div>
@@ -254,8 +254,8 @@ const properties = computed(() => {
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <button v-for="option in orientations" :key="option.value" type="button"
                             class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].orientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
                                 "
                             @click="selectedComponents.forEach(comp => { if (!comp) { return; } updateComponent(comp.frontendId, { orientation: Number(option.value) }) })">
                             {{ option.label }}
@@ -272,8 +272,8 @@ const properties = computed(() => {
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <button v-for="option in handidnesses" :key="option.value" type="button"
                             class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].handedness === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
                                 "
                             @click="selectedComponents.forEach(comp => { if (!comp) { return; } updateComponent(comp.frontendId, { handedness: Number(option.value) }) })">
                             {{ option.label }}

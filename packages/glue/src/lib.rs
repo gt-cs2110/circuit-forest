@@ -209,6 +209,20 @@ pub fn add_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow::R
     let result = circuit.add_wire(w);
     Ok(result.is_ok())
 }
+#[napi]
+
+/// Tries to remove the wire from the circuit, returning whether it was successful.
+pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow::Result<bool> {
+    let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
+
+    let Some(w) = Wire::from_endpoints(start.into(), end.into()) else {
+        return Ok(false);
+    };
+
+    let result = circuit.remove_wire(w);
+    Ok(result.is_ok())
+}
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
 

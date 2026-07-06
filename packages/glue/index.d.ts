@@ -58,6 +58,9 @@ export declare function propagate(circuitKey: Key): void
 
 export declare function removeComponent(circuitKey: Key, componentKey: Key): void
 
+/** Tries to remove the wire from the circuit, returning whether it was successful. */
+export declare function removeWire(circuitKey: Key, start: Location, end: Location): boolean
+
 export interface TransientComponentState {
   backendKey: Key
   ports: Array<PortTransientState>

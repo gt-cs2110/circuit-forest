@@ -1,11 +1,13 @@
-import { componentMap } from "@/components/circuitry";
-import type { Location, Subcircuit } from "@/lib/types";
+import { Location } from "circuitsim-glue";
 import { ComputedRef, Reactive, reactive } from "vue";
+
+import { componentMap } from "@/components/circuitry";
+import type { Subcircuit } from "@/lib/types";
 
 type Rect = { left: number; top: number; right: number; bottom: number };
 type Selectable = { id: number; bounds: Rect };
 
-export function useMarquee(subcircuit: Reactive<Subcircuit>, selection: ComputedRef<Set<number>>) {
+export function useMarquee(subcircuit: Reactive<Subcircuit>, componentSelection: ComputedRef<Set<number>>, wireSelection: ComputedRef<Set<number>>) {
     const marquee = reactive({
         active: false,
         start: { x: 0, y: 0 },
@@ -13,7 +15,7 @@ export function useMarquee(subcircuit: Reactive<Subcircuit>, selection: Computed
     });
 
     function startMarquee(worldX: number, worldY: number, additive: boolean) {
-        if (!additive) selection.value.clear();
+        if (!additive) {componentSelection.value.clear();wireSelection.value.clear();}
 
         marquee.active = true;
         marquee.start.x = worldX;
@@ -37,9 +39,14 @@ export function useMarquee(subcircuit: Reactive<Subcircuit>, selection: Computed
         // only if a drag actually happened
         if (rect.right - rect.left < 1 && rect.bottom - rect.top < 1) return;
 
-        for (const { id, bounds } of getSelectables(subcircuit)) {
+        for (const { id, bounds } of getComponentSelectables(subcircuit)) {
             if (rectsIntersect(rect, bounds)) {
-                selection.value.add(id);
+                componentSelection.value.add(id);
+            }
+        }
+        for (const { id, bounds } of getWireSelectables(subcircuit)) {
+            if (rectsIntersect(rect, bounds)) {
+                wireSelection.value.add(id);
             }
         }
     }
@@ -47,7 +54,7 @@ export function useMarquee(subcircuit: Reactive<Subcircuit>, selection: Computed
     return { marquee, startMarquee, updateMarquee, finalizeMarquee };
 }
 
-function getSelectables(subcircuit: Subcircuit): Selectable[] {
+function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
     return [...subcircuit.components].map(([id, comp]) => {
         const dims = componentMap[comp.type].getDimensions(comp);
         return {
@@ -60,6 +67,21 @@ function getSelectables(subcircuit: Subcircuit): Selectable[] {
             },
         };
     });
+    //TO DO add wire seleciton here
+}
+function getWireSelectables(subcircuit: Subcircuit): Selectable[]{
+    return [...subcircuit.wires].map((wire, id)=>{
+        return {
+            id, 
+            bounds: {
+                left:wire.endpoints[0].x,
+                right: wire.endpoints[1].x,
+                top:wire.endpoints[0].y,
+                bottom: wire.endpoints[1].y
+            }
+
+        }
+    })
 }
 
 function toBounds(a: Location, b: Location): Rect {

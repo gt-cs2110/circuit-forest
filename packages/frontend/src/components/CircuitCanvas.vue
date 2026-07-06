@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, toRaw, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
-import { addWire, deleteComponent, placeComponent, updateState } from "@/lib/store/circuit";
-import { clearSelection, getViewState, placingComponent, selection } from "@/lib/store/view";
+import { addWire, deleteComponent, deleteWires, placeComponent, updateState } from "@/lib/store/circuit";
+import { clearSelection, componentSelection, getViewState, placingComponent, wireSelection } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
 import { Subcircuit } from "@/lib/types";
 import { componentMap } from "./circuitry";
@@ -54,10 +54,12 @@ const { wheelZoom, keyboardZoom } = useZoom(
     (level) => (settings.scaleLevel = level),
     scale,
 );
-const { startDrag, updateDrag, stopDrag } = useDrag(props.subcircuit, selection);
+const { drag, startDrag, updateDrag, stopDrag } = useDrag(props.subcircuit, componentSelection, wireSelection);
+provide('dragState', drag);
 const { marquee, startMarquee, updateMarquee, finalizeMarquee } = useMarquee(
     props.subcircuit,
-    selection,
+    componentSelection,
+    wireSelection
 );
 const { tooltip, updateTooltip } = useTooltip();
 
@@ -127,10 +129,14 @@ function handleMouseMove(e: MouseEvent) {
 }
 function handleDelete(e: KeyboardEvent) {
     if (e.key === 'Backspace') {
-        if (selection.value.size > 0) {
-            selection.value.forEach((frontendId) => {
+        if (componentSelection.value.size + wireSelection.value.size > 0) {
+            //Delete all wires on backend manuall first, bc ids will not persits through updateState
+
+            componentSelection.value.forEach((frontendId) => {
                 deleteComponent(frontendId);
             });
+            deleteWires(wireSelection.value.keys().toArray())
+
         }
     }
 
@@ -145,7 +151,7 @@ function handleMouseUp(e: MouseEvent) {
     updatePan(e.clientX, e.clientY);
     updateDrag(world.x, world.y);
     stopPan();
-    stopDrag();
+    if (drag.active) stopDrag();
     stopWireDrag();
     finalizeMarquee();
 }
@@ -162,6 +168,8 @@ function handleComponentWireDrag(e: MouseEvent) {
         wireDrag.active = true;
         wireDrag.start.x = Math.round(world.x);
         wireDrag.start.y = Math.round(world.y);
+        wireDrag.middle.x = Math.round(world.x);
+        wireDrag.middle.y = Math.round(world.y);
         wireDrag.end.x = Math.round(world.x);
         wireDrag.end.y = Math.round(world.y);
     }
@@ -196,7 +204,6 @@ function updateWireDrag(e: MouseEvent) {
     const world = toWorld(e);
     world.x = Math.ceil(world.x);
     world.y = Math.floor(world.y);
-    console.log(Math.abs(wireDrag.start.x - world.x) + " " + Math.abs(wireDrag.start.y - world.y))
 
     if (wireDrag.start.x == world.x) {//we are only changing y direction
         wireDrag.multiDimension = false;
