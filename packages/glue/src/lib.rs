@@ -196,19 +196,18 @@ pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> anyhow::Res
         .context("Component removal failed")
 }
 
+/// Tries to add the wire to the circuit, returning whether it was successful.
 #[napi]
-pub fn add_wire(circuit_key: JsKey, wire: TransientWireState) -> anyhow::Result<()> {
+pub fn add_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow::Result<bool> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let (p, q) = wire.endpoints;
-    let w = Wire::from_endpoints(p.into(), q.into()).ok_or_else(|| {
-        anyhow!("Could not construct wire: Wire is not straight")
-    })?;
+    let Some(w) = Wire::from_endpoints(start.into(), end.into()) else {
+        return Ok(false);
+    };
 
-    circuit
-        .add_wire(w)
-        .context("Could not construct wire")
+    let result = circuit.add_wire(w);
+    Ok(result.is_ok())
 }
 
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit

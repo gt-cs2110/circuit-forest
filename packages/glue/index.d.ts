@@ -2,7 +2,8 @@
 /* eslint-disable */
 export declare function addComponent(args: CreateComponentArgs): Key
 
-export declare function addWire(circuitKey: Key, wire: TransientWireState): void
+/** Tries to add the wire to the circuit, returning whether it was successful. */
+export declare function addWire(circuitKey: Key, start: Location, end: Location): boolean
 
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(name: string): Key

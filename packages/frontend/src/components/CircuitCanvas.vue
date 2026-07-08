@@ -162,30 +162,28 @@ function handleComponentWireDrag(e: MouseEvent) {
         wireDrag.active = true;
         wireDrag.start.x = Math.round(world.x);
         wireDrag.start.y = Math.round(world.y);
+        wireDrag.end.x = Math.round(world.x);
+        wireDrag.end.y = Math.round(world.y);
     }
 }
 function stopWireDrag() {
-    if (!wireDrag.active) return
+    if (!wireDrag.active) return;
 
 
     //have to clone wireDrag bc its a vue reactive element so we can get the raw values
     let clonedWireDrag = structuredClone(toRaw(wireDrag));
 
-    let hDist = Math.abs(clonedWireDrag.end.x - clonedWireDrag.start.x);
-    let vDist = Math.abs(clonedWireDrag.end.y - clonedWireDrag.start.y);
-    if (clonedWireDrag.multiDimension) {
-        let firstWireIsHorizontal = wireDrag.middle.y == wireDrag.start.y;
-
-
-        addWire(clonedWireDrag.start, clonedWireDrag.middle, firstWireIsHorizontal ? hDist : vDist, firstWireIsHorizontal)
-        addWire(clonedWireDrag.middle, clonedWireDrag.end, !firstWireIsHorizontal ? hDist : vDist, !firstWireIsHorizontal)
-
+    let isEmpty = clonedWireDrag.end.x == clonedWireDrag.start.x
+        && clonedWireDrag.end.y == clonedWireDrag.start.y;
+    if (!isEmpty) {
+        if (clonedWireDrag.multiDimension) {
+            addWire(clonedWireDrag.start, clonedWireDrag.middle)
+            addWire(clonedWireDrag.middle, clonedWireDrag.end)
+        } else {
+            addWire(clonedWireDrag.start, clonedWireDrag.end);
+        }
     }
-    else {
-        let isHorizontal = wireDrag.end.y == wireDrag.start.y;
-        addWire(clonedWireDrag.start, clonedWireDrag.end, isHorizontal ? hDist : vDist, isHorizontal)
 
-    }
     wireDrag.active = false;
     wireDrag.multiDimension = false;
     wireDrag.start = { x: 0, y: 0 };

@@ -102,10 +102,9 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     placingComponent.value = null;
 }
-export function addWire(start: Location, end: Location, length: number, isHorizontal: boolean) {
+export function addWire(start: Location, end: Location) {
     console.log("adding")
-    console.log([start, end, length, isHorizontal])
-    console.log(window.api.core.addWire(currentSubcircuit.value.backendKey, { endpoints: [start, end], isHorizontal, length, value: "", issues: [] }))
+    console.log(window.api.core.addWire(currentSubcircuit.value.backendKey, start, end))
     updateState();
 }
 export function newSubcircuit(name?: string) {
