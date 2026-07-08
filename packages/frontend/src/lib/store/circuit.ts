@@ -70,7 +70,7 @@ export function deleteWires(ids: number[]) {
     ids.forEach(wireId => {
         const wire = circuit?.wires.at(wireId);
         if (!wire) return;
-        window.api.core.removeWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
+        window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(wire.endpoints));
 
     })
     wireSelection.value.clear();

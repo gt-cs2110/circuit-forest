@@ -398,15 +398,17 @@ impl WireSet {
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-        let mut frontier: Vec<_> = {
-            // Pick the first accessible endpoint on the wire where p is.
-            // If no wire exists, this will immediately terminate.
-            self.wires_at_coord(p)
+        // Pick a point on the graph to flood fill from.
+        //    If p is a wire endpoint or a port, we can start from p.
+        //    Otherwise, if p is on a wire, we can start from any of the endpoints on p.
+        // If no point can be found, we just give up.
+        let m_entry_point = match self.graph.contains_node(p.into()) {
+            true => Some(p.into()),
+            false => self.wires_at_coord(p)
                 .next()
                 .map(|w| MeshKey::from(w.endpoints()[0]))
-                .into_iter()
-                .collect()
         };
+        let mut frontier = Vec::from_iter(m_entry_point);
 
         while let Some(k) = frontier.pop() {
             let edges_to_flood: Vec<_> = self.graph.edges(k)
