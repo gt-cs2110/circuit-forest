@@ -66,7 +66,6 @@ computed(() => console.log(props.component))
 </script>
 
 <template>
-    ///Translation
     <g :transform="transform" @mousedown="handleMouseDown">
 
         <!-- <g :transform="rotate"> -->
