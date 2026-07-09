@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { CircuitComponent } from "@/lib/types";
+import { CircuitComponentProps } from "@/lib/types";
 
-const props = defineProps<{ component: CircuitComponent }>();
+defineProps<CircuitComponentProps>();
 </script>
 
 <template>

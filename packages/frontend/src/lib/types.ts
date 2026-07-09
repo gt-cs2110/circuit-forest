@@ -33,9 +33,13 @@ export type Port = Location & {
     issues?: string[];
 };
 
+export type CircuitComponentProps = {
+    component?: CircuitComponent;
+};
+
 export type ComponentMetadata = {
     displayName: string;
-    component: Component;
+    component: Component<CircuitComponentProps>;
     getDefaultDimensions: () => Dimensions;
     getDimensions: (component: CircuitComponent) => Dimensions;
     getDefaultPorts: () => Port[]; //Default Ports are only used for preview visualization before a component is created
