@@ -1,19 +1,19 @@
 import { TransientComponentState, TransientWireState, Location, Key } from "circuitsim-glue";
 import { Component } from "vue";
 
-export const gateTypes = ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"] as const;
-export const wiringTypes = ["constant"] as const;
-export const selectionTypes = ["mux", "demux", "decoder"];
-
 export const componentCategories = {
-    wiring: wiringTypes,
-    gates: gateTypes,
-    plexers: selectionTypes,
-};
-export type Dimensions = { width: number; height: number };
+    wiring: ["constant"],
+    gates: ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"],
+    plexers: ["mux", "demux", "decoder"],
+} as const;
+export type ComponentType = (typeof componentCategories)[keyof typeof componentCategories][number];
+export const componentTypes = [
+    ...componentCategories.wiring,
+    ...componentCategories.gates,
+    ...componentCategories.plexers,
+] as const satisfies readonly ComponentType[];
 
-export const componentTypes = [...gateTypes, ...wiringTypes];
-export type ComponentType = (typeof componentTypes)[number];
+export type Dimensions = { width: number; height: number };
 export const Orientation = {
     NORTH: 0,
 
@@ -72,29 +72,7 @@ export type Subcircuit = {
     wires: Wire[];
 };
 
-export const allTypes = [
-    "pin",
-    "constant",
-    "splitter",
-    "power",
-    "ground",
-    "tunnel",
-    "probe",
-    "mux",
-    "demux",
-    "decoder",
-    "text",
-    "subcircuit",
-    "not",
-    "buffer",
-    "and",
-    "or",
-    "nand",
-    "nor",
-    "xor",
-    "xnor",
-];
-
+// FIXME: This needs to use `ComponentType[]`, not `string[]` for types
 //Component Types gate, not, buffer, constant, pin, splitter, power ground, tunnel, probe, mux, demux, decode, text subcircuit
 const propertyGroups = [
     {
@@ -137,7 +115,8 @@ const propertyGroups = [
         properties: [],
     },
 ];
-//BUild a lookup map
+
+//Build a lookup map
 export const componentPropertiesMap: Record<string, string[]> = {};
 
 propertyGroups.forEach((group) => {
