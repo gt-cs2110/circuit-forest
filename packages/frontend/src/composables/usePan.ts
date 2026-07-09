@@ -1,22 +1,23 @@
-import type { Location } from "@/lib/types";
-import { reactive, ref } from "vue";
-import type { WritableComputedRef } from "vue";
+import type { Location } from "circuitsim-glue";
+import { ref, type Ref } from "vue";
 
-export function usePan(offset: WritableComputedRef<Location>) {
+export function usePan(offset: Ref<Location>) {
     const isPanning = ref(false);
-    const panStart = reactive({ x: 0, y: 0 });
+    const panStart = ref({ x: 0, y: 0 });
 
     function startPan(clientX: number, clientY: number) {
         isPanning.value = true;
-        panStart.x = clientX - offset.value.x;
-        panStart.y = clientY - offset.value.y;
+        panStart.value = {
+            x: clientX - offset.value.x,
+            y: clientY - offset.value.y,
+        };
     }
 
     function updatePan(clientX: number, clientY: number) {
         if (!isPanning.value) return;
         offset.value = {
-            x: clientX - panStart.x,
-            y: clientY - panStart.y,
+            x: clientX - panStart.value.x,
+            y: clientY - panStart.value.y,
         };
     }
 

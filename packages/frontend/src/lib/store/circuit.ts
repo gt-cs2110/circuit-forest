@@ -1,4 +1,4 @@
-import { computed, reactive, ref, toRaw } from "vue";
+import { computed, ref, toRaw } from "vue";
 
 import {
     CircuitComponent,
@@ -12,9 +12,9 @@ import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
 import { Key, Location } from "circuitsim-glue";
 
-export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
+export const circuits = ref<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
-export const currentSubcircuit = computed(() => circuits.get(currentSubcircuitId.value)!);
+export const currentSubcircuit = computed(() => circuits.value.get(currentSubcircuitId.value)!);
 updateState();
 let nextFrontendId = 100;
 
@@ -62,7 +62,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
 }
 
 export function deleteComponent(frontendId: number) {
-    const circuit = circuits.get(currentSubcircuitId.value);
+    const circuit = circuits.value.get(currentSubcircuitId.value);
     if (!circuit) return;
     const component = circuit?.components.get(frontendId);
     if (!component) return;
@@ -72,7 +72,7 @@ export function deleteComponent(frontendId: number) {
 }
 //wires have to be delted in batches
 export function deleteWires(ids: number[]) {
-    const circuit = circuits.get(currentSubcircuitId.value);
+    const circuit = circuits.value.get(currentSubcircuitId.value);
     if (!circuit) return;
     ids.forEach((wireId) => {
         const wire = circuit?.wires.at(wireId);
@@ -83,7 +83,7 @@ export function deleteWires(ids: number[]) {
     updateState();
 }
 export function addWires(wires: Wire[]) {
-    const circuit = circuits.get(currentSubcircuitId.value);
+    const circuit = circuits.value.get(currentSubcircuitId.value);
     if (!circuit) return;
     wires.forEach((wire) => {
         window.api.core.addWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
@@ -133,16 +133,19 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 }
 export function addWire(start: Location, end: Location) {
     console.log("adding");
-    console.log(window.api.core.addWire(currentSubcircuit.value.backendKey, start, end));
+    console.log(
+        window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw(start), toRaw(end)),
+    );
     updateState();
 }
 export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
-    const backendKey = window.api.core.createCircuit(name ?? "Circuit" + circuits.size);
-    circuits.set(frontendId, {
+    name ??= "Circuit" + circuits.value.size;
+    const backendKey = window.api.core.createCircuit(name);
+    circuits.value.set(frontendId, {
         frontendId,
         backendKey,
-        name: name ?? "Circuit" + circuits.size,
+        name,
         components: new Map(),
         wires: [],
     });
@@ -151,7 +154,7 @@ export function newSubcircuit(name?: string) {
 
 export function deleteSubcircuit(frontendId: number) {
     //TODO REMOVE on backend. TBH removing circuits is only an issue if you are using subcircuits, but honestly that could be checked and prevented in frontend
-    circuits.delete(frontendId);
+    circuits.value.delete(frontendId);
     deleteViewState(frontendId);
     updateState();
 }

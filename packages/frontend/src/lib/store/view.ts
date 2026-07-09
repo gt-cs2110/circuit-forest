@@ -1,5 +1,5 @@
 import type { Location } from "circuitsim-glue";
-import { computed, reactive, ref } from "vue";
+import { computed, ref } from "vue";
 
 import type { ComponentType } from "../types";
 import { currentSubcircuitId } from "./circuit";
@@ -10,21 +10,21 @@ type CircuitViewState = {
     offset: Location; // screen coords
 };
 
-const viewStates = reactive<Map<number, CircuitViewState>>(new Map());
+const viewStates = ref<Map<number, CircuitViewState>>(new Map());
 
 export function getViewState(circuitFrontendId: number): CircuitViewState {
-    if (!viewStates.has(circuitFrontendId)) {
-        viewStates.set(circuitFrontendId, {
+    if (!viewStates.value.has(circuitFrontendId)) {
+        viewStates.value.set(circuitFrontendId, {
             componentSelection: new Set(),
             wireSelection: new Set(),
             offset: { x: 0, y: 0 },
         });
     }
-    return viewStates.get(circuitFrontendId)!;
+    return viewStates.value.get(circuitFrontendId)!;
 }
 
 export function deleteViewState(circuitFrontendId: number) {
-    viewStates.delete(circuitFrontendId);
+    viewStates.value.delete(circuitFrontendId);
 }
 
 export const currentViewState = computed(() => getViewState(currentSubcircuitId.value));

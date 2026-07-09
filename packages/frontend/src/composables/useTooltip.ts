@@ -1,7 +1,7 @@
-import { reactive } from "vue";
+import { ref } from "vue";
 
 export function useTooltip() {
-    const tooltip = reactive({
+    const tooltip = ref({
         value: null as string | null,
         x: 0,
         y: 0,
@@ -16,11 +16,13 @@ export function useTooltip() {
 
         if (element.dataset.tooltip) {
             const rect = element.getBoundingClientRect();
-            tooltip.x = rect.x + rect.width / 2;
-            tooltip.y = rect.y + rect.height / 2;
-            tooltip.value = element.dataset.tooltip;
+            tooltip.value = {
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2,
+                value: element.dataset.tooltip,
+            };
         } else {
-            tooltip.value = null;
+            tooltip.value.value = null;
         }
     }
 

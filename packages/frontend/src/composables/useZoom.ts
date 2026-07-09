@@ -1,12 +1,12 @@
-import type { Location } from "@/lib/types";
-import type { ComputedRef, WritableComputedRef } from "vue";
+import type { Location } from "circuitsim-glue";
+import type { Ref } from "vue";
 
 export function useZoom(
-    offset: WritableComputedRef<Location>,
-    mousePosition: { x: number; y: number },
+    offset: Ref<Location>,
+    mousePosition: Ref<{ x: number; y: number }>,
     getScaleLevel: () => number,
     setScaleLevel: (level: number) => void,
-    scale: ComputedRef<number>,
+    scale: Ref<number>,
 ) {
     function zoom(newScaleLevel: number) {
         newScaleLevel = Math.min(Math.max(-5, newScaleLevel), 10);
@@ -14,13 +14,13 @@ export function useZoom(
         const oldScale = scale.value;
         const newScale = Math.pow(1.2, newScaleLevel);
 
-        const worldX = (mousePosition.x - offset.value.x) / oldScale;
-        const worldY = (mousePosition.y - offset.value.y) / oldScale;
+        const worldX = (mousePosition.value.x - offset.value.x) / oldScale;
+        const worldY = (mousePosition.value.y - offset.value.y) / oldScale;
 
         setScaleLevel(newScaleLevel);
         offset.value = {
-            x: mousePosition.x - worldX * newScale,
-            y: mousePosition.y - worldY * newScale,
+            x: mousePosition.value.x - worldX * newScale,
+            y: mousePosition.value.y - worldY * newScale,
         };
     }
 

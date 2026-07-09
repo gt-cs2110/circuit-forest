@@ -4,13 +4,14 @@ import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/s
 import { CircuitComponent } from "@/lib/types";
 import { componentMap } from ".";
 import { computed, inject } from "vue";
+import type { useDrag } from "@/composables/useDrag";
 
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
     dragstart: [e: MouseEvent];
     wiredrag: [e: MouseEvent];
 }>();
-const dragState = inject("dragState");
+const dragState = inject<ReturnType<typeof useDrag>["drag"]>("dragState");
 
 function handleMouseDown(e: MouseEvent) {
     console.log(e);
@@ -73,14 +74,12 @@ const transform = computed(() => {
 //The Ports and bounding box rely on the backend for their positiosning, thus while a draggin is happening they arent being updated until the drag is complete and a backend update is executed
 //Thus we need to artifically make it seems like they are moving by applying a transformatino if a drag is actie
 const boundingBoxAndPortTransform = computed(() => {
-    if (dragState.active && dragState.initialComponentPositions.has(props.component.frontendId)) {
-        let start_pos = dragState.initialComponentPositions.get(props.component.frontendId);
-        return ` translate(${(props.component.x - start_pos.x) * GRID_SIZE}, ${(props.component.y - start_pos.y) * GRID_SIZE})`;
-    } else {
-        return "";
-    }
+    if (!dragState || !dragState.value.active) return "";
+
+    let startPos = dragState.value.initialComponentPositions.get(props.component.frontendId);
+    if (!startPos) return "";
+    return `translate(${(props.component.x - startPos.x) * GRID_SIZE}, ${(props.component.y - startPos.y) * GRID_SIZE})`;
 });
-computed(() => console.log(props.component));
 </script>
 
 <template>

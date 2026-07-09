@@ -1,14 +1,14 @@
 import { addWires, deleteWires, updateComponent } from "@/lib/store/circuit";
 import type { Subcircuit } from "@/lib/types";
 import { Location, TransientWireState } from "circuitsim-glue";
-import { ComputedRef, Reactive, reactive } from "vue";
+import { Ref, ref } from "vue";
 
 export function useDrag(
-    subcircuit: Reactive<Subcircuit>,
-    componentSelection: ComputedRef<Set<number>>,
-    wireSelection: ComputedRef<Set<number>>,
+    subcircuit: Subcircuit,
+    componentSelection: Ref<Set<number>>,
+    wireSelection: Ref<Set<number>>,
 ) {
-    const drag = reactive({
+    const drag = ref({
         active: false,
         initialMouse: { x: 0, y: 0 } as Location,
         initialComponentPositions: new Map<number, Location>(),
@@ -16,18 +16,20 @@ export function useDrag(
     });
 
     function startDrag(worldX: number, worldY: number) {
-        drag.active = true;
-        drag.initialMouse = { x: worldX, y: worldY };
-        drag.initialComponentPositions.clear();
-        drag.initialWirePositions.clear();
+        drag.value.active = true;
+        drag.value.initialMouse = { x: worldX, y: worldY };
+        drag.value.initialComponentPositions.clear();
+        drag.value.initialWirePositions.clear();
         for (const id of componentSelection.value) {
             const comp = subcircuit.components.get(id);
-            if (comp) drag.initialComponentPositions.set(id, { x: comp.x, y: comp.y });
+            if (comp) {
+                drag.value.initialComponentPositions.set(id, { x: comp.x, y: comp.y });
+            }
         }
         for (const id of wireSelection.value) {
             const wire = subcircuit.wires.at(id);
             if (wire)
-                drag.initialWirePositions.set(id, {
+                drag.value.initialWirePositions.set(id, {
                     x: wire.endpoints[0].x,
                     y: wire.endpoints[0].y,
                 });
@@ -35,12 +37,12 @@ export function useDrag(
     }
 
     function updateDrag(worldX: number, worldY: number) {
-        if (!drag.active) return;
+        if (!drag.value.active) return;
 
-        const deltaX = Math.round(worldX - drag.initialMouse.x);
-        const deltaY = Math.round(worldY - drag.initialMouse.y);
+        const deltaX = Math.round(worldX - drag.value.initialMouse.x);
+        const deltaY = Math.round(worldY - drag.value.initialMouse.y);
 
-        for (const [id, initial] of drag.initialComponentPositions) {
+        for (const [id, initial] of drag.value.initialComponentPositions) {
             //Update Frontend
             const comp = subcircuit.components.get(id);
             if (!comp) continue;
@@ -48,7 +50,7 @@ export function useDrag(
             comp.y = Math.max(initial.y + deltaY, 0);
             //updateComponent(comp.frontendId, {x:comp.x, y:comp.y})
         }
-        for (const [id, initial] of drag.initialWirePositions) {
+        for (const [id, initial] of drag.value.initialWirePositions) {
             //Update Frontend
             const wire = subcircuit.wires.at(id);
             if (!wire) continue;
@@ -66,8 +68,8 @@ export function useDrag(
     }
 
     function stopDrag() {
-        if (!drag.active) return;
-        const newWires = drag.initialWirePositions
+        if (!drag.value.active) return;
+        const newWires = drag.value.initialWirePositions
             .keys()
             .map((index) => {
                 const wireData = JSON.parse(JSON.stringify(subcircuit.wires.at(index)));
@@ -76,7 +78,7 @@ export function useDrag(
             .toArray();
 
         //return old wires to old positions
-        drag.initialWirePositions.forEach((start, index) => {
+        drag.value.initialWirePositions.forEach((start, index) => {
             const wire = subcircuit.wires.at(index);
             if (!wire) return;
             wire.endpoints[0].x = start.x;
@@ -89,12 +91,12 @@ export function useDrag(
                 wire.endpoints[1].y = wire.endpoints[0].y + wire.length;
             }
         });
-        deleteWires(drag.initialWirePositions.keys().toArray());
+        deleteWires(drag.value.initialWirePositions.keys().toArray());
         console.log("Adding Wires: ", newWires);
         addWires(newWires);
 
-        drag.active = false;
-        for (const [id, _] of drag.initialComponentPositions) {
+        drag.value.active = false;
+        for (const [id] of drag.value.initialComponentPositions) {
             //Update Frontend
             const comp = subcircuit.components.get(id);
             if (!comp) continue;

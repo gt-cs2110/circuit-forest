@@ -1,15 +1,6 @@
 <script setup lang="ts">
-import {
-    computed,
-    nextTick,
-    onMounted,
-    onUnmounted,
-    provide,
-    reactive,
-    ref,
-    toRaw,
-    watch,
-} from "vue";
+import type { Location } from "circuitsim-glue";
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
     addWire,
@@ -57,9 +48,9 @@ const offset = computed({
 });
 
 // container coordinates
-const mousePosition = reactive({ x: 0, y: 0 });
+const mousePosition = ref({ x: 0, y: 0 });
 
-const wireDrag = reactive({
+const wireDrag = ref({
     active: false,
     multiDimension: false,
     start: { x: 0, y: 0 },
@@ -72,8 +63,8 @@ const { isPanning, startPan, updatePan, stopPan } = usePan(offset);
 const { wheelZoom, keyboardZoom } = useZoom(
     offset,
     mousePosition,
-    () => settings.scaleLevel,
-    (level) => (settings.scaleLevel = level),
+    () => settings.value.scaleLevel,
+    (level) => (settings.value.scaleLevel = level),
     scale,
 );
 const { drag, startDrag, updateDrag, stopDrag } = useDrag(
@@ -90,8 +81,8 @@ const { marquee, startMarquee, updateMarquee, finalizeMarquee } = useMarquee(
 const { tooltip, updateTooltip } = useTooltip();
 
 const marqueeStyle = computed(() => {
-    const a = worldToContainer(marquee.start.x, marquee.start.y);
-    const b = worldToContainer(marquee.current.x, marquee.current.y);
+    const a = worldToContainer(marquee.value.start.x, marquee.value.start.y);
+    const b = worldToContainer(marquee.value.current.x, marquee.value.current.y);
     return {
         left: Math.min(a.x, b.x) + "px",
         top: Math.min(a.y, b.y) + "px",
@@ -105,25 +96,23 @@ function toWorld(e: MouseEvent) {
     return containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
 }
 
-const placingComponentPosition = reactive({ x: 0 as number | null, y: 0 as number | null });
+const placingComponentPosition = ref<Location | null>(null);
 
 watch(placingComponent, () => {
-    placingComponentPosition.x = null;
-    placingComponentPosition.y = null;
+    placingComponentPosition.value = null;
 });
 
 watch(mousePosition, (mouse) => {
     if (!placingComponent.value) {
         return;
     }
+
     const metadata = componentMap[placingComponent.value];
     const dimensions = metadata?.getDefaultDimensions() || { width: 1, height: 1 };
-    placingComponentPosition.x = Math.floor(
-        (mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2,
-    );
-    placingComponentPosition.y = Math.floor(
-        (mouse.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2,
-    );
+    placingComponentPosition.value = {
+        x: Math.floor((mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2),
+        y: Math.floor((mouse.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2),
+    };
 });
 
 function handleMouseDown(e: MouseEvent) {
@@ -134,13 +123,17 @@ function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
 
     const world = toWorld(e);
-    if (!wireDrag.active) startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
+    if (!wireDrag.value.active) {
+        startMarquee(world.x, world.y, e.shiftKey || e.metaKey);
+    }
 }
 
 function handleMouseMove(e: MouseEvent) {
     const rect = containerRef.value!.getBoundingClientRect();
-    mousePosition.x = e.clientX - rect.left;
-    mousePosition.y = e.clientY - rect.top;
+    mousePosition.value = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+    };
 
     const world = toWorld(e);
 
@@ -165,14 +158,14 @@ function handleDelete(e: KeyboardEvent) {
 
 function handleMouseUp(e: MouseEvent) {
     const rect = containerRef.value!.getBoundingClientRect();
-    mousePosition.x = e.clientX - rect.left;
-    mousePosition.y = e.clientY - rect.top;
+    mousePosition.value.x = e.clientX - rect.left;
+    mousePosition.value.y = e.clientY - rect.top;
     const world = toWorld(e);
 
     updatePan(e.clientX, e.clientY);
     updateDrag(world.x, world.y);
     stopPan();
-    if (drag.active) stopDrag();
+    if (drag.value.active) stopDrag();
     stopWireDrag();
     finalizeMarquee();
 }
@@ -185,76 +178,78 @@ function handleComponentWireDrag(e: MouseEvent) {
     console.log("starting wire drag");
     const world = toWorld(e);
 
-    if (!wireDrag.active) {
-        wireDrag.active = true;
-        wireDrag.start.x = Math.round(world.x);
-        wireDrag.start.y = Math.round(world.y);
-        wireDrag.middle.x = Math.round(world.x);
-        wireDrag.middle.y = Math.round(world.y);
-        wireDrag.end.x = Math.round(world.x);
-        wireDrag.end.y = Math.round(world.y);
+    if (!wireDrag.value.active) {
+        let startPoint: Location = { x: Math.round(world.x), y: Math.round(world.y) };
+        wireDrag.value = {
+            active: true,
+            multiDimension: false,
+            start: startPoint,
+            middle: startPoint,
+            end: startPoint,
+        };
     }
 }
 function stopWireDrag() {
-    if (!wireDrag.active) return;
+    if (!wireDrag.value.active) return;
 
-    //have to clone wireDrag bc its a vue reactive element so we can get the raw values
-    let clonedWireDrag = structuredClone(toRaw(wireDrag));
-
-    let isEmpty =
-        clonedWireDrag.end.x == clonedWireDrag.start.x &&
-        clonedWireDrag.end.y == clonedWireDrag.start.y;
+    let drag = toRaw(wireDrag);
+    let isEmpty = drag.value.end.x == drag.value.start.x && drag.value.end.y == drag.value.start.y;
     if (!isEmpty) {
-        if (clonedWireDrag.multiDimension) {
-            addWire(clonedWireDrag.start, clonedWireDrag.middle);
-            addWire(clonedWireDrag.middle, clonedWireDrag.end);
+        if (drag.value.multiDimension) {
+            addWire(drag.value.start, drag.value.middle);
+            addWire(drag.value.middle, drag.value.end);
         } else {
-            addWire(clonedWireDrag.start, clonedWireDrag.end);
+            addWire(drag.value.start, drag.value.end);
         }
     }
 
-    wireDrag.active = false;
-    wireDrag.multiDimension = false;
-    wireDrag.start = { x: 0, y: 0 };
-    wireDrag.end = { x: 0, y: 0 };
-    wireDrag.middle = { x: 0, y: 0 };
+    wireDrag.value = {
+        active: false,
+        multiDimension: false,
+        start: { x: 0, y: 0 },
+        middle: { x: 0, y: 0 },
+        end: { x: 0, y: 0 },
+    };
     updateState();
 }
 function updateWireDrag(e: MouseEvent) {
-    if (!wireDrag.active) return;
+    if (!wireDrag.value.active) return;
     const world = toWorld(e);
     world.x = Math.ceil(world.x);
     world.y = Math.floor(world.y);
 
-    if (wireDrag.start.x == world.x) {
-        //we are only changing y direction
-        wireDrag.multiDimension = false;
-        wireDrag.end = world;
-    } else if (wireDrag.start.y == world.y) //we are only changing x direciotn
-    {
-        wireDrag.multiDimension = false;
-        wireDrag.end = world;
+    if (wireDrag.value.start.x == world.x) {
+        // Only changing y direction
+        wireDrag.value.multiDimension = false;
+        wireDrag.value.end = world;
+    } else if (wireDrag.value.start.y == world.y) {
+        // Only changing x direction
+        wireDrag.value.multiDimension = false;
+        wireDrag.value.end = world;
     } else {
-        //the dimension with largest delta becomes the first line
-        if (
-            (!wireDrag.multiDimension &&
-                Math.abs(wireDrag.start.x - world.x) > Math.abs(wireDrag.start.y - world.y)) ||
-            (wireDrag.multiDimension && wireDrag.middle.y == wireDrag.start.y)
-        ) {
-            //we choose horizontal to be the first line
-            wireDrag.middle.x = world.x;
-            wireDrag.middle.y = wireDrag.start.y;
-            wireDrag.end.x = world.x;
-            wireDrag.end.y = world.y;
-            wireDrag.multiDimension = true;
-        } else {
-            //we choose vertical to be the first line
+        // Line with largest delta becomes first line
+        let horizDelta = Math.abs(wireDrag.value.start.x - world.x);
+        let vertDelta = Math.abs(wireDrag.value.start.y - world.y);
+        let horizFirst = wireDrag.value.multiDimension
+            ? wireDrag.value.middle.y == wireDrag.value.start.y
+            : horizDelta > vertDelta;
 
-            wireDrag.middle.y = world.y;
-            wireDrag.middle.x = wireDrag.start.x;
-            wireDrag.end.y = world.y;
-            wireDrag.end.x = world.x;
-            wireDrag.multiDimension = true;
+        if (horizFirst) {
+            // Horizontal is largest delta, set horizontal as first line
+            wireDrag.value = {
+                ...wireDrag.value,
+                middle: { x: world.x, y: wireDrag.value.start.y },
+                end: world,
+                multiDimension: true,
+            };
+        } else {
+            // Vertical is largest delta, set vertical as first line
+            wireDrag.value = {
+                ...wireDrag.value,
+                middle: { x: wireDrag.value.start.x, y: world.y },
+                end: world,
+                multiDimension: true,
+            };
         }
     }
 }
@@ -334,11 +329,7 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
             />
 
             <g
-                v-if="
-                    placingComponent &&
-                    placingComponentPosition.x !== null &&
-                    placingComponentPosition.y !== null
-                "
+                v-if="placingComponent && placingComponentPosition !== null"
                 opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="

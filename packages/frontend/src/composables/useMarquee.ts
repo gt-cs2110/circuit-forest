@@ -1,5 +1,5 @@
 import { Location } from "circuitsim-glue";
-import { ComputedRef, Reactive, reactive } from "vue";
+import { Ref, ref } from "vue";
 
 import { componentMap } from "@/components/circuitry";
 import type { Subcircuit } from "@/lib/types";
@@ -8,11 +8,11 @@ type Rect = { left: number; top: number; right: number; bottom: number };
 type Selectable = { id: number; bounds: Rect };
 
 export function useMarquee(
-    subcircuit: Reactive<Subcircuit>,
-    componentSelection: ComputedRef<Set<number>>,
-    wireSelection: ComputedRef<Set<number>>,
+    subcircuit: Subcircuit,
+    componentSelection: Ref<Set<number>>,
+    wireSelection: Ref<Set<number>>,
 ) {
-    const marquee = reactive({
+    const marquee = ref({
         active: false,
         start: { x: 0, y: 0 },
         current: { x: 0, y: 0 },
@@ -24,24 +24,26 @@ export function useMarquee(
             wireSelection.value.clear();
         }
 
-        marquee.active = true;
-        marquee.start.x = worldX;
-        marquee.start.y = worldY;
-        marquee.current.x = worldX;
-        marquee.current.y = worldY;
+        marquee.value = {
+            active: true,
+            start: { x: worldX, y: worldY },
+            current: { x: worldX, y: worldY },
+        };
     }
 
     function updateMarquee(worldX: number, worldY: number) {
-        if (!marquee.active) return;
-        marquee.current.x = worldX;
-        marquee.current.y = worldY;
+        if (!marquee.value.active) return;
+        marquee.value.current = {
+            x: worldX,
+            y: worldY,
+        };
     }
 
     function finalizeMarquee() {
-        if (!marquee.active) return;
-        marquee.active = false;
+        if (!marquee.value.active) return;
+        marquee.value.active = false;
 
-        const rect = toBounds(marquee.start, marquee.current);
+        const rect = toBounds(marquee.value.start, marquee.value.current);
 
         // only if a drag actually happened
         if (rect.right - rect.left < 1 && rect.bottom - rect.top < 1) return;

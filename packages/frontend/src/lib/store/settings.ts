@@ -1,11 +1,11 @@
-import { computed, reactive, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
-export const settings = reactive({
+export const settings = ref({
     scaleLevel: 0,
     globalBitsize: 1,
 });
 export const scale = computed(() => {
-    return Math.pow(1.2, settings.scaleLevel);
+    return Math.pow(1.2, settings.value.scaleLevel);
 });
 
 export const themes = ["light", "light-contrast", "dark", "dark-contrast"] as const;

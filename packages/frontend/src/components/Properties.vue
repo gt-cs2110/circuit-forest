@@ -17,7 +17,7 @@ const subcircuitName = computed({
             toast.error("Subcircuit name is required!");
             nameReset.value++;
             return;
-        } else if ([...circuits.values()].some((subcircuit) => subcircuit.name === name)) {
+        } else if ([...circuits.value.values()].some((subcircuit) => subcircuit.name === name)) {
             toast.error("A subcircuit with this name already exists!");
             nameReset.value++;
             return;

@@ -25,10 +25,10 @@ onBeforeMount(() => {
 
 const sliderValue = computed({
     get() {
-        return [settings.scaleLevel];
+        return [settings.value.scaleLevel];
     },
     set(value) {
-        settings.scaleLevel = value[0];
+        settings.value.scaleLevel = value[0];
     },
 });
 
