@@ -52,10 +52,7 @@ const mousePosition = ref({ x: 0, y: 0 });
 
 const wireDrag = ref({
     active: false,
-    multiDimension: false,
-    start: { x: 0, y: 0 },
-    middle: { x: 0, y: 0 },
-    end: { x: 0, y: 0 },
+    points: [] as Location[],
 });
 
 const { containerToWorld, worldToContainer } = useCoordinates(offset, scale);
@@ -182,10 +179,7 @@ function handleComponentWireDrag(e: MouseEvent) {
         let startPoint: Location = { x: Math.round(world.x), y: Math.round(world.y) };
         wireDrag.value = {
             active: true,
-            multiDimension: false,
-            start: startPoint,
-            middle: startPoint,
-            end: startPoint,
+            points: [startPoint],
         };
     }
 }
@@ -193,22 +187,17 @@ function stopWireDrag() {
     if (!wireDrag.value.active) return;
 
     let drag = toRaw(wireDrag);
-    let isEmpty = drag.value.end.x == drag.value.start.x && drag.value.end.y == drag.value.start.y;
-    if (!isEmpty) {
-        if (drag.value.multiDimension) {
-            addWire(drag.value.start, drag.value.middle);
-            addWire(drag.value.middle, drag.value.end);
-        } else {
-            addWire(drag.value.start, drag.value.end);
+    if (drag.value.points.length >= 2) {
+        for (let i = 0; i < drag.value.points.length - 1; i++) {
+            let start = drag.value.points[i];
+            let end = drag.value.points[i + 1];
+            addWire(start, end);
         }
     }
 
     wireDrag.value = {
         active: false,
-        multiDimension: false,
-        start: { x: 0, y: 0 },
-        middle: { x: 0, y: 0 },
-        end: { x: 0, y: 0 },
+        points: [],
     };
     updateState();
 }
@@ -218,39 +207,22 @@ function updateWireDrag(e: MouseEvent) {
     world.x = Math.ceil(world.x);
     world.y = Math.floor(world.y);
 
-    if (wireDrag.value.start.x == world.x) {
-        // Only changing y direction
-        wireDrag.value.multiDimension = false;
-        wireDrag.value.end = world;
-    } else if (wireDrag.value.start.y == world.y) {
-        // Only changing x direction
-        wireDrag.value.multiDimension = false;
-        wireDrag.value.end = world;
+    let start = wireDrag.value.points.at(0);
+    if (!start) return;
+    if (start.x === world.x || start.y === world.y) {
+        // If matching straight, just enforce straightness
+        wireDrag.value.points = [start, world];
     } else {
+        let multiDimension = wireDrag.value.points.length > 2;
         // Line with largest delta becomes first line
-        let horizDelta = Math.abs(wireDrag.value.start.x - world.x);
-        let vertDelta = Math.abs(wireDrag.value.start.y - world.y);
-        let horizFirst = wireDrag.value.multiDimension
-            ? wireDrag.value.middle.y == wireDrag.value.start.y
-            : horizDelta > vertDelta;
+        let horizDelta = Math.abs(start.x - world.x);
+        let vertDelta = Math.abs(start.y - world.y);
+        let horizFirst = multiDimension
+            ? wireDrag.value.points[1].y == start.y // preserve current
+            : horizDelta > vertDelta; // pick whichever is growing out further
 
-        if (horizFirst) {
-            // Horizontal is largest delta, set horizontal as first line
-            wireDrag.value = {
-                ...wireDrag.value,
-                middle: { x: world.x, y: wireDrag.value.start.y },
-                end: world,
-                multiDimension: true,
-            };
-        } else {
-            // Vertical is largest delta, set vertical as first line
-            wireDrag.value = {
-                ...wireDrag.value,
-                middle: { x: wireDrag.value.start.x, y: world.y },
-                end: world,
-                multiDimension: true,
-            };
-        }
+        let middle = horizFirst ? { x: world.x, y: start.y } : { x: start.x, y: world.y };
+        wireDrag.value.points = [start, middle, world];
     }
 }
 
@@ -346,36 +318,19 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
             <g v-for="(wire, i) in subcircuit.wires" :key="i">
                 <Wire :wire @wiredrag="handleComponentWireDrag" />
             </g>
-            <line
-                v-if="wireDrag.active && !wireDrag.multiDimension"
-                :x1="wireDrag.start.x * GRID_SIZE"
-                :y1="wireDrag.start.y * GRID_SIZE"
-                :x2="wireDrag.end.x * GRID_SIZE"
-                :y2="wireDrag.end.y * GRID_SIZE"
-                stroke="black"
-                stroke-width="2"
-                stroke-linecap="round"
-            />
-            <line
-                v-if="wireDrag.active && wireDrag.multiDimension"
-                :x1="wireDrag.start.x * GRID_SIZE"
-                :y1="wireDrag.start.y * GRID_SIZE"
-                :x2="wireDrag.middle.x * GRID_SIZE"
-                :y2="wireDrag.middle.y * GRID_SIZE"
-                stroke="black"
-                stroke-width="2"
-                stroke-linecap="round"
-            />
-            <line
-                v-if="wireDrag.active && wireDrag.multiDimension"
-                :x1="wireDrag.middle.x * GRID_SIZE"
-                :y1="wireDrag.middle.y * GRID_SIZE"
-                :x2="wireDrag.end.x * GRID_SIZE"
-                :y2="wireDrag.end.y * GRID_SIZE"
-                stroke="black"
-                stroke-width="2"
-                stroke-linecap="round"
-            />
+            <template v-if="wireDrag.active">
+                <line
+                    v-for="(point, i) in wireDrag.points.slice(0, -1)"
+                    :key="i"
+                    :x1="point.x * GRID_SIZE"
+                    :y1="point.y * GRID_SIZE"
+                    :x2="wireDrag.points[i + 1].x * GRID_SIZE"
+                    :y2="wireDrag.points[i + 1].y * GRID_SIZE"
+                    stroke="black"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                />
+            </template>
         </svg>
 
         <div
