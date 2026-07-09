@@ -54,9 +54,9 @@ function handleClick(e: MouseEvent) {
         stroke-width="2"
         stroke-linecap="round"
         :color="
-            wire.value.includes('Z')
+            wire.value.includes('X')
                 ? 'rgb(255,0,0)'
-                : wire.value.includes('X')
+                : wire.value.includes('Z')
                   ? 'rgb(0,0,255)'
                   : wire.value.includes('1')
                     ? 'rgb(0,255,0)'
