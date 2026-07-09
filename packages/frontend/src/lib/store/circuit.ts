@@ -1,11 +1,18 @@
 import { computed, reactive, ref, toRaw } from "vue";
 
-import { CircuitComponent, ComponentType, Handedness, Orientation, Subcircuit, Wire } from "../types";
+import {
+    CircuitComponent,
+    ComponentType,
+    Handedness,
+    Orientation,
+    Subcircuit,
+    Wire,
+} from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
 import { Key, Location } from "circuitsim-glue";
 
-export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit());//mapping from frontend id to subcircuit
+export const circuits = reactive<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
 export const currentSubcircuit = computed(() => circuits.get(currentSubcircuitId.value)!);
 updateState();
@@ -48,7 +55,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
         state.backendKey = window.api.core.addComponent({
             ...toRaw(component),
             circuitKey: currentSubcircuit.value.backendKey,
-            componentType: String(component.type).toUpperCase()
+            componentType: String(component.type).toUpperCase(),
         });
     }
     updateState();
@@ -67,21 +74,20 @@ export function deleteComponent(frontendId: number) {
 export function deleteWires(ids: number[]) {
     const circuit = circuits.get(currentSubcircuitId.value);
     if (!circuit) return;
-    ids.forEach(wireId => {
+    ids.forEach((wireId) => {
         const wire = circuit?.wires.at(wireId);
         if (!wire) return;
         window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(wire.endpoints));
-
-    })
+    });
     wireSelection.value.clear();
     updateState();
 }
 export function addWires(wires: Wire[]) {
     const circuit = circuits.get(currentSubcircuitId.value);
     if (!circuit) return;
-    wires.forEach(wire => {
+    wires.forEach((wire) => {
         window.api.core.addWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
-    })
+    });
     wireSelection.value.clear();
     updateState();
 }
@@ -98,7 +104,8 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         backendKey: window.api.core.addComponent({
             circuitKey: currentSubcircuit.value.backendKey,
             componentType: String(type).toUpperCase(),
-            x, y
+            x,
+            y,
         }),
         frontendId: frontendId,
         type: type,
@@ -115,27 +122,27 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         selsize: 1,
         isInput: false,
         textContent: "",
-        constantValue: "0"
+        constantValue: "0",
     };
 
     currentSubcircuit.value.components.set(frontendId, new_component);
     selectComponent(frontendId, false);
-    updateState();//will update the ports and bounds values from the backend
+    updateState(); //will update the ports and bounds values from the backend
 
     placingComponent.value = null;
 }
 export function addWire(start: Location, end: Location) {
-    console.log("adding")
-    console.log(window.api.core.addWire(currentSubcircuit.value.backendKey, start, end))
+    console.log("adding");
+    console.log(window.api.core.addWire(currentSubcircuit.value.backendKey, start, end));
     updateState();
 }
 export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
-    const backendKey = window.api.core.createCircuit(name ?? ("Circuit" + circuits.size));
+    const backendKey = window.api.core.createCircuit(name ?? "Circuit" + circuits.size);
     circuits.set(frontendId, {
         frontendId,
         backendKey,
-        name: name ?? ("Circuit" + circuits.size),
+        name: name ?? "Circuit" + circuits.size,
         components: new Map(),
         wires: [],
     });
@@ -152,23 +159,25 @@ export function deleteSubcircuit(frontendId: number) {
 export function updateState() {
     //call glue functions to propagate changes to backend and update frontend state based on backend state
     window.api.core.propagate(currentSubcircuit.value.backendKey);
-    const [transientComponentStates, transientWireState] = window.api.core.getTransientState(currentSubcircuit.value.backendKey);
-    transientComponentStates.forEach(state => {
-        const corresponding_object = currentSubcircuit.value.components.values().find(component => keyEquals(component.backendKey, state.backendKey));
+    const [transientComponentStates, transientWireState] = window.api.core.getTransientState(
+        currentSubcircuit.value.backendKey,
+    );
+    transientComponentStates.forEach((state) => {
+        const corresponding_object = currentSubcircuit.value.components
+            .values()
+            .find((component) => keyEquals(component.backendKey, state.backendKey));
         if (corresponding_object) {
             Object.assign(corresponding_object, state);
         }
-    })
-    currentSubcircuit.value.wires = transientWireState
+    });
+    currentSubcircuit.value.wires = transientWireState;
 
-
-
-    console.log("______UPDATING STATE_____")
-    console.log(toRaw(currentSubcircuit.value))
-    console.log("backend updates")
-    console.log(transientComponentStates)
-    console.log(transientWireState)
-    console.log("____________")
+    console.log("______UPDATING STATE_____");
+    console.log(toRaw(currentSubcircuit.value));
+    console.log("backend updates");
+    console.log(transientComponentStates);
+    console.log(transientWireState);
+    console.log("____________");
 }
 //TODO Update Circuit State
 export function generateFrontendId() {

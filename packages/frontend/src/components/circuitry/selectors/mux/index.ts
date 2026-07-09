@@ -12,12 +12,14 @@ export const mux: ComponentMetadata = {
             { x: 3, y: 2, label: "Out" },
         ];
     },
-    getDimensions: (component)=>{
-        return ({width:component.bounds[1].x - component.bounds[0].x,height:component.bounds[1].y - component.bounds[0].y})
+    getDimensions: (component) => {
+        return {
+            width: component.bounds[1].x - component.bounds[0].x,
+            height: component.bounds[1].y - component.bounds[0].y,
+        };
     },
-    getOriginToFixedPortOffset: (component)=>{
+    getOriginToFixedPortOffset: (component) => {
         // In the mux the origin is alwys 3 away from the fixed point in the x, and is Math.pow(2,selsize+1)/2
-        return {x:3, y:Math.pow(2, component.selsize+1)/2}
-    }
-
+        return { x: 3, y: Math.pow(2, component.selsize + 1) / 2 };
+    },
 };

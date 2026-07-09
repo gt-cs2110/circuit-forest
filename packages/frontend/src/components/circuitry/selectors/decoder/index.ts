@@ -1,6 +1,6 @@
 import { ComponentMetadata } from "@/lib/types";
 
-import Decoder from "./Decoder.vue"
+import Decoder from "./Decoder.vue";
 export const decoder: ComponentMetadata = {
     displayName: "DECODER",
     component: Decoder,
@@ -12,12 +12,14 @@ export const decoder: ComponentMetadata = {
             { x: 2, y: 0, label: "Out" },
         ];
     },
-    getDimensions: (component)=>{
-        return ({width:component.bounds[1].x - component.bounds[0].x,height:component.bounds[1].y - component.bounds[0].y})
+    getDimensions: (component) => {
+        return {
+            width: component.bounds[1].x - component.bounds[0].x,
+            height: component.bounds[1].y - component.bounds[0].y,
+        };
     },
-    getOriginToFixedPortOffset: ()=>{
+    getOriginToFixedPortOffset: () => {
         // In the Decoder the fixed port is the selector which by default is at the top middle
-        return {x:1, y:0}
-    }
-
+        return { x: 1, y: 0 };
+    },
 };

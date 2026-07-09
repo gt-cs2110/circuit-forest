@@ -11,15 +11,19 @@ export const buffer: ComponentMetadata = {
             { x: 0, y: 1, label: "In" },
             { x: 1, y: 2, label: "Enable" },
             { x: 2, y: 1, label: "Out" },
-        
         ];
-
     },
-    getDimensions: (component)=>{
-        return ({width:component.bounds[1].x - component.bounds[0].x,height:component.bounds[1].y - component.bounds[0].y})
+    getDimensions: (component) => {
+        return {
+            width: component.bounds[1].x - component.bounds[0].x,
+            height: component.bounds[1].y - component.bounds[0].y,
+        };
     },
-    getOriginToFixedPortOffset: (component)=>{
-            // buffer is a square, port to origin will always be the full width in the x and half the height in the y bc heigh == width
-            return {x:component.bounds[1].x - component.bounds[0].x, y:(component.bounds[1].y - component.bounds[0].y)/2}
-        }
+    getOriginToFixedPortOffset: (component) => {
+        // buffer is a square, port to origin will always be the full width in the x and half the height in the y bc heigh == width
+        return {
+            x: component.bounds[1].x - component.bounds[0].x,
+            y: (component.bounds[1].y - component.bounds[0].y) / 2,
+        };
+    },
 };

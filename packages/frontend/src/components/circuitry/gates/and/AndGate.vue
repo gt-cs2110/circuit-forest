@@ -2,11 +2,8 @@
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponent } from "@/lib/types";
 
-const props = defineProps<{component:CircuitComponent}>();
-
-
+const props = defineProps<{ component: CircuitComponent }>();
 </script>
-
 
 <template>
     <g>

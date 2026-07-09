@@ -7,7 +7,11 @@ import type { Subcircuit } from "@/lib/types";
 type Rect = { left: number; top: number; right: number; bottom: number };
 type Selectable = { id: number; bounds: Rect };
 
-export function useMarquee(subcircuit: Reactive<Subcircuit>, componentSelection: ComputedRef<Set<number>>, wireSelection: ComputedRef<Set<number>>) {
+export function useMarquee(
+    subcircuit: Reactive<Subcircuit>,
+    componentSelection: ComputedRef<Set<number>>,
+    wireSelection: ComputedRef<Set<number>>,
+) {
     const marquee = reactive({
         active: false,
         start: { x: 0, y: 0 },
@@ -15,7 +19,10 @@ export function useMarquee(subcircuit: Reactive<Subcircuit>, componentSelection:
     });
 
     function startMarquee(worldX: number, worldY: number, additive: boolean) {
-        if (!additive) {componentSelection.value.clear();wireSelection.value.clear();}
+        if (!additive) {
+            componentSelection.value.clear();
+            wireSelection.value.clear();
+        }
 
         marquee.active = true;
         marquee.start.x = worldX;
@@ -69,19 +76,18 @@ function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
     });
     //TO DO add wire seleciton here
 }
-function getWireSelectables(subcircuit: Subcircuit): Selectable[]{
-    return [...subcircuit.wires].map((wire, id)=>{
+function getWireSelectables(subcircuit: Subcircuit): Selectable[] {
+    return [...subcircuit.wires].map((wire, id) => {
         return {
-            id, 
+            id,
             bounds: {
-                left:wire.endpoints[0].x,
+                left: wire.endpoints[0].x,
                 right: wire.endpoints[1].x,
-                top:wire.endpoints[0].y,
-                bottom: wire.endpoints[1].y
-            }
-
-        }
-    })
+                top: wire.endpoints[0].y,
+                bottom: wire.endpoints[1].y,
+            },
+        };
+    });
 }
 
 function toBounds(a: Location, b: Location): Rect {

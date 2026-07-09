@@ -18,18 +18,31 @@ const themeNames: Record<Theme, string> = {
         </PopoverTrigger>
 
         <PopoverPortal>
-            <PopoverContent align="start" side="bottom" :side-offset="8"
-                class="data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in left-2 w-64 border bg-panel-dark p-4">
+            <PopoverContent
+                align="start"
+                side="bottom"
+                :side-offset="8"
+                class="left-2 w-64 border bg-panel-dark p-4 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in"
+            >
                 <fieldset class="text-xs">
                     <span class="flex justify-between font-medium"> Theme </span>
-                    <label v-for="newTheme in themes" :key="newTheme"
+                    <label
+                        v-for="newTheme in themes"
+                        :key="newTheme"
                         class="mt-1 block w-full appearance-none border px-1 py-1 accent-blue-500 focus-within:outline"
                         :class="{
                             'bg-panel-dark': newTheme === theme,
                             'bg-panel-light': newTheme !== theme,
-                        }">
+                        }"
+                    >
                         {{ themeNames[newTheme] }}
-                        <input v-model="theme" type="radio" name="theme" :value="newTheme" class="sr-only" />
+                        <input
+                            v-model="theme"
+                            type="radio"
+                            name="theme"
+                            :value="newTheme"
+                            class="sr-only"
+                        />
                     </label>
                 </fieldset>
             </PopoverContent>

@@ -10,11 +10,10 @@ const emit = defineEmits<{
     wiredrag: [e: MouseEvent];
 }>();
 let index = computed(() => {
-    return currentSubcircuit.value.wires.indexOf(wire)
-})
+    return currentSubcircuit.value.wires.indexOf(wire);
+});
 function handleMouseDown(e: MouseEvent) {
-
-    if (!isWireSelected(index.value)) emit('wiredrag', e)
+    if (!isWireSelected(index.value)) emit("wiredrag", e);
 }
 function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
@@ -31,23 +30,50 @@ function handleClick(e: MouseEvent) {
         selectWire(index.value, additive);
     }
 }
-
 </script>
 
 <template>
-    <line v-if="isWireSelected(index)" :x1="wire.endpoints[0].x * GRID_SIZE" :y1="wire.endpoints[0].y * GRID_SIZE"
-        :x2="wire.endpoints[1].x * GRID_SIZE" :y2="wire.endpoints[1].y * GRID_SIZE" stroke-width="5"
-        stroke-linecap="round" stroke="#3b82f6" />
+    <line
+        v-if="isWireSelected(index)"
+        :x1="wire.endpoints[0].x * GRID_SIZE"
+        :y1="wire.endpoints[0].y * GRID_SIZE"
+        :x2="wire.endpoints[1].x * GRID_SIZE"
+        :y2="wire.endpoints[1].y * GRID_SIZE"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke="#3b82f6"
+    />
 
     <!-- displayed wire -->
-    <line :x1="wire.endpoints[0].x * GRID_SIZE" :y1="wire.endpoints[0].y * GRID_SIZE"
-        :x2="wire.endpoints[1].x * GRID_SIZE" :y2="wire.endpoints[1].y * GRID_SIZE" stroke="currentColor"
-        stroke-width="2" stroke-linecap="round"
-        :color="wire.value.includes('Z') ? 'rgb(255,0,0)' : (wire.value.includes('X') ? 'rgb(0,0,255)' : (wire.value.includes('1') ? 'rgb(0,255,0)' : '#006400'))" />
+    <line
+        :x1="wire.endpoints[0].x * GRID_SIZE"
+        :y1="wire.endpoints[0].y * GRID_SIZE"
+        :x2="wire.endpoints[1].x * GRID_SIZE"
+        :y2="wire.endpoints[1].y * GRID_SIZE"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        :color="
+            wire.value.includes('Z')
+                ? 'rgb(255,0,0)'
+                : wire.value.includes('X')
+                  ? 'rgb(0,0,255)'
+                  : wire.value.includes('1')
+                    ? 'rgb(0,255,0)'
+                    : '#006400'
+        "
+    />
 
     <!-- hitbox wire (it is larger) -->
-    <line :x1="wire.endpoints[0].x * GRID_SIZE" :y1="wire.endpoints[0].y * GRID_SIZE"
-        :x2="wire.endpoints[1].x * GRID_SIZE" :y2="wire.endpoints[1].y * GRID_SIZE" stroke="transparent"
-        stroke-width="6" stroke-linecap="round" @mousedown="handleMouseDown" @click="handleClick" />
-
+    <line
+        :x1="wire.endpoints[0].x * GRID_SIZE"
+        :y1="wire.endpoints[0].y * GRID_SIZE"
+        :x2="wire.endpoints[1].x * GRID_SIZE"
+        :y2="wire.endpoints[1].y * GRID_SIZE"
+        stroke="transparent"
+        stroke-width="6"
+        stroke-linecap="round"
+        @mousedown="handleMouseDown"
+        @click="handleClick"
+    />
 </template>

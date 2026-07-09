@@ -6,7 +6,7 @@ import { currentSubcircuitId } from "./circuit";
 
 type CircuitViewState = {
     componentSelection: Set<number>;
-    wireSelection: Set<number>
+    wireSelection: Set<number>;
     offset: Location; // screen coords
 };
 
@@ -29,7 +29,7 @@ export function deleteViewState(circuitFrontendId: number) {
 
 export const currentViewState = computed(() => getViewState(currentSubcircuitId.value));
 export const componentSelection = computed(() => currentViewState.value.componentSelection);
-export const wireSelection = computed(() => currentViewState.value.wireSelection)
+export const wireSelection = computed(() => currentViewState.value.wireSelection);
 
 // SELECTION
 
@@ -49,7 +49,6 @@ export function deselectWire(wireId: number) {
     wireSelection.value.delete(wireId);
 }
 
-
 export function clearSelection() {
     componentSelection.value.clear();
     wireSelection.value.clear();
@@ -59,9 +58,9 @@ export function isComponentSelected(id: number) {
     return componentSelection.value.has(id);
 }
 export function isWireSelected(id: number) {
-    console.log("checking to see if contains")
-    console.log(id)
-    console.log(wireSelection)
+    console.log("checking to see if contains");
+    console.log(id);
+    console.log(wireSelection);
     return wireSelection.value.has(id);
 }
 
