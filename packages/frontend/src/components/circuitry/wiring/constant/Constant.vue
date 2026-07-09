@@ -31,7 +31,8 @@ const width = computed(() => (component ? Math.max(2, component.bitsize) : 2));
         :letter-spacing="GRID_SIZE / 3"
         text-anchor="middle"
         dominant-baseline="middle"
-        class="pointer-events-none fill-black text-xs select-none"
-        >{{ component ? component.componentValue : "" }}</text
+        class="pointer-events-none fill-black font-mono text-xs select-none"
     >
+        {{ component ? component.constantValue : "" }}
+    </text>
 </template>

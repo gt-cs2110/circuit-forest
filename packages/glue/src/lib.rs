@@ -142,7 +142,8 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let bit_array = match args.constant_value {
         Some(s) => s.parse().context("Could not parse constant value")?,
         None => bitarr![0],
-    };
+    }
+    .resize(bitsize, bitstate![0]);
 
     let inputs = args.inputs.unwrap_or(2);
     let circuit_key = args.circuit_key.into_key()?;

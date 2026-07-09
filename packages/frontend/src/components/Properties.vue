@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
 import { componentSelection } from "@/lib/store/view";
-import { componentPropertiesMap } from "@/lib/types";
+import { CircuitComponent, componentPropertiesMap } from "@/lib/types";
 
 const nameReset = ref(0);
 const subcircuitName = computed({
@@ -26,123 +26,102 @@ const subcircuitName = computed({
     },
 });
 
+// FIXME: These two consts is redundant and should be removed.
 const orientations = [
     { label: "N", value: 0 },
     { label: "S", value: 1 },
     { label: "E", value: 2 },
     { label: "W", value: 3 },
 ] as const;
-const handidnesses = [
+const handednesses = [
     { label: "TOP/LEFT", value: 0 },
     { label: "BOTTOM/RIGHT", value: 1 },
 ] as const;
 
-const selectedComponents = computed(() =>
-    [...componentSelection.value].map((id) => currentSubcircuit.value.components.get(id)),
+const selectedComponents = computed<CircuitComponent[]>(() =>
+    [...componentSelection.value].map((id) => currentSubcircuit.value.components.get(id)!),
 );
+// Get properties defined by all selected components.
+const selectedProperties = computed(() => {
+    if (selectedComponents.value.length == 0) return new Set();
+
+    return selectedComponents.value
+        .map((c) => new Set(getComponentProps(c)))
+        .reduce((acc, cv) => acc.intersection(cv));
+});
 
 const sections = ["global", "circuit", "component"] as const;
 
-//CONSTANT INPUT LOGIC
-const constantError = ref("");
-const constantValue = ref({ binaryValue: "0", decimalValue: "0" });
-
-//Once selectedComponents renders in, we'll set the default binary and decimal values in the constant accordion selector to be the constant value associated with the first constant
-watch(
-    () => selectedComponents,
-    (_) => {
-        if (!selectedComponents.value || selectedComponents.value.length == 0) {
-            return;
-        }
-        constantValue.value = {
-            binaryValue: selectedComponents.value[0]!.constantValue.padStart(
-                selectedComponents.value[0]!.bitsize,
-                "0",
-            ),
-            decimalValue: parseInt(selectedComponents.value[0]!.constantValue, 2).toString(),
-        };
-    },
-);
-
-function onDecimalInput(e: Event) {
-    const val = (e.target as HTMLInputElement).value.trim();
-    constantError.value = "";
-    if (!val) {
-        constantValue.value.binaryValue = "";
-        constantValue.value.decimalValue = "";
-        return;
-    }
-    const n = Number(val);
-    if (!Number.isInteger(n) || n < 0 || isNaN(n)) {
-        constantError.value = "Enter a non-negative integer";
-        return;
-    }
-    if (n.toString(2).length > selectedComponents.value[0]!.bitsize) {
-        //exceeds max bit size
-        constantError.value = "Value exceeds current bitsize";
-
-        return;
-    }
-    console.log(val);
-
-    constantValue.value = {
-        binaryValue: n.toString(2).padStart(selectedComponents.value[0]!.bitsize, "0"),
-        decimalValue: val,
-    };
-
-    selectedComponents.value.forEach((component) => {
-        if (!component) return;
-        updateComponent(component.frontendId, { componentValue: constantValue.value.binaryValue });
-    });
+/**
+ * Gets a value from all selected components, returning it if all components have the same value.
+ * Otherwise, this returns the fallback value.
+ */
+function getFromSelected<T>(query: (c: CircuitComponent) => T, fallback: T) {
+    let queries = selectedComponents.value.map((c) => query(c));
+    return queries.every((t) => queries[0] == t) ? queries[0] : fallback;
 }
-function onBinaryInput(e: Event) {
-    const val = (e.target as HTMLInputElement).value.trim();
-    constantError.value = "";
-    if (!val) {
-        constantValue.value.binaryValue = "";
-        constantValue.value.decimalValue = "";
-        return;
+/** Updates all selected components with the specified updates. */
+function updateAllSelected(updates: Partial<CircuitComponent>) {
+    for (let component of selectedComponents.value) {
+        updateComponent(component.frontendId, updates);
     }
-    if (!/^[01]+$/.test(val)) {
-        constantError.value = "Binary digits only (0 and 1)";
-
-        return;
-    }
-    if (val.length > selectedComponents.value[0]!.bitsize) {
-        //exceeds max bit size
-        constantError.value = "Value exceeds current bitsize";
-        return;
-    }
-    const n = parseInt(val, 2);
-    constantValue.value = {
-        binaryValue: val.padStart(selectedComponents.value[0]!.bitsize, "0"),
-        decimalValue: String(n),
-    };
-    console.log(val);
-
-    selectedComponents.value.forEach((component) => {
-        if (!component) return;
-        updateComponent(component.frontendId, { componentValue: constantValue.value.binaryValue });
-    });
+}
+/** Gets all defined properties for a given component. */
+function getComponentProps(component: CircuitComponent) {
+    // FIXME: Please use an enum here instead of string[]
+    return componentPropertiesMap[component.type.toLowerCase()];
 }
 
-const label = computed(() =>
-    selectedComponents.value.length == 0 ? "" : selectedComponents.value[0]?.label,
-);
-
-//If we have more than one componet selected, we will choose to display the property modifier which al=pply to all of them
-
-const properties = computed(() => {
-    if (!selectedComponents.value[0]) return [];
-    let props = componentPropertiesMap[selectedComponents.value[0].type.toLowerCase()];
-    selectedComponents.value.forEach((comp) => {
-        if (!comp) return;
-        props = props.filter((prop) =>
-            componentPropertiesMap[comp.type.toLowerCase()].includes(prop),
-        );
-    });
-    return props;
+const labelInput = computed({
+    get: () => getFromSelected((c) => c.label, ""),
+    set: (label) => updateAllSelected({ label }),
 });
+const bitsizeInput = computed({
+    get: () => getFromSelected((c) => c.bitsize, 1), // TODO: Allow null, in cases where not all bitsizes are the same
+    set: (bitsize) => updateAllSelected({ bitsize }),
+});
+const selsizeInput = computed({
+    get: () => getFromSelected((c) => c.selsize, 1), // TODO: Allow null, in cases where not all selsizes are the same
+    set: (selsize) => updateAllSelected({ selsize }),
+});
+const nInputsInput = computed({
+    get: () => getFromSelected((c) => c.inputs, 1), // TODO: you see the above
+    set: (inputs) => updateAllSelected({ inputs }),
+});
+
+const constantError = ref("");
+const constantValue = {
+    dec: computed({
+        get: () => {
+            let bin = getFromSelected((c) => c.constantValue, "0");
+            return /^[01]+$/.test(bin) ? parseInt(bin, 2) : "?";
+        },
+        set: (value) => {
+            constantError.value = "";
+            const n = +value;
+            if (!Number.isInteger(n) || n < 0 || isNaN(n)) {
+                constantError.value = "Enter a non-negative integer";
+                return;
+            }
+
+            let bin = n.toString(2).padStart(bitsizeInput.value, "0").slice(-bitsizeInput.value);
+            updateAllSelected({ constantValue: bin });
+        },
+    }),
+    bin: computed({
+        get: () => getFromSelected((c) => c.constantValue, "0"),
+        set: (value) => {
+            constantError.value = "";
+            if (!/^[01]+$/.test(value)) {
+                constantError.value = "Binary digits only (0 and 1)";
+                return;
+            }
+
+            let bin = value.slice(-bitsizeInput.value);
+            updateAllSelected({ constantValue: bin });
+        },
+    }),
+};
 </script>
 
 <template>
@@ -209,26 +188,21 @@ const properties = computed(() => {
             <AccordionContent
                 v-if="
                     selectedComponents.length == 1 &&
-                    componentPropertiesMap[selectedComponents[0].type.toLowerCase()].includes(
-                        'label',
-                    )
+                    getComponentProps(selectedComponents[0]).includes('label')
                 "
                 class="px-4 py-3 text-xs"
             >
                 <label class="block">
-                    <span class="flex justify-between font-medium"> Label </span>
+                    <span class="flex justify-between font-medium">Label</span>
                     <input
-                        :value="0"
+                        v-model.lazy.trim="labelInput"
                         type="text"
                         placeholder="Enter label..."
-                        @keydown.stop
-                        @change="
-                            updateComponent(selectedComponents[0].frontendId, { label: label })
-                        "
                     />
 
                     <h2 class="font-medium">Label Orientation</h2>
 
+                    <!-- FIXME: Missing accessibility labels -->
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <button
                             v-for="option in orientations"
@@ -240,11 +214,7 @@ const properties = computed(() => {
                                     ? 'bg-blue-500 text-white'
                                     : 'bg-panel-light hover:bg-panel-dark'
                             "
-                            @click="
-                                updateComponent(selectedComponents[0].frontendId, {
-                                    labelOrientation: option.value,
-                                })
-                            "
+                            @click="updateAllSelected({ labelOrientation: option.value })"
                         >
                             {{ option.label }}
                         </button>
@@ -253,97 +223,67 @@ const properties = computed(() => {
             </AccordionContent>
 
             <!-- BITSIZE -->
-            <AccordionContent v-if="properties.includes('bitsize')" class="px-4 py-3 text-xs">
+            <AccordionContent v-if="selectedProperties.has('bitsize')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
-                        <span class="font-medium"> Bitsize</span>
-                        <span>{{ selectedComponents[0].bitsize }}</span>
+                        <span class="font-medium">Bitsize</span>
+                        <span>{{ bitsizeInput }}</span>
                     </span>
                     <input
-                        :value="selectedComponents[0].bitsize"
+                        v-model.lazy.number="bitsizeInput"
                         type="range"
-                        min="1"
-                        step="1"
-                        max="64"
+                        :min="1"
+                        :step="1"
+                        :max="64"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="
-                            (e) => {
-                                let bitsize = Number((e.target as HTMLInputElement).value);
-
-                                constantValue.binaryValue = constantValue.binaryValue
-                                    .slice(-bitsize!)
-                                    .padStart(bitsize!, '0');
-                                selectedComponents.forEach((comp) => {
-                                    if (!comp) return;
-                                    updateComponent(comp.frontendId, {
-                                        componentValue: constantValue.binaryValue,
-                                        bitsize: Number((e.target as HTMLInputElement).value),
-                                    });
-                                });
-                            }
-                        "
                     />
                 </label>
             </AccordionContent>
 
             <!-- SELSIZE -->
-            <AccordionContent v-if="properties.includes('selsize')" class="px-4 py-3 text-xs">
+            <AccordionContent v-if="selectedProperties.has('selsize')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
-                        <span class="font-medium"> SelectorBits</span>
-                        <span>{{ selectedComponents[0].selsize }}</span>
+                        <span class="font-medium">Selector Bits</span>
+                        <span>{{ selsizeInput }}</span>
                     </span>
                     <input
-                        :value="selectedComponents[0].selsize"
+                        v-model.lazy.number="selsizeInput"
                         type="range"
-                        min="1"
-                        step="1"
-                        max="6"
+                        :min="1"
+                        :step="1"
+                        :max="6"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="
-                            selectedComponents.forEach((comp) => {
-                                if (!comp) return;
-                                updateComponent(comp!.frontendId, {
-                                    selsize: Number(($event.target as HTMLInputElement).value),
-                                });
-                            })
-                        "
                     />
                 </label>
             </AccordionContent>
             <!-- INPUTS -->
-            <AccordionContent v-if="properties.includes('inputs')" class="px-4 py-3 text-xs">
+            <AccordionContent v-if="selectedProperties.has('inputs')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
                         <span class="font-medium"> Num Inputs</span>
-                        <span>{{ selectedComponents[0].inputs }}</span>
+                        <span>{{ nInputsInput }}</span>
                     </span>
                     <input
-                        :value="selectedComponents[0].inputs"
+                        v-model.lazy.number="nInputsInput"
                         type="range"
-                        min="1"
-                        step="1"
-                        max="8"
+                        :min="1"
+                        :step="1"
+                        :max="8"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="
-                            selectedComponents.forEach((comp) => {
-                                if (!comp) {
-                                    return;
-                                }
-                                updateComponent(comp.frontendId, {
-                                    inputs: Number(($event.target as HTMLInputElement).value),
-                                });
-                            })
-                        "
                     />
                 </label>
             </AccordionContent>
             <!-- ORIENTATION -->
-            <AccordionContent v-if="properties.includes('orientation')" class="px-4 py-3 text-xs">
+            <AccordionContent
+                v-if="selectedProperties.has('orientation')"
+                class="px-4 py-3 text-xs"
+            >
                 <label class="block">
                     <span class="font-medium">Orientation</span>
 
                     <div class="mt-2 flex overflow-hidden rounded border">
+                        <!-- FIXME: Missing accessibility labels -->
                         <button
                             v-for="option in orientations"
                             :key="option.value"
@@ -354,16 +294,7 @@ const properties = computed(() => {
                                     ? 'bg-blue-500 text-white'
                                     : 'bg-panel-light hover:bg-panel-dark'
                             "
-                            @click="
-                                selectedComponents.forEach((comp) => {
-                                    if (!comp) {
-                                        return;
-                                    }
-                                    updateComponent(comp.frontendId, {
-                                        orientation: Number(option.value),
-                                    });
-                                })
-                            "
+                            @click="updateAllSelected({ orientation: option.value })"
                         >
                             {{ option.label }}
                         </button>
@@ -371,14 +302,15 @@ const properties = computed(() => {
                 </label>
             </AccordionContent>
 
-            <!-- HANDIDNESS -->
-            <AccordionContent v-if="properties.includes('handedness')" class="px-4 py-3 text-xs">
+            <!-- HANDEDNESS -->
+            <AccordionContent v-if="selectedProperties.has('handedness')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Handedness</span>
 
                     <div class="mt-2 flex overflow-hidden rounded border">
+                        <!-- FIXME: Missing accessibility labels -->
                         <button
-                            v-for="option in handidnesses"
+                            v-for="option in handednesses"
                             :key="option.value"
                             type="button"
                             class="flex-1 px-3 py-2 transition-colors"
@@ -387,16 +319,7 @@ const properties = computed(() => {
                                     ? 'bg-blue-500 text-white'
                                     : 'bg-panel-light hover:bg-panel-dark'
                             "
-                            @click="
-                                selectedComponents.forEach((comp) => {
-                                    if (!comp) {
-                                        return;
-                                    }
-                                    updateComponent(comp.frontendId, {
-                                        handedness: Number(option.value),
-                                    });
-                                })
-                            "
+                            @click="updateAllSelected({ handedness: option.value })"
                         >
                             {{ option.label }}
                         </button>
@@ -404,30 +327,27 @@ const properties = computed(() => {
                 </label>
             </AccordionContent>
             <!-- CONSTANT VALUE -->
-            <AccordionContent v-if="properties.includes('constantValue')" class="px-4 py-3 text-xs">
+            <AccordionContent
+                v-if="selectedProperties.has('constantValue')"
+                class="px-4 py-3 text-xs"
+            >
                 <label class="block space-y-3">
                     <span class="font-medium">Value</span>
 
                     <div>
                         <span class="flex justify-between font-medium">Decimal</span>
                         <input
-                            :value="constantValue.decimalValue"
+                            v-model.lazy.trim="constantValue.dec.value"
                             type="text"
-                            :placeholder="constantValue.decimalValue"
                             class="font-mono"
-                            @keydown.stop
-                            @input="onDecimalInput"
                         />
                     </div>
                     <div>
                         <span class="flex justify-between font-medium">Binary</span>
                         <input
-                            :value="constantValue.binaryValue"
+                            v-model.lazy.trim="constantValue.bin.value"
                             type="text"
-                            :placeholder="constantValue.binaryValue"
                             class="font-mono"
-                            @keydown.stop
-                            @change="onBinaryInput"
                         />
                     </div>
                     <span v-if="constantError" class="text-xs text-red-500">{{
