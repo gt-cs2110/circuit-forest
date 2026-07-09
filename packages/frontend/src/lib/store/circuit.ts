@@ -113,7 +113,10 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         bitsize: 1,
         inputs: 2,
         ports: [],
-        bounds: [],
+        bounds: [
+            { x: 0, y: 0 },
+            { x: 0, y: 0 },
+        ],
         orientation: Orientation["EAST"],
         handedness: type == "buffer" ? Handedness["TOPLEFT"] : Handedness["N/A"],
         labelOrientation: Orientation["EAST"],
