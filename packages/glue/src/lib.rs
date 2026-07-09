@@ -1,12 +1,12 @@
 use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
-use circuitsim_engine::bitarr;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::{CircuitKey, FunctionKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{ComponentKey, MiddleCircuit, MiddleRepr, UIKey};
+use circuitsim_engine::{bitarr, bitstate};
 use napi_derive::napi;
 use slotmap::KeyData;
 
@@ -25,7 +25,7 @@ pub struct JsKey {
     pub kind: KeyKind,
     pub id: (u32, u32),
     // HACK: Vue's markRaw assigns this field to indicate it shouldn't be reactive.
-    #[napi(js_name="__v_skip")]
+    #[napi(js_name = "__v_skip")]
     pub __v_skip: bool,
 }
 impl JsKey {
@@ -38,7 +38,11 @@ trait CastKeyByKind: slotmap::Key {
 }
 impl<K: CastKeyByKind> CastKey for K {
     fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
-        let JsKey { kind, id, __v_skip: _ } = k;
+        let JsKey {
+            kind,
+            id,
+            __v_skip: _,
+        } = k;
         match kind == Self::KIND {
             true => {
                 let raw = u64::from(id.0) << 32 | (u64::from(id.1));
@@ -124,24 +128,19 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
     let orient = match args.orientation {
-        Some(i) => Orientation::try_from(i)
-            .context("Could not parse orientation value")?,
+        Some(i) => Orientation::try_from(i).context("Could not parse orientation value")?,
         None => Default::default(),
     };
     let label_orient = match args.label_orientation {
-        Some(i) => Orientation::try_from(i)
-            .context("Could not parse label orientation value")?,
+        Some(i) => Orientation::try_from(i).context("Could not parse label orientation value")?,
         None => Default::default(),
     };
     let handedness = match args.handedness {
-        Some(i) => Handedness::try_from(i)
-            .context("Could not parse handedness value")?,
+        Some(i) => Handedness::try_from(i).context("Could not parse handedness value")?,
         None => Default::default(),
     };
     let bit_array = match args.constant_value {
-        Some(s) => s
-            .parse()
-            .context("Could not parse constant value")?,
+        Some(s) => s.parse().context("Could not parse constant value")?,
         None => bitarr![0],
     };
 
