@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { circuits, currentSubcircuitId, newSubcircuit } from "@/lib/store/circuit";
-import { Plus } from "lucide-vue-next";
+import { Plus } from "@lucide/vue";
 import { TabsList, TabsRoot, TabsTrigger } from "reka-ui";
 import { nextTick, useTemplateRef } from "vue";
 import HorizontalScroll from "./ui/HorizontalScroll.vue";

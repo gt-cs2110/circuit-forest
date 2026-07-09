@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Theme, theme, themes } from "@/lib/store/settings";
-import { SettingsIcon } from "lucide-vue-next";
+import { SettingsIcon } from "@lucide/vue";
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
 
 const themeNames: Record<Theme, string> = {
