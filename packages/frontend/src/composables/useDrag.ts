@@ -1,7 +1,7 @@
 import { addWires, deleteWires, updateComponent } from "@/lib/store/circuit";
 import type { Subcircuit } from "@/lib/types";
-import { Location, TransientWireState } from "circuitsim-glue";
-import { Ref, ref } from "vue";
+import { Location } from "circuitsim-glue";
+import { Ref, ref, toRaw } from "vue";
 
 export function useDrag(
     subcircuit: Subcircuit,
@@ -71,10 +71,7 @@ export function useDrag(
         if (!drag.value.active) return;
         const newWires = drag.value.initialWirePositions
             .keys()
-            .map((index) => {
-                const wireData = JSON.parse(JSON.stringify(subcircuit.wires.at(index)));
-                return wireData as TransientWireState;
-            })
+            .map((index) => toRaw(subcircuit.wires[index]))
             .toArray();
 
         //return old wires to old positions
