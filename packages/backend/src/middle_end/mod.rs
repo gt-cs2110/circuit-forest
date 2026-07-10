@@ -291,13 +291,7 @@ impl MiddleCircuit<'_> {
         circ!(self.engine).propagate();
     }
 
-    /// Get the states of all components in the circuit.
-    pub fn get_component_states(&self) -> Vec<(FunctionKey, &FunctionState)> {
-        circ!(self.state)
-            .functions
-            .iter()
-            .collect() 
-    } 
+   
 
     pub fn get_wire_states(&self) -> Vec<(Wire, BitArray, Vec<ValueIssue>)> {
         circ!(self.physical).wires.wires().map(|wire| {
@@ -307,6 +301,40 @@ impl MiddleCircuit<'_> {
 
             (wire, bit_value, issues)
         }).collect()
+    }
+    pub fn get_component_states(&self)-> Vec<(FunctionKey,Vec<((u32,u32),String, Vec<String>)>, [(u32,u32);2], Option<String>)>{
+        let mut component_states: Vec<(FunctionKey,Vec<((u32,u32),String, Vec<String>)>, [(u32,u32);2], Option<String> )> = Vec::new();
+        for (key, state) in circ!(self.state).functions.iter(){
+            let component: &ComponentProps = self.get_component(ComponentKey::Function(key)).unwrap();
+            let ports: Vec<((u32,u32),String, Vec<String>)> = (0..state.get_num_ports())
+            .map(|i| {
+                let coords = component.ports[i];
+                let value = state.get_port(i).to_string();
+                let value_key = self
+                    .get_wire_set()
+                    .find_key((ComponentKey::Function(key), i))
+                    .unwrap();
+                let issues = self
+                    .get_circuit_state()
+                    .get_issues(value_key)
+                    .iter()
+                    .map(|issue| issue.to_string())
+                    .collect();
+
+                (coords,state.get_port(i).to_string(), issues)
+            })
+            .collect();
+            // Get value for component value field for Probe or Constant
+            let bitvalue = match component.inner {
+                PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
+                PhysicalComponentEnum::Constant(constant) => Some(constant.get_value()),
+                _ => None,
+            };
+        component_states.push((key, ports, component.bounds, bitvalue.map(|s| s.to_string())))
+
+        }
+        component_states
+
     }
 
     pub fn get_wire_set(&self) -> &WireSet {
