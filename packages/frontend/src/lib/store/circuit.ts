@@ -1,9 +1,9 @@
 import { Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 
-import type { CircuitComponent, ComponentType, Subcircuit, Wire } from "../types";
+import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
-import { deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
+import { deleteViewState, placingComponent, selectComponent } from "./view";
 
 export const circuits = ref<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -55,33 +55,27 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
 }
 
 export function deleteComponent(frontendId: number) {
-    const circuit = circuits.value.get(currentSubcircuitId.value);
-    if (!circuit) return;
-    const component = circuit?.components.get(frontendId);
-    if (!component) return;
-    window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
-    circuit.components.delete(frontendId);
-    updateState();
+    const component = currentSubcircuit.value.components.get(frontendId);
+    if (component) {
+        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
+        currentSubcircuit.value.components.delete(frontendId);
+        updateState();
+    }
 }
 //wires have to be delted in batches
-export function deleteWires(ids: number[]) {
-    const circuit = circuits.value.get(currentSubcircuitId.value);
-    if (!circuit) return;
-    ids.forEach((wireId) => {
-        const wire = circuit?.wires.at(wireId);
-        if (!wire) return;
-        window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(wire.endpoints));
-    });
-    wireSelection.value.clear();
+export function deleteWiresFromIds(wires: number[]) {
+    deleteWires(wires.map((id) => currentSubcircuit.value.wires[id].endpoints));
+}
+export function deleteWires(wires: [Location, Location][]) {
+    for (const endpoints of wires) {
+        window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(endpoints));
+    }
     updateState();
 }
-export function addWires(wires: Wire[]) {
-    const circuit = circuits.value.get(currentSubcircuitId.value);
-    if (!circuit) return;
-    wires.forEach((wire) => {
-        window.api.core.addWire(currentSubcircuit.value.backendKey, ...wire.endpoints);
-    });
-    wireSelection.value.clear();
+export function addWires(wires: [Location, Location][]) {
+    for (const endpoints of wires) {
+        window.api.core.addWire(currentSubcircuit.value.backendKey, ...toRaw(endpoints));
+    }
     updateState();
 }
 

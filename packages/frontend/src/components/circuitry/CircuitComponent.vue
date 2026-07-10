@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
 import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/store/view";
-import { CircuitComponent } from "@/lib/types";
+import { CircuitComponent, DragState } from "@/lib/types";
 import { componentMap } from ".";
-import { computed, inject } from "vue";
-import type { useDrag } from "@/composables/useDrag";
+import { computed, inject, useId } from "vue";
 
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
     dragstart: [e: MouseEvent];
     wiredrag: [e: MouseEvent];
 }>();
-const dragState = inject<ReturnType<typeof useDrag>["drag"]>("dragState");
+const baseId = useId();
+// ~~~ DRAG HANDLERS ~~~
+const dragState = inject<DragState>("dragState");
+const isDragging = computed(
+    () => dragState?.value.active && isComponentSelected(props.component.frontendId),
+);
+const dragTransform = computed(() => {
+    if (!dragState || !isDragging.value) return "";
+    const { delta } = dragState.value;
+    return `translate(${delta.x * GRID_SIZE}, ${delta.y * GRID_SIZE})`;
+});
 
 function handleMouseDown(e: MouseEvent) {
     console.log(e);
@@ -71,27 +80,24 @@ const transform = computed(() => {
     translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})
   `;
 });
-
-//The Ports and bounding box rely on the backend for their positiosning, thus while a draggin is happening they arent being updated until the drag is complete and a backend update is executed
-//Thus we need to artifically make it seems like they are moving by applying a transformatino if a drag is actie
-const boundingBoxAndPortTransform = computed(() => {
-    if (!dragState || !dragState.value.active) return "";
-
-    let startPos = dragState.value.initialComponentPositions.get(props.component.frontendId);
-    if (!startPos) return "";
-    return `translate(${(props.component.x - startPos.x) * GRID_SIZE}, ${(props.component.y - startPos.y) * GRID_SIZE})`;
-});
 </script>
 
 <template>
-    <g :transform="transform" @mousedown="handleMouseDown">
-        <!-- <g :transform="rotate"> -->
-        <component :is="metadata.component" :component="props.component" />
-
-        <!-- </g> -->
+    <!-- The original component, which is also responsible for interactions -->
+    <!-- On drag, it becomes translucent to indicate a move is occurring -->
+    <g :class="[{ 'opacity-50': isDragging }]">
+        <g :transform="transform" @mousedown="handleMouseDown" :id="baseId">
+            <component :is="metadata.component" :component="props.component" />
+        </g>
     </g>
 
-    <g :transform="boundingBoxAndPortTransform">
+    <!-- Drag items, which move alongside a drag -->
+    <g :transform="dragTransform">
+        <!-- Drag copy of the component -->
+        <g v-if="isDragging">
+            <use :href="`#${baseId}`" />
+        </g>
+        <!-- Selected outline -->
         <rect
             v-if="isComponentSelected(props.component.frontendId)"
             :x="props.component.bounds[0].x * GRID_SIZE"
@@ -102,7 +108,7 @@ const boundingBoxAndPortTransform = computed(() => {
             stroke="#3b82f6"
             stroke-width="2"
         />
-        <!-- transparent stroke enlarges hitbox -->
+        <!-- Ports -->
         <circle
             v-for="(point, index) in ports"
             :key="`${index}`"

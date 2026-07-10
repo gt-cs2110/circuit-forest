@@ -1,3 +1,4 @@
+import type { useDrag } from "@/composables/useDrag";
 import type {
     TransientComponentState,
     TransientWireState,
@@ -61,7 +62,7 @@ export type CircuitComponent = Location &
     };
 
 export type WireDirection = "H" | "V";
-export type Wire = TransientWireState;
+export type Wire = TransientWireState; // FIXME: Wire should not be using this type
 
 export type Subcircuit = {
     frontendId: number;
@@ -70,6 +71,8 @@ export type Subcircuit = {
     components: Map<number, CircuitComponent>;
     wires: Wire[];
 };
+
+export type DragState = ReturnType<typeof useDrag>["drag"];
 
 // FIXME: This needs to use `ComponentType[]`, not `string[]` for types
 //Component Types gate, not, buffer, constant, pin, splitter, power ground, tunnel, probe, mux, demux, decode, text subcircuit

@@ -5,7 +5,7 @@ import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
     addWire,
     deleteComponent,
-    deleteWires,
+    deleteWiresFromIds,
     placeComponent,
     updateState,
 } from "@/lib/store/circuit";
@@ -142,13 +142,12 @@ function handleMouseMove(e: MouseEvent) {
 }
 function handleDelete(e: KeyboardEvent) {
     if (e.key === "Backspace") {
-        if (componentSelection.value.size + wireSelection.value.size > 0) {
-            //Delete all wires on backend manuall first, bc ids will not persits through updateState
-
-            componentSelection.value.forEach((frontendId) => {
+        if (componentSelection.value.size > 0 || wireSelection.value.size > 0) {
+            for (const frontendId of componentSelection.value) {
                 deleteComponent(frontendId);
-            });
-            deleteWires(wireSelection.value.keys().toArray());
+            }
+
+            deleteWiresFromIds(Array.from(wireSelection.value));
         }
     }
 }

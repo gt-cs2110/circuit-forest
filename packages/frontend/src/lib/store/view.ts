@@ -1,5 +1,5 @@
 import type { Location } from "circuitsim-glue";
-import { computed, ref } from "vue";
+import { computed, ref, toRaw } from "vue";
 
 import type { ComponentType } from "../types";
 import { currentSubcircuitId } from "./circuit";
@@ -60,7 +60,7 @@ export function isComponentSelected(id: number) {
 export function isWireSelected(id: number) {
     console.log("checking to see if contains");
     console.log(id);
-    console.log(wireSelection);
+    console.log(toRaw(wireSelection.value));
     return wireSelection.value.has(id);
 }
 
