@@ -2,7 +2,7 @@ import { TransientComponentState, TransientWireState, Location, Key } from "circ
 import { Component } from "vue";
 
 export const componentCategories = {
-    wiring: ["constant"],
+    wiring: ["constant", "probe"],
     gates: ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"],
     plexers: ["mux", "demux", "decoder"],
 } as const;
