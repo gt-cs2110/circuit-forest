@@ -54,9 +54,9 @@ export function useDrag(
             //Update Frontend
             const wire = subcircuit.wires.at(id);
             if (!wire) continue;
+            
             wire.endpoints[0].x = Math.max(initial.x + deltaX, 0);
             wire.endpoints[0].y = Math.max(initial.y + deltaY, 0);
-
             if (wire.isHorizontal) {
                 wire.endpoints[1].x = wire.endpoints[0].x + wire.length;
                 wire.endpoints[1].y = wire.endpoints[0].y;
@@ -65,13 +65,14 @@ export function useDrag(
                 wire.endpoints[1].y = wire.endpoints[0].y + wire.length;
             }
         }
+        
     }
 
     function stopDrag() {
         if (!drag.value.active) return;
         const newWires = drag.value.initialWirePositions
             .keys()
-            .map((index) => toRaw(subcircuit.wires[index]))
+            .map((index) => JSON.parse(JSON.stringify((subcircuit.wires[index]))))//NEED A DEEP CLONE HERE bc we change the coords back to original for deletion
             .toArray();
 
         //return old wires to old positions
@@ -89,7 +90,6 @@ export function useDrag(
             }
         });
         deleteWires(drag.value.initialWirePositions.keys().toArray());
-        console.log("Adding Wires: ", newWires);
         addWires(newWires);
 
         drag.value.active = false;

@@ -340,6 +340,7 @@ const constantValue = {
                             v-model.lazy.trim="constantValue.dec.value"
                             type="text"
                             class="font-mono"
+                            @keydown.stop
                         />
                     </div>
                     <div>
@@ -348,6 +349,7 @@ const constantValue = {
                             v-model.lazy.trim="constantValue.bin.value"
                             type="text"
                             class="font-mono"
+                            @keydown.stop
                         />
                     </div>
                     <span v-if="constantError" class="text-xs text-red-500">{{
