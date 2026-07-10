@@ -1,4 +1,11 @@
-import { TransientComponentState, TransientWireState, Location, Key } from "circuitsim-glue";
+import type {
+    TransientComponentState,
+    TransientWireState,
+    Location,
+    Key,
+    Orientation,
+    Handedness,
+} from "circuitsim-glue";
 import { Component } from "vue";
 
 export const componentCategories = {
@@ -14,18 +21,6 @@ export const componentTypes = [
 ] as const satisfies readonly ComponentType[];
 
 export type Dimensions = { width: number; height: number };
-export const Orientation = {
-    NORTH: 0,
-
-    SOUTH: 1,
-    EAST: 2,
-    WEST: 3,
-};
-export const Handedness = {
-    "N/A": 0,
-    TOPLEFT: 0,
-    BOTTOMRIGHT: 1,
-};
 
 export type Port = Location & {
     label?: string;
@@ -60,9 +55,9 @@ export type CircuitComponent = Location &
         constantValue: string;
 
         inputs: number;
-        orientation: number;
-        handedness: number;
-        labelOrientation: number;
+        orientation: Orientation;
+        handedness: Handedness;
+        labelOrientation: Orientation;
     };
 
 export type WireDirection = "H" | "V";

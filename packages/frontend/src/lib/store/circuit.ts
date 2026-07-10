@@ -1,16 +1,9 @@
+import { Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 
-import {
-    CircuitComponent,
-    ComponentType,
-    Handedness,
-    Orientation,
-    Subcircuit,
-    Wire,
-} from "../types";
+import type { CircuitComponent, ComponentType, Subcircuit, Wire } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
-import { Key, Location } from "circuitsim-glue";
 
 export const circuits = ref<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -117,9 +110,9 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
             { x: 0, y: 0 },
             { x: 0, y: 0 },
         ],
-        orientation: Orientation["EAST"],
-        handedness: type == "buffer" ? Handedness["TOPLEFT"] : Handedness["N/A"],
-        labelOrientation: Orientation["EAST"],
+        orientation: "East",
+        handedness: "TopLeft",
+        labelOrientation: "East",
         x,
         y,
         selsize: 1,

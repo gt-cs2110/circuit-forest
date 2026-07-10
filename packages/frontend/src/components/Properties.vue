@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { Handedness, Orientation } from "circuitsim-glue";
 import { computed, ref } from "vue";
+import { toast } from "vue-sonner";
+
 import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
-import { toast } from "vue-sonner";
 import { settings } from "@/lib/store/settings";
 import { componentSelection } from "@/lib/store/view";
 import { CircuitComponent, componentPropertiesMap } from "@/lib/types";
@@ -28,15 +30,15 @@ const subcircuitName = computed({
 
 // FIXME: These two consts is redundant and should be removed.
 const orientations = [
-    { label: "N", value: 0 },
-    { label: "S", value: 1 },
-    { label: "E", value: 2 },
-    { label: "W", value: 3 },
-] as const;
+    { label: "N", value: "North" },
+    { label: "S", value: "South" },
+    { label: "E", value: "East" },
+    { label: "W", value: "West" },
+] as const satisfies { label: string; value: Orientation }[];
 const handednesses = [
-    { label: "TOP/LEFT", value: 0 },
-    { label: "BOTTOM/RIGHT", value: 1 },
-] as const;
+    { label: "TOP/LEFT", value: "TopLeft" },
+    { label: "BOTTOM/RIGHT", value: "DownRight" },
+] as const satisfies { label: string; value: Handedness }[];
 
 const selectedComponents = computed<CircuitComponent[]>(() =>
     [...componentSelection.value].map((id) => currentSubcircuit.value.components.get(id)!),

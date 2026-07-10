@@ -12,6 +12,55 @@ use slotmap::KeyData;
 
 static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
 
+mod js_enum {
+    use napi_derive::napi;
+
+    /// Duplicates an enum for use in JS.
+    macro_rules! make_napi_enum {
+        ($(#[$m:meta])* $vis:vis enum $Js:ident from $Orig:path {
+            $($OrigVariant:ident),*
+        }) => {
+            #[napi(string_enum)]
+            $(#[$m])*
+            $vis enum $Js {
+                $($OrigVariant),*
+            }
+
+            impl From<$Orig> for $Js {
+                fn from(value: $Orig) -> Self {
+                    match value {
+                        $(
+                            <$Orig>::$OrigVariant => Self::$OrigVariant,
+                        )*
+                    }
+                }
+            }
+            impl From<$Js> for $Orig {
+                fn from(value: $Js) -> Self {
+                    match value {
+                        $(
+                            $Js::$OrigVariant => Self::$OrigVariant,
+                        )*
+                    }
+                }
+            }
+        }
+    }
+
+    make_napi_enum! {
+        #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+        pub enum Handedness from super::Handedness {
+            TopLeft, DownRight
+        }
+    }
+    make_napi_enum! {
+        #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+        pub enum Orientation from super::Orientation {
+            North, South, East, West
+        }
+    }
+}
+
 #[napi(string_enum)]
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum KeyKind {
@@ -127,18 +176,12 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let mut repr = REPR.lock().unwrap();
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
-    let orient = match args.orientation {
-        Some(i) => Orientation::try_from(i).context("Could not parse orientation value")?,
-        None => Default::default(),
-    };
-    let label_orient = match args.label_orientation {
-        Some(i) => Orientation::try_from(i).context("Could not parse label orientation value")?,
-        None => Default::default(),
-    };
-    let handedness = match args.handedness {
-        Some(i) => Handedness::try_from(i).context("Could not parse handedness value")?,
-        None => Default::default(),
-    };
+
+    let orient = args.orientation.map_or_else(Default::default, From::from);
+    let label_orient = args
+        .label_orientation
+        .map_or_else(Default::default, From::from);
+    let handedness = args.handedness.map_or_else(Default::default, From::from);
     let bit_array = match args.constant_value {
         Some(s) => s.parse().context("Could not parse constant value")?,
         None => bitarr![0],
@@ -320,27 +363,27 @@ pub fn print_circuit(circuit_key: JsKey) -> anyhow::Result<String> {
 #[napi(object)]
 pub struct CreateComponentArgs {
     pub circuit_key: JsKey,
-    pub component_type: String,
+    pub component_type: String, // FIXME: Should be an enum?
     pub label: Option<String>,
-    pub label_orientation: Option<u8>,
+    pub label_orientation: Option<js_enum::Orientation>,
     pub x: u32,
     pub y: u32,
 
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
-    pub orientation: Option<u8>,
-    pub constant_value: Option<String>,
+    pub orientation: Option<js_enum::Orientation>,
+    pub constant_value: Option<String>, // FIXME: Should not be String
     pub is_input: Option<bool>,
     pub selsize: Option<u8>,
     pub text_content: Option<String>,
-    pub handedness: Option<u8>,
+    pub handedness: Option<js_enum::Handedness>,
 }
 #[napi(object)]
 pub struct TransientComponentState {
     pub backend_key: JsKey,
     pub ports: Vec<PortTransientState>,
     pub bounds: (Location, Location),
-    pub component_value: Option<String>, //only for probes and constants
+    pub component_value: Option<String>, //only for probes and constants, FIXME should not be string
 }
 #[napi(object)]
 pub struct TransientWireState {
