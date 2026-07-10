@@ -47,8 +47,8 @@
         "access": "public"
     },
     "scripts": {
-        "build": "napi build --platform --release",
-        "build:debug": "napi build --platform",
+        "build": "napi build --platform --release --no-const-enum",
+        "build:debug": "napi build --platform --no-const-enum",
         "format": "prettier . -w",
         "prepublishOnly": "napi prepublish -t npm",
         "version": "napi version"

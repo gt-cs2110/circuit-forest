@@ -38,14 +38,15 @@ const metadata = computed(() => componentMap[props.component.type]);
 const ports = computed(() => props.component.ports);
 const rotation = computed(() => {
     switch (props.component.orientation) {
-        case 0:
-            return 270; //n
-        case 1:
-            return 90; //s
-        case 2:
-            return 0; //e
+        case "North":
+            return 270;
+        case "South":
+            return 90;
+        case "East":
+            return 0;
+        case "West":
         default:
-            return 180; // w
+            return 180;
     }
 });
 

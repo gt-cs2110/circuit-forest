@@ -12,21 +12,24 @@ export interface CreateComponentArgs {
   circuitKey: Key
   componentType: string
   label?: string
-  labelOrientation?: number
+  labelOrientation?: Orientation
   x: number
   y: number
   bitsize?: number
   inputs?: number
-  orientation?: number
+  orientation?: Orientation
   constantValue?: string
   isInput?: boolean
   selsize?: number
   textContent?: string
-  handedness?: number
+  handedness?: Handedness
 }
 
 /** Function Get Transient State, gets the relevant data and state of all components in a circuit */
 export declare function getTransientState(circuitKey: Key): [Array<TransientComponentState>, Array<TransientWireState>]
+
+export type Handedness =  'TopLeft'|
+'DownRight';
 
 export interface Key {
   kind: KeyKind
@@ -34,16 +37,19 @@ export interface Key {
   __v_skip: boolean
 }
 
-export declare const enum KeyKind {
-  Circuit = 'Circuit',
-  Function = 'Function',
-  UI = 'UI'
-}
+export type KeyKind =  'Circuit'|
+'Function'|
+'UI';
 
 export interface Location {
   x: number
   y: number
 }
+
+export type Orientation =  'North'|
+'South'|
+'East'|
+'West';
 
 export interface PortTransientState {
   x: number
