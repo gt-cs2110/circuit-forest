@@ -110,9 +110,9 @@ const boundingBoxAndPortTransform = computed(() => {
             :cy="point.y * GRID_SIZE"
             r="2"
             :fill="
-                point.value.includes('Z')
+                point.value.includes('X')
                     ? 'rgb(255,0,0)'
-                    : point.value.includes('X')
+                    : point.value.includes('Z')
                       ? 'rgb(0,0,255)'
                       : point.value.includes('1')
                         ? 'rgb(0,255,0)'
