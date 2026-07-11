@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Handedness, Orientation } from "circuitsim-glue";
-import { computed, ref } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circuit";
@@ -74,21 +74,19 @@ function getComponentProps(component: CircuitComponent) {
     return componentPropertiesMap[component.type.toLowerCase()];
 }
 
+// TODO: Allow null or "invalid state" cases
+//    Should show up when not all inputs are the same
 const labelInput = computed({
     get: () => getFromSelected((c) => c.label, ""),
     set: (label) => updateAllSelected({ label }),
 });
-const bitsizeInput = computed({
-    get: () => getFromSelected((c) => c.bitsize, 1), // TODO: Allow null, in cases where not all bitsizes are the same
-    set: (bitsize) => updateAllSelected({ bitsize }),
-});
-const selsizeInput = computed({
-    get: () => getFromSelected((c) => c.selsize, 1), // TODO: Allow null, in cases where not all selsizes are the same
-    set: (selsize) => updateAllSelected({ selsize }),
-});
-const nInputsInput = computed({
-    get: () => getFromSelected((c) => c.inputs, 1), // TODO: you see the above
-    set: (inputs) => updateAllSelected({ inputs }),
+const bitsizeInput = ref(1);
+const selsizeInput = ref(1);
+const nInputsInput = ref(1);
+watchEffect(() => {
+    bitsizeInput.value = getFromSelected((c) => c.bitsize, 1);
+    selsizeInput.value = getFromSelected((c) => c.selsize, 1);
+    nInputsInput.value = getFromSelected((c) => c.inputs, 1);
 });
 
 const constantError = ref("");
@@ -232,12 +230,13 @@ const constantValue = {
                         <span>{{ bitsizeInput }}</span>
                     </span>
                     <input
-                        v-model.lazy.number="bitsizeInput"
+                        v-model.number="bitsizeInput"
                         type="range"
                         :min="1"
                         :step="1"
                         :max="64"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        @change="updateAllSelected({ bitsize: bitsizeInput })"
                     />
                 </label>
             </AccordionContent>
@@ -250,12 +249,13 @@ const constantValue = {
                         <span>{{ selsizeInput }}</span>
                     </span>
                     <input
-                        v-model.lazy.number="selsizeInput"
+                        v-model.number="selsizeInput"
                         type="range"
                         :min="1"
                         :step="1"
                         :max="6"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        @change="updateAllSelected({ selsize: selsizeInput })"
                     />
                 </label>
             </AccordionContent>
@@ -267,12 +267,13 @@ const constantValue = {
                         <span>{{ nInputsInput }}</span>
                     </span>
                     <input
-                        v-model.lazy.number="nInputsInput"
+                        v-model.number="nInputsInput"
                         type="range"
                         :min="1"
                         :step="1"
                         :max="8"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        @change="updateAllSelected({ inputs: nInputsInput })"
                     />
                 </label>
             </AccordionContent>
