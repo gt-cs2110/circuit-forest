@@ -146,8 +146,10 @@ function handleDelete(e: KeyboardEvent) {
             for (const frontendId of componentSelection.value) {
                 deleteComponent(frontendId);
             }
-
             deleteWiresFromIds(Array.from(wireSelection.value));
+
+            componentSelection.value.clear();
+            wireSelection.value.clear();
         }
     }
 }
