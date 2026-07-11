@@ -181,18 +181,17 @@ impl PhysicalComponent for Tunnel {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Probe {
-    orientation: Orientation, 
-    bitsize: BitSize
+    orientation: Orientation
 }
 impl Probe {
     /// Creates a new instance of the probe with specified orientation.
-    pub fn new(orientation: Orientation, bitsize: u8) -> Self {
-        Self { orientation, bitsize:BitSize::new_clamped(bitsize) }
+    pub fn new(orientation: Orientation) -> Self {
+        Self { orientation }
     }
 }
 impl PhysicalComponent for Probe {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Probe::new(self.bitsize.get()).into())
+        None
     }
 
     fn component_name(&self) ->  &'static str {
@@ -200,7 +199,7 @@ impl PhysicalComponent for Probe {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
+        RelativeComponentBounds::single_port(2, 2)
             .orient(self.orientation, Default::default())
     }
 }

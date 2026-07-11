@@ -131,7 +131,7 @@ pub enum ComponentFn {
     // Gates
     Gate, Not, TriState,
     // Wiring
-    Input, Output, Constant, Splitter,Probe,
+    Input, Output, Constant, Splitter,
     // Muxes
     Mux, Demux, Decoder,
     // Memory

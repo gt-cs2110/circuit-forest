@@ -3,5 +3,6 @@ import { constant } from "./constant";
 import { probe } from "./probe";
 
 export const wiring = {
-    constant,probe
+    constant,
+    probe,
 } satisfies Partial<ComponentMap>;

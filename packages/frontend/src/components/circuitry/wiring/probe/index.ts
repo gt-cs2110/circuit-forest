@@ -14,8 +14,11 @@ export const probe: ComponentMetadata = {
         };
     },
     getOriginToFixedPortOffset: (component) => {
-        const width = component.bitsize <=ROW_MAX_SIZE?Math.max(component.bitsize-2, 0)+2:ROW_MAX_SIZE
-        const height = (Math.max(Math.floor((component.bitsize-1)/ROW_MAX_SIZE), 0)*2)+2
-        return { x: width, y: height/2 };
+        const width =
+            component.bitsize <= ROW_MAX_SIZE
+                ? Math.max(component.bitsize - 2, 0) + 2
+                : ROW_MAX_SIZE;
+        const height = Math.max(Math.floor((component.bitsize - 1) / ROW_MAX_SIZE), 0) * 2 + 2;
+        return { x: width, y: height / 2 };
     },
 };

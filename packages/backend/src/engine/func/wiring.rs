@@ -96,36 +96,6 @@ impl Component for Constant {
     }
 }
 
-/// A constant.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Probe {
-    bitsize: BitSize
-}
-impl Probe {
-    /// Creates a new instance of the tri-state buffer with specified bitsize.
-    pub fn new(bitsize: u8) -> Self {
-        Self { bitsize: BitSize::new_clamped(bitsize) }
-    }
-
-    /// Gets the value which this constant holds.
-    pub fn get_bitsize(&self) -> u8 {
-        self.bitsize.get()
-    }
-}
-impl Component for Probe {
-    fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
-        port_list(&[
-            // output
-            (PortProperties { ty: PortType::Input, bitsize: self.get_bitsize() }, 1),
-        ])
-    }
-
-    fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        vec![]
-    }
-}
-
-
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
