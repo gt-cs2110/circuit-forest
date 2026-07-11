@@ -362,8 +362,6 @@ pub fn get_transient_state(
             let [p, q] = wire.endpoints();
             TransientWireState {
                 endpoints: (p.into(), q.into()),
-                is_horizontal: wire.horizontal(),
-                length: wire.length(),
                 value: value.to_string(),
                 issues: issues.into_iter().map(|s| s.to_string()).collect(),
             }
@@ -416,8 +414,6 @@ pub struct TransientComponentState {
 #[napi(object)]
 pub struct TransientWireState {
     pub endpoints: (Location, Location),
-    pub is_horizontal: bool,
-    pub length: u32,
     pub value: String,
     pub issues: Vec<String>,
 }

@@ -75,8 +75,6 @@ export interface TransientComponentState {
 
 export interface TransientWireState {
   endpoints: [Location, Location]
-  isHorizontal: boolean
-  length: number
   value: string
   issues: Array<string>
 }
