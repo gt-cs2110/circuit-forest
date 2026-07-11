@@ -277,19 +277,51 @@ pub fn get_transient_state(
     let mut repr = REPR.lock().unwrap();
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
-    for (key, ports, bounds, component_value) in circuit.get_component_states(){
-        let ports = ports.into_iter().map(|((x,y), value, issues)| {PortTransientState{x,y,value,issues}}).collect();
-        let bounds = (bounds[0].into(), bounds[1].into());
-        component_states.push(TransientComponentState {
-                backend_key: key.into_js(),
-                ports,
-                bounds,
-                component_value
-            });
-    }
+    for (key, state) in circuit.get_component_states() {
+        let component = circuit
+            .get_component(ComponentKey::Function(key))
+            .context("Component not found")?;
+        //get num ports and iterate through them to get values and states
+        let num_ports = state.get_num_ports();
+        let ports: Vec<PortTransientState> = (0..num_ports)
+            .map(|i| {
+                let (x, y) = component.ports[i];
+                let value = state.get_port(i).to_string();
+                let value_key: circuitsim_engine::engine::ValueKey = circuit
+                    .get_wire_set()
+                    .find_key((ComponentKey::Function(key), i))
+                    .unwrap();
+                let issues = circuit
+                    .get_circuit_state()
+                    .get_issues(value_key)
+                    .iter()
+                    .map(|issue| issue.to_string())
+                    .collect();
 
-    
-    
+                PortTransientState {
+                    x,
+                    y,
+                    value,
+                    issues,
+                }
+            })
+            .collect();
+
+        let bounds = component.bounds.map(Into::into).into();
+        // Get value for component value field for Probe or Constant
+        let bitvalue = match component.inner {
+            PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
+            PhysicalComponentEnum::Constant(constant) => Some(constant.get_value()),
+            _ => None,
+        };
+
+        component_states.push(TransientComponentState {
+            backend_key: key.into_js(),
+            ports,
+            bounds,
+            component_value: bitvalue.map(|s| s.to_string()),
+        });
+    }
 
     //Get Wire Transient States
     //Middle End has a wire set and tunnel interner'
