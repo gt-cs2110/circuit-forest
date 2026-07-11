@@ -5,17 +5,18 @@
 //! - [`MiddleCircuit`]: A mutable view of one of the middle-end circuits.
 //! 
 
-use slotmap::{SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap};
 use thiserror::Error;
 
 use crate::bitarray::{BitArray};
 use crate::engine::state::{FunctionState, ValueIssue};
-use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort};
+use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
+use crate::middle_end::comp_key::ComponentMap;
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{MeshKey, Wire, WireSet};
 
-mod key;
+mod comp_key;
 mod string_interner;
 #[cfg(feature="serde")]
 pub mod serialize;
@@ -23,7 +24,7 @@ pub mod wire;
 pub mod func;
 
 pub use string_interner::TunnelSymbol;
-pub use key::{ComponentKey, UIKey};
+pub use comp_key::{ComponentKey, UIKey};
 
 type Axis = u32;
 type Coord = (Axis, Axis);
@@ -44,8 +45,7 @@ pub struct MiddleRepr {
 #[derive(Debug, Default)]
 struct CircuitArea {
     name: String,
-    components: SecondaryMap<FunctionKey, ComponentProps>,
-    ui_components: SlotMap<UIKey, ComponentProps>,
+    components: ComponentMap<ComponentProps>,
     wires: WireSet,
     tunnel_interner: StringInterner
 }
@@ -169,8 +169,7 @@ impl MiddleCircuit<'_> {
                 circ!(self.engine).connect_one(value, FunctionPort { gate, index });
             }
 
-            circ!(self.physical).components.insert(gate, props);
-            
+            circ!(self.physical).components.func.insert(gate, props);
             Ok(ComponentKey::Function(gate))
         } else {
             // ~~~ UI component ~~~
@@ -182,7 +181,7 @@ impl MiddleCircuit<'_> {
                 circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
             }
 
-            let ui_key = circ!(self.physical).ui_components.insert(props);
+            let ui_key = circ!(self.physical).components.ui.insert(props);
             Ok(ComponentKey::UI(ui_key))
         }
     }
@@ -192,10 +191,8 @@ impl MiddleCircuit<'_> {
     /// 
     /// This returns [`ReprEditErr::ComponentDoesNotExist`] if the component does not exist.
     pub fn remove_component(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
-        let props = match key {
-            ComponentKey::Function(gate) => circ!(self.physical).components.remove(gate),
-            ComponentKey::UI(key) => circ!(self.physical).ui_components.remove(key),
-        }.ok_or(ReprEditErr::ComponentDoesNotExist)?;
+        let props = circ!(self.physical).components.remove(key)
+            .ok_or(ReprEditErr::ComponentDoesNotExist)?;
 
         // Remove from engine (if applicable):
         if let ComponentKey::Function(gate) = key {
@@ -318,25 +315,16 @@ impl MiddleCircuit<'_> {
     
     /// Get the component properties for a given component key, returning an error if the component does not exist.
     pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
-        match key {
-            ComponentKey::Function(gate) => circ!(self.physical).components.get(gate),
-            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key),
-        }.ok_or(ReprEditErr::ComponentDoesNotExist)
+        circ!(self.physical).components.get(key).ok_or(ReprEditErr::ComponentDoesNotExist)
     }
     
     /// Checks to see if circuit has a component with the given key
     pub fn has_component(&self, key: ComponentKey) -> bool {
-        match key {
-            ComponentKey::Function(gate) => circ!(self.physical).components.contains_key(gate),
-            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
-        }
+        circ!(self.physical).components.contains_key(key)
     }
 
     pub fn get_components(&self) -> impl Iterator<Item=(ComponentKey, &ComponentProps)> {
-        std::iter::chain(
-            circ!(self.physical).components.iter().map(|(k, v)| (k.into(), v)),
-            circ!(self.physical).ui_components.iter().map(|(k, v)| (k.into(), v)),
-        )
+        circ!(self.physical).components.iter()
     }
 }
 
