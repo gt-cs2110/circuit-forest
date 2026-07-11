@@ -198,7 +198,7 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
         "POWER" => func::Power.into(),
         "GROUND" => func::Ground.into(),
         "TUNNEL" => func::Tunnel::new(orient).into(),
-        "PROBE" => func::Probe::new(orient).into(),
+        "PROBE" => func::Probe::new(orient, bitsize).into(),
         "MUX" => func::Mux::new(bitsize, selsize, orient, handedness).into(),
         "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
         "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
