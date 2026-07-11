@@ -105,7 +105,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
             { x: 0, y: 0 },
         ],
         orientation: "East",
-        handedness: "TopLeft",
+        handedness: "DownRight",
         labelOrientation: "East",
         x,
         y,
