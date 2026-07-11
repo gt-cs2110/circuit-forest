@@ -155,33 +155,42 @@ impl MiddleCircuit<'_> {
             inner: physical,
         };
 
-        if let Some(component) = physical.init_engine() {
+        let key: ComponentKey = if let Some(component) = physical.init_engine() {
             // ~~~ Engine component ~~~
             let gate = circ!(self.engine).add_function_node(component);
-            
-            // Add port to wire set:
-            for (index, &c) in props.ports.iter().enumerate() {
-                let value = circ!(self.physical).wires.add_port(c, gate.into(), index, || circ!(self.engine).add_value_node())
-                    .expect("Expected port addition to be successful");
-                
-                circ!(self.engine).connect_one(value, FunctionPort { gate, index });
-            }
-
             circ!(self.physical).components.func.insert(gate, props);
-            Ok(ComponentKey::Function(gate))
+            gate.into()
         } else {
             // ~~~ UI component ~~~
-
-            // Add tunnel to wire set:
-            if !props.label.is_empty() && matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
-                let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
-                let sym = circ!(self.physical).tunnel_interner.add_ref(&props.label);
-                circ!(self.physical).wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
-            }
-
             let ui_key = circ!(self.physical).components.ui.insert(props);
-            Ok(ComponentKey::UI(ui_key))
+            ui_key.into()
+        };
+
+        // Update the wire set to include all the component's ports.
+        //    For tunnels, all tunnels are treated as one unified port.
+        //    For every other type of component, each port is passed onto the wire set.
+        let CircuitArea { name: _, components, wires, tunnel_interner } = &mut circ!(self.physical);
+        let props = &components[key];
+        if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
+            // Add tunnel to wire set:
+            if !props.label.is_empty() {
+                let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
+                let sym = tunnel_interner.add_ref(&props.label);
+                wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
+            }
+        } else {
+            // Add port to wire set:
+            for (index, &c) in props.ports.iter().enumerate() {
+                let value = wires.add_port(c, key, index, || circ!(self.engine).add_value_node())
+                    .expect("Expected port addition to be successful");
+                
+                if let ComponentKey::Function(gate) = key {
+                    circ!(self.engine).connect_one(value, FunctionPort { gate, index });
+                }
+            }
         }
+        
+        Ok(key)
     }
 
 
@@ -208,7 +217,7 @@ impl MiddleCircuit<'_> {
             // Remove all ports from wire set:
             for index in 0..props.ports.len() {
                 let result = circ!(self.physical).wires.remove_port(key, index)
-                    .expect("Component removal should succeed");
+                    .expect("Port removal should succeed");
                 self.handle_remove(result);
             }
         }
