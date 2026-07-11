@@ -9,8 +9,9 @@ const { component } = defineProps<CircuitComponentProps>();
 const width = computed(() => (component ? probe.getDimensions(component).width - 2 : 0));
 const height = computed(() => (component ? probe.getDimensions(component).height - 2 : 0));
 const textLines = computed(() => {
-    if (!component?.componentValue) return [];
-    return component.componentValue.match(/.{1,8}/g) || [];
+    let value = component?.ports[0]?.value;
+    if (!value) return [];
+    return value.match(/.{1,8}/g) || [];
 });
 
 const totalLines = computed(() => textLines.value.length);

@@ -71,7 +71,6 @@ export interface TransientComponentState {
   backendKey: Key
   ports: Array<PortTransientState>
   bounds: [Location, Location]
-  componentValue?: string
 }
 
 export interface TransientWireState {

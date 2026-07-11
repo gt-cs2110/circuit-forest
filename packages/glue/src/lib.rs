@@ -308,18 +308,10 @@ pub fn get_transient_state(
             .collect();
 
         let bounds = component.bounds.map(Into::into).into();
-        // Get value for component value field for Probe or Constant
-        let bitvalue = match component.inner {
-            PhysicalComponentEnum::Probe(_) => Some(state.get_port(0)),
-            PhysicalComponentEnum::Constant(constant) => Some(constant.get_value()),
-            _ => None,
-        };
-
         component_states.push(TransientComponentState {
             backend_key: key.into_js(),
             ports,
             bounds,
-            component_value: bitvalue.map(|s| s.to_string()),
         });
     }
 
@@ -383,7 +375,6 @@ pub struct TransientComponentState {
     pub backend_key: JsKey,
     pub ports: Vec<PortTransientState>,
     pub bounds: (Location, Location),
-    pub component_value: Option<String>, //only for probes and constants, FIXME should not be string
 }
 #[napi(object)]
 pub struct TransientWireState {
