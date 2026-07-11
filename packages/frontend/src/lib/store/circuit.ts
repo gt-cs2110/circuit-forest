@@ -31,26 +31,26 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     //Retreive component from store of current circuit
     const component = currentSubcircuit.value.components.get(frontendId);
     if (!component) return;
+    console.log("Update request:", updates);
+
+    // FIXME: If updates wouldn't change the component, don't invoke backend
+    // Create object with new changes:
     console.log(`Updating component with frontend id ${frontendId}`);
-    console.log(updates);
+    const newComponent = Object.assign(toRaw(component), updates);
 
-    //Apply the changes in the Partial<Circuit Component>
-    Object.assign(component, updates);
-
-    //To Update the component we delete the old and add a new identical component with the changes applied
-
-    //Remove the Old Component with this id
+    // Remove the original version of this component:
     window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
 
-    ///Add new component with changes applied & update backend key
-    const state = currentSubcircuit.value.components.get(frontendId);
-    if (state) {
-        state.backendKey = window.api.core.addComponent({
-            ...toRaw(component),
+    // Add new component with changes applied & update backend key.
+    currentSubcircuit.value.components.set(frontendId, {
+        ...newComponent,
+        backendKey: window.api.core.addComponent({
+            ...newComponent,
             circuitKey: currentSubcircuit.value.backendKey,
             componentType: String(component.type).toUpperCase(),
-        });
-    }
+        }),
+    });
+
     updateState();
 }
 
