@@ -1,8 +1,10 @@
 use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
+use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
-use circuitsim_engine::engine::{CircuitKey, FunctionKey};
+use circuitsim_engine::engine::state::ValueIssue;
+use circuitsim_engine::engine::{CircuitKey, FunctionKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{ComponentKey, MiddleCircuit, MiddleRepr, UIKey};
@@ -267,71 +269,106 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     Ok(result.is_ok())
 }
 
+struct DValueState {
+    value: BitArray,
+    issues: Vec<ValueIssue>,
+}
+impl DValueState {
+    fn query(circuit: &MiddleCircuit<'_>, key: ValueKey) -> Self {
+        let state = circuit.get_circuit_state();
+        let value = state.get_node_value(key);
+        let issues = Vec::from_iter(state.get_issues(key).iter().cloned());
+
+        Self { value, issues }
+    }
+}
+
+struct DComponentState {
+    key: ComponentKey,
+    ports: Vec<((u32, u32), Option<DValueState>)>,
+    bounds: [(u32, u32); 2],
+}
+
+fn get_component_states(circuit: &MiddleCircuit<'_>) -> impl Iterator<Item = DComponentState> {
+    circuit.get_components().map(|(ck, props)| {
+        let ports = props
+            .ports
+            .iter()
+            .enumerate()
+            .map(|(i, &coord)| {
+                let value = circuit
+                    .get_wire_set()
+                    .find_key((ck, i))
+                    .map(|vk| DValueState::query(circuit, vk));
+                (coord, value)
+            })
+            .collect();
+
+        DComponentState {
+            key: ck,
+            ports,
+            bounds: props.bounds,
+        }
+    })
+}
+
+fn get_wire_states(circuit: &MiddleCircuit<'_>) -> impl Iterator<Item = (Wire, DValueState)> {
+    circuit
+        .get_wire_set()
+        .wire_values_iter()
+        .map(|(w, k)| (w, DValueState::query(circuit, k)))
+}
 /// Function Get Transient State, gets the relevant data and state of all components in a circuit
 
 #[napi]
 pub fn get_transient_state(
     circuit_key: JsKey,
 ) -> anyhow::Result<(Vec<TransientComponentState>, Vec<TransientWireState>)> {
-    let mut component_states: Vec<TransientComponentState> = Vec::new();
     let mut repr = REPR.lock().unwrap();
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
-    for (key, state) in circuit.get_component_states() {
-        let component = circuit
-            .get_component(ComponentKey::Function(key))
-            .context("Component not found")?;
-        //get num ports and iterate through them to get values and states
-        let num_ports = state.get_num_ports();
-        let ports: Vec<PortTransientState> = (0..num_ports)
-            .map(|i| {
-                let (x, y) = component.ports[i];
-                let value = state.get_port(i).to_string();
-                let value_key: circuitsim_engine::engine::ValueKey = circuit
-                    .get_wire_set()
-                    .find_key((ComponentKey::Function(key), i))
-                    .unwrap();
-                let issues = circuit
-                    .get_circuit_state()
-                    .get_issues(value_key)
-                    .iter()
-                    .map(|issue| issue.to_string())
-                    .collect();
+    let component_states = get_component_states(&circuit)
+        .map(|DComponentState { key, ports, bounds }| {
+            let ports = ports
+                .into_iter()
+                .map(|((x, y), d_value)| {
+                    let (value, issues) = match d_value {
+                        Some(DValueState { value, issues }) => (
+                            value.to_string(),
+                            issues.into_iter().map(|s| s.to_string()).collect(),
+                        ),
+                        None => (String::from("0"), vec![]),
+                    };
+                    PortTransientState {
+                        x,
+                        y,
+                        value,
+                        issues,
+                    }
+                })
+                .collect();
+            let bounds = bounds.map(Into::into).into();
+            TransientComponentState {
+                backend_key: key.into_js(),
+                ports,
+                bounds,
+            }
+        })
+        .collect();
 
-                PortTransientState {
-                    x,
-                    y,
-                    value,
-                    issues,
-                }
-            })
-            .collect();
-
-        let bounds = component.bounds.map(Into::into).into();
-        component_states.push(TransientComponentState {
-            backend_key: key.into_js(),
-            ports,
-            bounds,
-        });
-    }
-
-    //Get Wire Transient States
-    //Middle End has a wire set and tunnel interner'
-
-    //Wire Range Map holds all our horizantal and vertical segments
-
-    let mut wire_states: Vec<TransientWireState> = Vec::new();
-
-    for (wire, value, issues) in circuit.get_wire_states() {
-        let [p, q] = wire.endpoints();
-        wire_states.push(TransientWireState {
-            endpoints: (p.into(), q.into()),
-            is_horizontal: wire.horizontal(),
-            length: wire.length(),
-            value: value.to_string(),
-            issues: issues.into_iter().map(|s| s.to_string()).collect(),
-        });
-    }
+    let wire_states = get_wire_states(&circuit)
+        .map(|(wire, d_value)| {
+            let DValueState { value, issues } = d_value;
+            let [p, q] = wire.endpoints();
+            TransientWireState {
+                endpoints: (p.into(), q.into()),
+                is_horizontal: wire.horizontal(),
+                length: wire.length(),
+                value: value.to_string(),
+                issues: issues.into_iter().map(|s| s.to_string()).collect(),
+            }
+        })
+        .collect();
 
     Ok((component_states, wire_states))
 }

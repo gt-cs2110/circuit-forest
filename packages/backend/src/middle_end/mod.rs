@@ -8,13 +8,11 @@
 use slotmap::{SecondaryMap};
 use thiserror::Error;
 
-use crate::bitarray::{BitArray};
-use crate::engine::state::{FunctionState, ValueIssue};
 use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
 use crate::middle_end::comp_key::ComponentMap;
 use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
-use crate::middle_end::wire::{MeshKey, Wire, WireSet};
+use crate::middle_end::wire::{Wire, WireSet};
 
 mod comp_key;
 mod string_interner;
@@ -286,24 +284,6 @@ impl MiddleCircuit<'_> {
     /// Updates the engine.
     pub fn propagate(&mut self) {
         circ!(self.engine).propagate();
-    }
-
-    /// Get the states of all components in the circuit.
-    pub fn get_component_states(&self) -> Vec<(FunctionKey, &FunctionState)> {
-        circ!(self.state)
-            .functions
-            .iter()
-            .collect() 
-    } 
-
-    pub fn get_wire_states(&self) -> Vec<(Wire, BitArray, Vec<ValueIssue>)> {
-        circ!(self.physical).wires.wires().map(|wire| {
-            let value_key = circ!(self.physical).wires.find_key(MeshKey::from(wire.endpoints()[0])).unwrap();
-            let bit_value = circ!(self.state).get_node_value(value_key);
-            let issues = circ!(self.state).get_issues(value_key).iter().copied().collect();
-
-            (wire, bit_value, issues)
-        }).collect()
     }
 
     pub fn get_wire_set(&self) -> &WireSet {
