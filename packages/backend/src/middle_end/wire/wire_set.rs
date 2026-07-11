@@ -90,6 +90,15 @@ impl WireSet {
             .map(|(_, _, &k)| k)
     }
 
+    /// Finds the [`ValueKey`] corresponding to a given wire.
+    /// 
+    /// This is `None` if the wire is not present on the graph.
+    /// The two endpoints must be joints (i.e., the specified wire cannot be a subwire).
+    pub fn find_key_of_wire(&self, w: Wire) -> Option<ValueKey> {
+        let [p, q] = w.endpoints();
+        self.graph.edge_weight(p.into(), q.into()).copied()
+    }
+
     /// Checks if there is a wire to split, and splitting it into two if needed.
     /// 
     /// This function accepts the coordinate to split at.
@@ -435,6 +444,15 @@ impl WireSet {
     /// Gets all of the wires defined in the set.
     pub fn wires(&self) -> impl Iterator<Item=Wire> {
         self.ranges.wires()
+    }
+
+    /// Gets all of the wires in the set and their associated value keys.
+    pub fn wire_values_iter(&self) -> impl Iterator<Item=(Wire, ValueKey)> {
+        self.graph.all_edges()
+            .filter_map(|(m1, m2, &vk)| match (m1, m2) {
+                (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some((Wire::from_endpoints(p, q).unwrap(), vk)),
+                _ => None
+            })
     }
 }
 
