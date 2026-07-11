@@ -128,6 +128,7 @@ const transform = computed(() => {
             stroke-width="4"
             draggable="true"
             @mousedown="onPortDrag"
+            @click="console.log('Port value:', point.value)"
             class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
         />
     </g>

@@ -38,6 +38,7 @@ function handleClick(e: MouseEvent) {
 
     if (!isWireSelected(index.value)) {
         selectWire(index.value, additive);
+        console.log("Wire value:", wire.value);
     }
 }
 </script>
