@@ -64,15 +64,16 @@ export function useMarquee(
 }
 
 function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
-    return [...subcircuit.components].map(([id, comp]) => {
-        const dims = componentMap[comp.type].getDimensions(comp);
+    return [...subcircuit.components].map(([id, component]) => {
+        const dims = componentMap[component.type].getDimensions(component);
+        const { x, y } = component.pos;
         return {
             id,
             bounds: {
-                left: comp.x,
-                top: comp.y,
-                right: comp.x + dims.width,
-                bottom: comp.y + dims.height,
+                left: x,
+                top: y,
+                right: x + dims.width,
+                bottom: y + dims.height,
             },
         };
     });

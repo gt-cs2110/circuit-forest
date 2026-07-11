@@ -13,8 +13,7 @@ export interface CreateComponentArgs {
   componentType: string
   label?: string
   labelOrientation?: Orientation
-  x: number
-  y: number
+  pos: Location
   bitsize?: number
   inputs?: number
   orientation?: Orientation
@@ -52,8 +51,7 @@ export type Orientation =  'North'|
 'West';
 
 export interface PortTransientState {
-  x: number
-  y: number
+  pos: Location
   value: string
   issues: Array<string>
 }

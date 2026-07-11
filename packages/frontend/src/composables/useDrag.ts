@@ -52,8 +52,10 @@ export function useDrag(
                 const component = subcircuit.components.get(id);
                 if (component) {
                     updateComponent(component.frontendId, {
-                        x: component.x + delta.x,
-                        y: component.y + delta.y,
+                        pos: {
+                            x: component.pos.x + delta.x,
+                            y: component.pos.y + delta.y,
+                        },
                     });
                 }
             }

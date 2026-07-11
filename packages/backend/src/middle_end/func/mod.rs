@@ -11,7 +11,7 @@ pub use misc::*;
 pub use gates::*;
 
 use crate::engine::func::ComponentFn;
-use crate::middle_end::{AxisDelta, Coord, CoordDelta, MiddleCircuit};
+use crate::middle_end::{Axis, AxisDelta, Coord, CoordDelta, MiddleCircuit};
 use enum_dispatch::enum_dispatch;
 
 /// Helper which rotates a coordinate around the origin to match the provided orientation.
@@ -222,9 +222,14 @@ impl RelativeComponentBounds {
     }
 
     pub(crate) fn into_absolute(self, origin: Coord) -> Option<AbsoluteComponentBounds> {
+        fn add_axis(p: Axis, delta: AxisDelta) -> Option<Axis> {
+            // Bound coordinate to maximum i32::MAX
+            p.checked_add_signed(delta)
+                .filter(|&c| AxisDelta::try_from(c).is_ok())
+        }
         fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
-            p.0.checked_add_signed(delta.0)
-                .zip(p.1.checked_add_signed(delta.1))
+            add_axis(p.0, delta.0)
+                .zip(add_axis(p.1, delta.1))
         }
 
         let Self { bounds: [b0, b1], ports } = self;

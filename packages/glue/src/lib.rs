@@ -1,3 +1,4 @@
+use std::num::TryFromIntError;
 use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
@@ -145,20 +146,29 @@ impl CastKey for ComponentKey {
     }
 }
 
+type Coord = (u32, u32);
 #[napi(object)]
 pub struct Location {
-    pub x: u32,
-    pub y: u32,
+    pub x: i32,
+    pub y: i32,
 }
-impl From<(u32, u32)> for Location {
-    fn from(value: (u32, u32)) -> Self {
+impl From<Coord> for Location {
+    fn from(value: Coord) -> Self {
         let (x, y) = value;
+        let x = x
+            .try_into()
+            .expect("bug: repr should bound coordinate to fit in i32");
+        let y = y
+            .try_into()
+            .expect("bug: repr should bound coordinate to fit in i32");
         Self { x, y }
     }
 }
-impl From<Location> for (u32, u32) {
-    fn from(value: Location) -> Self {
-        (value.x, value.y)
+impl TryFrom<Location> for (u32, u32) {
+    type Error = TryFromIntError;
+
+    fn try_from(value: Location) -> Result<Self, Self::Error> {
+        Ok((value.x.try_into()?, value.y.try_into()?))
     }
 }
 
@@ -224,7 +234,7 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
             component,
             &args.label.unwrap_or_default(),
             label_orient,
-            (args.x, args.y),
+            args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?,
         )
         .context("Component addition failed")?;
     Ok(comp_key.into_js())
@@ -247,12 +257,16 @@ pub fn add_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow::R
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let Some(w) = Wire::from_endpoints(start.into(), end.into()) else {
-        return Ok(false);
+    let result = if let Ok(start) = start.try_into()
+        && let Ok(end) = end.try_into()
+        && let Some(w) = Wire::from_endpoints(start, end)
+    {
+        circuit.add_wire(w).is_ok()
+    } else {
+        false
     };
 
-    let result = circuit.add_wire(w);
-    Ok(result.is_ok())
+    Ok(result)
 }
 #[napi]
 
@@ -261,12 +275,16 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let Some(w) = Wire::from_endpoints(start.into(), end.into()) else {
-        return Ok(false);
+    let result = if let Ok(start) = start.try_into()
+        && let Ok(end) = end.try_into()
+        && let Some(w) = Wire::from_endpoints(start, end)
+    {
+        circuit.remove_wire(w).is_ok()
+    } else {
+        false
     };
 
-    let result = circuit.remove_wire(w);
-    Ok(result.is_ok())
+    Ok(result)
 }
 
 struct DValueState {
@@ -331,7 +349,7 @@ pub fn get_transient_state(
         .map(|DComponentState { key, ports, bounds }| {
             let ports = ports
                 .into_iter()
-                .map(|((x, y), d_value)| {
+                .map(|(pos, d_value)| {
                     let (value, issues) = match d_value {
                         Some(DValueState { value, issues }) => (
                             value.to_string(),
@@ -340,8 +358,7 @@ pub fn get_transient_state(
                         None => (String::from("0"), vec![]),
                     };
                     PortTransientState {
-                        x,
-                        y,
+                        pos: pos.into(),
                         value,
                         issues,
                     }
@@ -393,8 +410,7 @@ pub struct CreateComponentArgs {
     pub component_type: String, // FIXME: Should be an enum?
     pub label: Option<String>,
     pub label_orientation: Option<js_enum::Orientation>,
-    pub x: u32,
-    pub y: u32,
+    pub pos: Location,
 
     pub bitsize: Option<u8>,
     pub inputs: Option<u8>,
@@ -419,8 +435,7 @@ pub struct TransientWireState {
 }
 #[napi(object)]
 pub struct PortTransientState {
-    pub x: u32,
-    pub y: u32,
+    pub pos: Location,
     pub value: String,
     pub issues: Vec<String>,
 }

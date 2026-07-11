@@ -61,8 +61,8 @@ const rotation = computed(() => {
 
 const transform = computed(() => {
     const ShiftToWorldCoordinates = {
-        x: props.component.x * GRID_SIZE,
-        y: props.component.y * GRID_SIZE,
+        x: props.component.pos.x * GRID_SIZE,
+        y: props.component.pos.y * GRID_SIZE,
     };
 
     const OriginRelativeToFixedPortRelative = {
@@ -112,8 +112,8 @@ const transform = computed(() => {
         <circle
             v-for="(point, index) in ports"
             :key="`${index}`"
-            :cx="point.x * GRID_SIZE"
-            :cy="point.y * GRID_SIZE"
+            :cx="point.pos.x * GRID_SIZE"
+            :cy="point.pos.y * GRID_SIZE"
             r="2"
             :fill="
                 point.value.includes('X')
