@@ -315,12 +315,13 @@ impl MiddleCircuit<'_> {
     pub fn get_circuit_state(&self) -> &CircuitState {
         &circ!(self.state)
     }
-      /// get the component properties for a given component key, returns an error if the component does not exist
+    
+    /// Get the component properties for a given component key, returning an error if the component does not exist.
     pub fn get_component(&self, key: ComponentKey) -> Result<&ComponentProps, ReprEditErr> {
         match key {
-                ComponentKey::Function(gate) => circ!(self.physical).components.get(gate).ok_or(ReprEditErr::ComponentDoesNotExist),
-            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key).ok_or(ReprEditErr::ComponentDoesNotExist),
-        }
+            ComponentKey::Function(gate) => circ!(self.physical).components.get(gate),
+            ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.get(ui_key),
+        }.ok_or(ReprEditErr::ComponentDoesNotExist)
     }
     
     /// Checks to see if circuit has a component with the given key
@@ -329,6 +330,13 @@ impl MiddleCircuit<'_> {
             ComponentKey::Function(gate) => circ!(self.physical).components.contains_key(gate),
             ComponentKey::UI(ui_key) => circ!(self.physical).ui_components.contains_key(ui_key),
         }
+    }
+
+    pub fn get_components(&self) -> impl Iterator<Item=(ComponentKey, &ComponentProps)> {
+        std::iter::chain(
+            circ!(self.physical).components.iter().map(|(k, v)| (k.into(), v)),
+            circ!(self.physical).ui_components.iter().map(|(k, v)| (k.into(), v)),
+        )
     }
 }
 
