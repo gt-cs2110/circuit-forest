@@ -138,14 +138,12 @@ impl WireSet {
         debug_assert_eq!(p1, c);
         debug_assert_eq!(k0, k1);
 
-        Some((
-            [
-                Wire::from_endpoints(q0, c)?,
-                Wire::from_endpoints(c, q1)?
-            ],
-            Wire::from_endpoints(q0, q1)?,
-        ))
+        let l = Wire::from_endpoints(q0, c).expect("graph edges should make valid wires");
+        let r = Wire::from_endpoints(c, q1).expect("graph edges should make valid wires");
+        let j = Wire::from_endpoints(q0, q1)?;
+        Some(([l, r], j))
     }
+
     /// Performs a join at the given coord,
     /// allowing two wires at the given point to be joined
     /// if it would make sense for the geometry of the graph.
@@ -509,7 +507,7 @@ mod tests {
 
     use super::*;
     
-    fn keygen() -> impl FnMut() -> ValueKey {
+    fn keygen<K: slotmap::Key>() -> impl FnMut() -> K {
         let mut map = SlotMap::with_key();
         move || map.insert(())
     }
@@ -519,7 +517,9 @@ mod tests {
         let expected: BTreeSet<_> = nodes.into_iter().map(Into::into).collect();
         assert_eq!(actual, expected, "nodes in graph should match");
     }
-    fn assert_graph_edges<const N: usize>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(Coord, Coord)>); N]) {
+    fn assert_graph_edges<const N: usize, K>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(K, K)>); N])
+        where K: Into<MeshKey> + Copy
+    {
         use crate::middle_end::wire::minmax;
         
         let expected_edgemap = HashMap::from(all_edges);
@@ -813,9 +813,9 @@ mod tests {
         assert_remove(ws.remove_wire(w(n01, n11)), [], []);
         assert_remove(ws.remove_wire(w(n00, n01)), [key], []);
 
-        // Check corre0ct construction
+        // Check correct construction
         assert_graph_nodes(&ws.graph, []);
-        assert_graph_edges(&ws.graph, []);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, []);
         assert_range_map(&ws.ranges, []);
     }
 
@@ -1004,5 +1004,50 @@ mod tests {
         let edges = [(n00, n01), (n04, n05)];
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
+    }
+
+    #[test]
+    fn wireset_mid_port() {
+        let mut value_keygen = keygen();
+        let mut func_keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02] = [
+            (0, 0), (0, 1), (0, 2)
+        ];
+        let gate = func_keygen();
+        let port = FunctionPort { gate, index: 0 };
+        // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Add a wire and put a port in the middle of it.
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n00, n02), &mut value_keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        let Some(k2) = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen) else {
+            panic!("Expected port creation to succeed");
+        };
+
+        assert_eq!(k1, k2);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+        // Remove one of the split wires and readd it.
+        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        let Some(AddWireResult::NoJoin(k3)) = ws.add_wire(w(n01, n02), &mut value_keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_eq!(k1, k3);
+        // Adding wires should be the same because the port still exists.
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+
+        // Remove the port.
+        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
+        assert_range_map(&ws.ranges, [(n00, n02)]);
     }
 }
