@@ -99,9 +99,11 @@ impl WireSet {
         self.graph.edge_weight(p.into(), q.into()).copied()
     }
 
-    /// Checks if there is a wire to split, and splitting it into two if needed.
+    /// Tries to split the wire facing the specified horizontality
+    /// at the point of where `c` is.
     /// 
-    /// This function accepts the coordinate to split at.
+    /// This function will successfully split if there is a wire at `c`
+    /// which can be broken up into two parts on both sides of `c`.
     fn split_wire_on_joint(&mut self, c: Coord, horizontal: bool) {
         if let Some((_, joined)) = self.ranges.split_wire(horizontal, c) {
             let [p, q] = joined.endpoints();
@@ -114,7 +116,52 @@ impl WireSet {
         }
     }
 
-    
+    /// Splits all wires at a given coord.
+    fn split_at_coord(&mut self, c: Coord) {
+        self.split_wire_on_joint(c, true);
+        self.split_wire_on_joint(c, false);
+    }
+
+    /// Returns a pair of wires on the coordinate, if they can be joined.
+    fn get_joinable_wires(&self, c: Coord) -> Option<([Wire; 2], Wire)> {
+        // Coordinate is graph joinable if there are two edges from some coordinate `c`,
+        // both connecting to wire joints which collectively could form a straight wire.
+        let mut edges = self.graph.edges(c.into());
+
+        let (MeshKey::WireJoint(p0), MeshKey::WireJoint(q0), k0) = edges.next()? else {
+            return None;
+        };
+        let (MeshKey::WireJoint(p1), MeshKey::WireJoint(q1), k1) = edges.next()? else {
+            return None;
+        };
+        debug_assert_eq!(p0, c);
+        debug_assert_eq!(p1, c);
+        debug_assert_eq!(k0, k1);
+
+        Some((
+            [
+                Wire::from_endpoints(q0, c)?,
+                Wire::from_endpoints(c, q1)?
+            ],
+            Wire::from_endpoints(q0, q1)?,
+        ))
+    }
+    /// Performs a join at the given coord,
+    /// allowing two wires at the given point to be joined
+    /// if it would make sense for the geometry of the graph.
+    fn join_at_coord(&mut self, c: Coord) {
+        if self.get_joinable_wires(c).is_some()
+            && let Some(([l, r], j)) = self.ranges.join_wire(c)
+        {
+                let lk = self.graph_remove_wire(l).expect("removable wire");
+                let rk = self.graph_remove_wire(r).expect("removable wire");
+                assert_eq!(lk, rk, "Joined wires should have same keys");
+        
+                let [j0, j1] = j.endpoints();
+                self.graph.add_edge(j0.into(), j1.into(), lk);
+            }
+    }
+
     /// Removes an edge from the graph and removes any singleton nodes.
     fn graph_remove_edge(&mut self, l: MeshKey, r: MeshKey) -> Option<ValueKey> {
         /// Removes node if it is not connected to any wire.
@@ -193,7 +240,7 @@ impl WireSet {
             // and keeping track of which wires are added/removed
             added.push(subwire);
             let [l, r] = subwire.endpoints();
-            if let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
+            if self.get_joinable_wires(l).is_some() && let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
                 // Remove spl:
                 if added.pop_if(|&mut w| w == spl).is_none() {
                     removed.push(spl);
@@ -204,7 +251,7 @@ impl WireSet {
                 // Add joined:
                 added.push(joined);
             }
-            if let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
+            if self.get_joinable_wires(r).is_some() && let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
                 // Remove spl:
                 let result = added.pop();
                 debug_assert_eq!(result, Some(spl));
@@ -262,18 +309,19 @@ impl WireSet {
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists or if port already exists as a node).
     pub fn add_port(&mut self, c: Coord, key: ComponentKey, index: usize, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
-        let c = c.into();
         let port = (key, index).into();
 
         if self.graph.contains_node(port) {
             return None;
         }
-        if self.graph.contains_edge(c, port) {
+
+        if self.graph.contains_edge(c.into(), port) {
             return None;
         }
 
+        self.split_at_coord(c); // If point is in middle of wire, split it
         let key = self.find_key(c).unwrap_or_else(new_vk);
-        self.graph.add_edge(c, port, key);
+        self.graph.add_edge(c.into(), port, key);
         Some(key)
     }
 
@@ -288,6 +336,7 @@ impl WireSet {
             return None;
         }
 
+        self.split_at_coord(c); // If point is in middle of wire, split it
         let key = self.find_key(c).unwrap_or_else(new_vk);
         self.graph.add_edge(c.into(), tunnel.into(), key);
         Some(key)
@@ -338,16 +387,8 @@ impl WireSet {
         });
 
         // See if any edges can be joined:
-        for c in [p, q] {
-            if let Some(([l, r], j)) = self.ranges.join_wire(c) {
-                let lk = self.graph_remove_wire(l).expect("removable wire");
-                let rk = self.graph_remove_wire(r).expect("removable wire");
-                assert_eq!(lk, rk, "Joined wires should have same keys");
-
-                let [j0, j1] = j.endpoints();
-                self.graph.add_edge(j0.into(), j1.into(), lk);
-            }
-        }
+        self.join_at_coord(p);
+        self.join_at_coord(q);
 
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
@@ -376,6 +417,7 @@ impl WireSet {
             true  => HashSet::new(),
             false => HashSet::from([k]),
         };
+        self.join_at_coord(c);
 
         Some(RemoveWireResult { deleted_keys, split_groups: Default::default() })
     }
@@ -397,6 +439,7 @@ impl WireSet {
         // Find groups:
         let mut split_groups = self.compute_meshes::<MeshKey>([c.into(), tunnel.into()]);
         split_groups.retain(|_, groups| groups.len() > 1);
+        self.join_at_coord(c);
 
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
