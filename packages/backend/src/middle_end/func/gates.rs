@@ -113,7 +113,7 @@ impl PhysicalComponent for TriState {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (2, 1);
-        AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
+        AbsoluteComponentBounds::new((2, 2), [(1, 2), (0, 1), origin])
         .into_relative(origin)
         .orient(self.orientation, self.handedness)
     }
