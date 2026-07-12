@@ -122,33 +122,25 @@ impl WireSet {
         self.split_wire_on_joint(c, false);
     }
 
-    /// Returns a pair of wires on the coordinate, if they can be joined.
-    fn get_joinable_wires(&self, c: Coord) -> Option<([Wire; 2], Wire)> {
-        // Coordinate is graph joinable if there are two edges from some coordinate `c`,
-        // both connecting to wire joints which collectively could form a straight wire.
-        let mut edges = self.graph.edges(c.into());
+    /// Checks whether coordinate has any conditions which would prevent wire joins.
+    /// This returns true if none of those cases are met.
+    /// 
+    /// Joining is handled by the range map, but some logic is not known by the range map
+    /// (particularly, coordinate connections to ports).
+    /// This is used to check the graph cases that would not be known by the range map.
+    fn graph_joinable(&self, c: Coord) -> bool {
+        // Succeeds if <=2 neighbors and if no neighbors are non-joints (all neighbors are joints)
+        let mut neighbors = self.graph.neighbors(c.into());
 
-        let (MeshKey::WireJoint(p0), MeshKey::WireJoint(q0), k0) = edges.next()? else {
-            return None;
-        };
-        let (MeshKey::WireJoint(p1), MeshKey::WireJoint(q1), k1) = edges.next()? else {
-            return None;
-        };
-        debug_assert_eq!(p0, c);
-        debug_assert_eq!(p1, c);
-        debug_assert_eq!(k0, k1);
-
-        let l = Wire::from_endpoints(q0, c).expect("graph edges should make valid wires");
-        let r = Wire::from_endpoints(c, q1).expect("graph edges should make valid wires");
-        let j = Wire::from_endpoints(q0, q1)?;
-        Some(([l, r], j))
+        neighbors.by_ref().take(2).all(|n| matches!(n, MeshKey::WireJoint(_)))
+            && neighbors.next().is_none()
     }
 
     /// Performs a join at the given coord,
     /// allowing two wires at the given point to be joined
     /// if it would make sense for the geometry of the graph.
     fn join_at_coord(&mut self, c: Coord) {
-        if self.get_joinable_wires(c).is_some()
+        if self.graph_joinable(c)
             && let Some(([l, r], j)) = self.ranges.join_wire(c)
         {
                 let lk = self.graph_remove_wire(l).expect("removable wire");
@@ -238,7 +230,7 @@ impl WireSet {
             // and keeping track of which wires are added/removed
             added.push(subwire);
             let [l, r] = subwire.endpoints();
-            if self.get_joinable_wires(l).is_some() && let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
+            if self.graph_joinable(l) && let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
                 // Remove spl:
                 if added.pop_if(|&mut w| w == spl).is_none() {
                     removed.push(spl);
@@ -249,7 +241,7 @@ impl WireSet {
                 // Add joined:
                 added.push(joined);
             }
-            if self.get_joinable_wires(r).is_some() && let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
+            if self.graph_joinable(r) && let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
                 // Remove spl:
                 let result = added.pop();
                 debug_assert_eq!(result, Some(spl));
