@@ -38,7 +38,8 @@ function handleClick(e: MouseEvent) {
 
     if (!isWireSelected(index.value)) {
         selectWire(index.value, additive);
-        console.log("Wire value:", wire.value);
+        let displayKey = `${wire.backendKey.kind}:${wire.backendKey.id[0]}v${wire.backendKey.id[1]}`;
+        console.log("Wire value:", displayKey);
     }
 }
 </script>

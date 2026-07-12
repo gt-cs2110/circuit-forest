@@ -128,7 +128,16 @@ const transform = computed(() => {
             stroke-width="4"
             draggable="true"
             @mousedown="onPortDrag"
-            @click="console.log('Port value:', point.value)"
+            @click="
+                () => {
+                    let key = point.backendKey;
+                    let displayKey =
+                        typeof key !== 'undefined'
+                            ? `${key.kind}:${key.id[0]}v${key.id[1]}`
+                            : undefined;
+                    console.log('Port value:', point.value, displayKey);
+                }
+            "
             class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
         />
     </g>

@@ -70,6 +70,7 @@ pub enum KeyKind {
     Circuit,
     Function,
     UI,
+    Value,
 }
 #[napi(object, js_name = "Key")]
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -129,6 +130,9 @@ impl CastKeyByKind for FunctionKey {
 }
 impl CastKeyByKind for UIKey {
     const KIND: KeyKind = KeyKind::UI;
+}
+impl CastKeyByKind for ValueKey {
+    const KIND: KeyKind = KeyKind::Value;
 }
 impl CastKey for ComponentKey {
     fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
@@ -289,6 +293,7 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
 
 #[derive(Debug)]
 struct DValueState {
+    key: ValueKey,
     value: BitArray,
     issues: Vec<ValueIssue>,
 }
@@ -298,7 +303,7 @@ impl DValueState {
         let value = state.get_node_value(key);
         let issues = Vec::from_iter(state.get_issues(key).iter().cloned());
 
-        Self { value, issues }
+        Self { key, value, issues }
     }
 }
 
@@ -347,19 +352,21 @@ pub fn get_transient_state(
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
     let component_states = get_component_states(&circuit)
-        .map(|DComponentState { key, ports, bounds }| {
+        .map(|DComponentState { key: ckey, ports, bounds }| {
             let ports = ports
                 .into_iter()
                 .map(|(pos, d_value)| {
-                    let (value, issues) = match d_value {
-                        Some(DValueState { value, issues }) => (
+                    let (vkey, value, issues) = match d_value {
+                        Some(DValueState { key, value, issues }) => (
+                            Some(key.into_js()),
                             value.to_string(),
                             issues.into_iter().map(|s| s.to_string()).collect(),
                         ),
-                        None => (String::from("0"), vec![]),
+                        None => (None, String::from("0"), vec![]),
                     };
                     PortTransientState {
                         pos: pos.into(),
+                        backend_key: vkey,
                         value,
                         issues,
                     }
@@ -367,7 +374,7 @@ pub fn get_transient_state(
                 .collect();
             let bounds = bounds.map(Into::into).into();
             TransientComponentState {
-                backend_key: key.into_js(),
+                backend_key: ckey.into_js(),
                 ports,
                 bounds,
             }
@@ -376,10 +383,11 @@ pub fn get_transient_state(
 
     let wire_states = get_wire_states(&circuit)
         .map(|(wire, d_value)| {
-            let DValueState { value, issues } = d_value;
+            let DValueState { key, value, issues } = d_value;
             let [p, q] = wire.endpoints();
             TransientWireState {
                 endpoints: (p.into(), q.into()),
+                backend_key: key.into_js(),
                 value: value.to_string(),
                 issues: issues.into_iter().map(|s| s.to_string()).collect(),
             }
@@ -431,12 +439,14 @@ pub struct TransientComponentState {
 #[napi(object)]
 pub struct TransientWireState {
     pub endpoints: (Location, Location),
+    pub backend_key: JsKey,
     pub value: String,
     pub issues: Vec<String>,
 }
 #[napi(object)]
 pub struct PortTransientState {
     pub pos: Location,
+    pub backend_key: Option<JsKey>,
     pub value: String,
     pub issues: Vec<String>,
 }

@@ -38,7 +38,8 @@ export interface Key {
 
 export type KeyKind =  'Circuit'|
 'Function'|
-'UI';
+'UI'|
+'Value';
 
 export interface Location {
   x: number
@@ -52,6 +53,7 @@ export type Orientation =  'North'|
 
 export interface PortTransientState {
   pos: Location
+  backendKey?: Key
   value: string
   issues: Array<string>
 }
@@ -73,6 +75,7 @@ export interface TransientComponentState {
 
 export interface TransientWireState {
   endpoints: [Location, Location]
+  backendKey: Key
   value: string
   issues: Array<string>
 }
