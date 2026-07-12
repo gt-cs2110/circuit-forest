@@ -54,9 +54,13 @@ impl Wire {
     /// Constructs a wire out of endpoints, returning None if not 1D.
     pub fn from_endpoints(p: Coord, q: Coord) -> Option<Self> {
         // Let p = the left-/top-most coord, q = the other coord.
+        //
+        // If p.1 > q.1, then this obviously isn't a valid wire, since pq are on a diagonal.
         let [p, q] = minmax(p, q);
-
-        match (NonZero::new(q.0 - p.0), NonZero::new(q.1 - p.1)) {
+        
+        let dx = NonZero::new(q.0.checked_sub(p.0)?);
+        let dy = NonZero::new(q.1.checked_sub(p.1)?);
+        match (dx, dy) {
             (None, None) => None,
             (None, Some(length)) => Some(Self { x: p.0, y: p.1, length, horizontal: false }),
             (Some(length), None) => Some(Self { x: p.0, y: p.1, length, horizontal: true }),
@@ -135,6 +139,10 @@ mod tests {
 
         // Diagonal wires
         let [p, q] = [(1, 2), (3, 4)];
+        assert_eq!(Wire::from_endpoints(p, q), None);
+        assert_eq!(Wire::from_endpoints(q, p), None);
+
+        let [p, q] = [(1, 4), (3, 2)];
         assert_eq!(Wire::from_endpoints(p, q), None);
         assert_eq!(Wire::from_endpoints(q, p), None);
 
