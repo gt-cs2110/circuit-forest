@@ -321,15 +321,29 @@ impl WireSet {
     /// 
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists).
-    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
+    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         if self.graph.contains_edge(c.into(), tunnel.into()) {
             return None;
         }
 
         self.split_at_coord(c); // If point is in middle of wire, split it
-        let key = self.find_key(c).unwrap_or_else(new_vk);
-        self.graph.add_edge(c.into(), tunnel.into(), key);
-        Some(key)
+
+        // Get the key of the new coordinate (if it exists) and get the key of the tunnel.
+        let added_key = self.find_key(c);
+        let tunnel_key = self.find_key(tunnel);
+
+        let (edge_key, result) = match (added_key, tunnel_key) {
+            (None, None) => {
+                let k = new_vk();
+                (k, AddWireResult::NoJoin(k))
+            },
+            (None, Some(k)) | (Some(k), None) => (k, AddWireResult::NoJoin(k)),
+            (Some(a), Some(t)) if a == t => (t, AddWireResult::NoJoin(t)),
+            (Some(a), Some(t)) => (t, AddWireResult::Join(c, vec![a, t])),
+        };
+
+        self.graph.add_edge(c.into(), tunnel.into(), edge_key);
+        Some(result)
     }
 
     /// Removes the wire from the graph.

@@ -287,6 +287,7 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     Ok(result)
 }
 
+#[derive(Debug)]
 struct DValueState {
     value: BitArray,
     issues: Vec<ValueIssue>,
@@ -301,6 +302,7 @@ impl DValueState {
     }
 }
 
+#[derive(Debug)]
 struct DComponentState {
     key: ComponentKey,
     ports: Vec<((u32, u32), Option<DValueState>)>,
@@ -312,11 +314,10 @@ fn get_component_states(circuit: &MiddleCircuit<'_>) -> impl Iterator<Item = DCo
         let ports = props
             .ports
             .iter()
-            .enumerate()
-            .map(|(i, &coord)| {
+            .map(|&coord| {
                 let value = circuit
                     .get_wire_set()
-                    .find_key((ck, i))
+                    .find_key(coord)
                     .map(|vk| DValueState::query(circuit, vk));
                 (coord, value)
             })

@@ -154,7 +154,7 @@ impl PhysicalComponent for Splitter {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tunnel {
-    orientation: Orientation
+    orientation: Orientation,
 }
 impl Tunnel {
     /// Creates a new instance of a tunnel with the specified orientation.
@@ -171,8 +171,9 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
+    fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let width = std::cmp::max(3, ctx.label.len() as u32 + 1);
+        RelativeComponentBounds::single_port_with_origin(width, 2, (width, 1))
             .orient(self.orientation, Default::default())
     }
 }

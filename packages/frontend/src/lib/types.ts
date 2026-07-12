@@ -10,7 +10,7 @@ import type {
 import { Component } from "vue";
 
 export const componentCategories = {
-    wiring: ["constant", "probe"],
+    wiring: ["constant", "probe", "tunnel"],
     gates: ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"],
     plexers: ["mux", "demux", "decoder"],
 } as const;
@@ -110,7 +110,7 @@ const propertyGroups = [
         properties: ["label", "label_orientation", "orientation", "handedness", "selsize"],
     },
     {
-        types: ["ground", "power", "subcircuit"],
+        types: ["ground", "power", "subcircuit", "tunnel"],
         properties: ["label", "label_orientation", "orientation"],
     },
     {

@@ -73,6 +73,10 @@ pub enum ReprEditErr {
     /// Component being specified doesn't exist (so it cannot be removed).
     #[error("component does not exist")]
     ComponentDoesNotExist,
+    
+    /// Adding a tunnel at a spot where the same tunnel already exists.
+    #[error("cannot place two identical tunnels with the same port")]
+    RedundantTunnel,
 
     /// Adding a wire fails.
     #[error("cannot add wire")]
@@ -176,7 +180,10 @@ impl MiddleCircuit<'_> {
             if !props.label.is_empty() {
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = tunnel_interner.add_ref(&props.label);
-                wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node());
+                
+                let result = wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node())
+                    .ok_or(ReprEditErr::RedundantTunnel)?;
+                self.handle_add(result);
             }
         } else {
             // Add port to wire set:
@@ -209,10 +216,14 @@ impl MiddleCircuit<'_> {
         
         // Handle tunnels specially:
         if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
-            let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
-                .expect("Tunnel should have an assigned symbol");
-            circ!(self.physical).wires.remove_tunnel(props.origin, sym)
-                .expect("Tunnel removal should succeed");
+            if !props.label.is_empty() {
+                let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
+                    .expect("Tunnel should have an assigned symbol");
+    
+                let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym)
+                    .expect("Tunnel removal should succeed");
+                self.handle_remove(result);
+            }
         } else {
             // Remove all ports from wire set:
             for index in 0..props.ports.len() {
@@ -235,13 +246,8 @@ impl MiddleCircuit<'_> {
     pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
         let result = circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node())
             .ok_or(ReprEditErr::CannotAddWire)?;
-        match result {
-            wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
-                circ!(self.engine).join(&keys);
-                circ!(self.physical).wires.flood_fill(c, k1);
-            },
-        }
+
+        self.handle_add(result);
 
         Ok(())
     }
@@ -259,7 +265,17 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
-    /// Updates engine to corresponding `RemoveWireResult`.
+    /// Updates engine & middle end to corresponding AddWireResult.
+    fn handle_add(&mut self, result: wire::AddWireResult) {
+        match result {
+            wire::AddWireResult::NoJoin(_) => {},
+            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
+                circ!(self.engine).join(&keys);
+                circ!(self.physical).wires.flood_fill(c, k1);
+            },
+        }
+    }
+    /// Updates engine & middle end to corresponding `RemoveWireResult`.
     fn handle_remove(&mut self, result: wire::RemoveWireResult) {
         let wire::RemoveWireResult { deleted_keys, split_groups } = result;
 
