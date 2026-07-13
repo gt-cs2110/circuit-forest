@@ -22,19 +22,30 @@ use enum_dispatch::enum_dispatch;
 /// 
 /// If you only wish to rotate, you can specify handedness with `Default::default()` [down-right handedness].
 fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness) -> CoordDelta {
-    let (x, y) = c;
-    let y = match handedness {
-        Handedness::TopLeft   => -y,
-        Handedness::DownRight => y,
-    };
-    match orientation {
+    let (mut x,mut y) = c;
+    
+    (x,y) = match orientation {
         // To transform east to north, we rotate 90 deg CCW,
         // which transforms (x, y) to (-y, x)
         Orientation::North => ( y, -x),
         Orientation::East  => ( x,  y),
         Orientation::South => (-y,  x),
         Orientation::West  => (-x, -y)
+    };
+
+    //if west and down right flip y 
+    //if east and top left flip y
+    //if north and top left flip x
+    //if south and down right flip x
+    match (orientation, handedness) {
+        (Orientation::West,  Handedness::DownRight) => (x,-y),
+        (Orientation::East,  Handedness::TopLeft)   => (x,-y),
+        (Orientation::North, Handedness::TopLeft)   => (-x,y),
+        (Orientation::South, Handedness::DownRight) => (-x,y),
+        _ => {(x,y)} // The other 4 states remain un-flipped
     }
+    
+    
 }
 
 /// Cast from number to [`Orientation`] or [`Handedness`] failed.

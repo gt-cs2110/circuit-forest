@@ -9,7 +9,7 @@ export const decoder: ComponentMetadata = {
         return [
             { x: 3, y: 1, label: "0" },
             { x: 3, y: 3, label: "1" },
-            { x: 2, y: 0, label: "Out" },
+            { x: 2, y: 4, label: "selector" },
         ];
     },
     getDimensions: (component) => {

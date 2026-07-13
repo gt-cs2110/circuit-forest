@@ -9,6 +9,8 @@ export const mux: ComponentMetadata = {
         return [
             { x: 0, y: 1, label: "0" },
             { x: 0, y: 3, label: "1" },
+            { x: 1, y: 4, label: "selector" },
+
             { x: 3, y: 2, label: "Out" },
         ];
     },
