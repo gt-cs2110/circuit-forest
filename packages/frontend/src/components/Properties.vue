@@ -139,14 +139,8 @@ const constantValue = {
                         <span class="font-medium">Global Bitsize</span>
                         <span>{{ settings.globalBitsize }}</span>
                     </span>
-                    <input
-                        v-model="settings.globalBitsize"
-                        type="range"
-                        min="1"
-                        step="1"
-                        max="16"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                    />
+                    <input v-model="settings.globalBitsize" type="range" min="1" step="1" max="16"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500" />
                 </label>
             </AccordionContent>
         </AccordionItem>
@@ -157,65 +151,42 @@ const constantValue = {
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between font-medium"> Name </span>
-                    <input
-                        :key="nameReset"
-                        v-model.lazy.trim="subcircuitName"
-                        type="text"
-                        min="1"
-                        step="1"
-                        max="16"
-                        class="mt-1 block w-full appearance-none border bg-panel-light px-1 py-1 accent-blue-500"
-                    />
+                    <input :key="nameReset" v-model.lazy.trim="subcircuitName" type="text" min="1" step="1" max="16"
+                        @keydown.stop
+                        class="mt-1 block w-full appearance-none border bg-panel-light px-1 py-1 accent-blue-500" />
                 </label>
             </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem
-            v-if="selectedComponents.length != 0 && selectedComponents[0] != undefined"
-            value="component"
-        >
+        <AccordionItem v-if="selectedComponents.length != 0 && selectedComponents[0] != undefined" value="component">
             <AccordionHeader>
                 {{
                     selectedComponents.length > 1
                         ? "Component Group"
                         : selectedComponents[0].label != ""
-                          ? selectedComponents[0].label
-                          : selectedComponents[0].type.toUpperCase()
+                            ? selectedComponents[0].label
+                            : selectedComponents[0].type.toUpperCase()
                 }}
             </AccordionHeader>
 
             <!-- LABEL -->
-            <AccordionContent
-                v-if="
-                    selectedComponents.length == 1 &&
-                    getComponentProps(selectedComponents[0]).includes('label')
-                "
-                class="px-4 py-3 text-xs"
-            >
+            <AccordionContent v-if="
+                selectedComponents.length == 1 &&
+                getComponentProps(selectedComponents[0]).includes('label')
+            " class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between font-medium">Label</span>
-                    <input
-                        v-model.lazy.trim="labelInput"
-                        type="text"
-                        placeholder="Enter label..."
-                    />
+                    <input v-model.lazy.trim="labelInput" type="text" placeholder="Enter label..." @keydown.stop />
 
                     <h2 class="font-medium">Label Orientation</h2>
 
                     <!-- FIXME: Missing accessibility labels -->
                     <div class="mt-2 flex overflow-hidden rounded border">
-                        <button
-                            v-for="option in orientations"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].labelOrientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ labelOrientation: option.value })"
-                        >
+                        <button v-for="option in orientations" :key="option.value" type="button"
+                            class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].labelOrientation === option.value
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
+                                " @click="updateAllSelected({ labelOrientation: option.value })">
                             {{ option.label }}
                         </button>
                     </div>
@@ -229,15 +200,10 @@ const constantValue = {
                         <span class="font-medium">Bitsize</span>
                         <span>{{ bitsizeInput }}</span>
                     </span>
-                    <input
-                        v-model.number="bitsizeInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="64"
+                    <input v-model.number="bitsizeInput" type="range" :min="1" :step="1" :max="64"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="updateAllSelected({ bitsize: bitsizeInput })"
-                    />
+                        @change="updateAllSelected({ bitsize: bitsizeInput })" @keydown.stop />
+
                 </label>
             </AccordionContent>
 
@@ -248,15 +214,9 @@ const constantValue = {
                         <span class="font-medium">Selector Bits</span>
                         <span>{{ selsizeInput }}</span>
                     </span>
-                    <input
-                        v-model.number="selsizeInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="6"
+                    <input v-model.number="selsizeInput" type="range" :min="1" :step="1" :max="6"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="updateAllSelected({ selsize: selsizeInput })"
-                    />
+                        @change="updateAllSelected({ selsize: selsizeInput })" @keydown.stop />
                 </label>
             </AccordionContent>
             <!-- INPUTS -->
@@ -266,39 +226,23 @@ const constantValue = {
                         <span class="font-medium"> Num Inputs</span>
                         <span>{{ nInputsInput }}</span>
                     </span>
-                    <input
-                        v-model.number="nInputsInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="8"
+                    <input v-model.number="nInputsInput" type="range" :min="1" :step="1" :max="8"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
-                        @change="updateAllSelected({ inputs: nInputsInput })"
-                    />
+                        @change="updateAllSelected({ inputs: nInputsInput })" @keydown.stop />
                 </label>
             </AccordionContent>
             <!-- ORIENTATION -->
-            <AccordionContent
-                v-if="selectedProperties.has('orientation')"
-                class="px-4 py-3 text-xs"
-            >
+            <AccordionContent v-if="selectedProperties.has('orientation')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Orientation</span>
 
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <!-- FIXME: Missing accessibility labels -->
-                        <button
-                            v-for="option in orientations"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].orientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ orientation: option.value })"
-                        >
+                        <button v-for="option in orientations" :key="option.value" type="button"
+                            class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].orientation === option.value
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
+                                " @click="updateAllSelected({ orientation: option.value })">
                             {{ option.label }}
                         </button>
                     </div>
@@ -312,48 +256,30 @@ const constantValue = {
 
                     <div class="mt-2 flex overflow-hidden rounded border">
                         <!-- FIXME: Missing accessibility labels -->
-                        <button
-                            v-for="option in handednesses"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].handedness === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ handedness: option.value })"
-                        >
+                        <button v-for="option in handednesses" :key="option.value" type="button"
+                            class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].handedness === option.value
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
+                                " @click="updateAllSelected({ handedness: option.value })">
                             {{ option.label }}
                         </button>
                     </div>
                 </label>
             </AccordionContent>
             <!-- CONSTANT VALUE -->
-            <AccordionContent
-                v-if="selectedProperties.has('constantValue')"
-                class="px-4 py-3 text-xs"
-            >
+            <AccordionContent v-if="selectedProperties.has('constantValue')" class="px-4 py-3 text-xs">
                 <label class="block space-y-3">
                     <span class="font-medium">Value</span>
 
                     <div>
                         <span class="flex justify-between font-medium">Decimal</span>
-                        <input
-                            v-model.lazy.trim="constantValue.dec.value"
-                            type="text"
-                            class="font-mono"
-                            @keydown.stop
-                        />
+                        <input v-model.lazy.trim="constantValue.dec.value" type="text" class="font-mono"
+                            @keydown.stop />
                     </div>
                     <div>
                         <span class="flex justify-between font-medium">Binary</span>
-                        <input
-                            v-model.lazy.trim="constantValue.bin.value"
-                            type="text"
-                            class="font-mono"
-                            @keydown.stop
-                        />
+                        <input v-model.lazy.trim="constantValue.bin.value" type="text" class="font-mono"
+                            @keydown.stop />
                     </div>
                     <span v-if="constantError" class="text-xs text-red-500">{{
                         constantError
