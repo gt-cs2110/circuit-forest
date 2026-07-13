@@ -1,6 +1,6 @@
 import { Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
-
+import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
 import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
@@ -36,20 +36,33 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     // FIXME: If updates wouldn't change the component, don't invoke backend
     // Create object with new changes:
     console.log(`Updating component with frontend id ${frontendId}`);
-    const newComponent = Object.assign(toRaw(component), updates);
-
-    // Remove the original version of this component:
-    window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
-
-    // Add new component with changes applied & update backend key.
-    currentSubcircuit.value.components.set(frontendId, {
-        ...newComponent,
-        backendKey: window.api.core.addComponent({
+    const newComponent = Object.assign({}, toRaw(component), updates);
+    //attempt to update the component, if it fails flash a error
+    try {
+        // Add new component with changes applied & update backend key.
+        currentSubcircuit.value.components.set(frontendId, {
             ...newComponent,
-            circuitKey: currentSubcircuit.value.backendKey,
-            componentType: String(component.type).toUpperCase(),
-        }),
-    });
+            backendKey: window.api.core.addComponent({
+                ...newComponent,
+                circuitKey: currentSubcircuit.value.backendKey,
+                componentType: String(component.type).toUpperCase(),
+            }),
+        });
+        // Remove the original version of this component:
+        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
+    } catch {
+        toast.error("Update Unsucessful", {
+            description: "Ensure you arent forcing a component out of bounds",
+            style: {
+                background: "#ef4444",
+                color: "#ffffff",
+                borderColor: "#dc2626",
+            },
+            duration: 4000,
+        });
+        //force referseh properties
+        currentSubcircuit.value.components.set(frontendId, { ...component });
+    }
 
     updateState();
 }

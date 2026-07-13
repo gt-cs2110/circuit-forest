@@ -67,6 +67,8 @@ const rightWidth = ref(72 * 4);
         }"
         :gap="6"
         :visible-toasts="3"
+        position="top-center"
+        close-button
     />
 
     <div class="flex h-screen flex-col">
