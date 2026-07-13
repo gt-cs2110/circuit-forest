@@ -280,10 +280,10 @@ impl WireSet {
                 (l.into(), r.into(), fill_key)
             })
         );
-        // Break up any new wires with any joints that connect to this wire.
+        // Break up any new wires with any joints or ports that connect to this wire.
         for c in w.coord_iter() {
-            let intersecting = self.graph.neighbors(c.into())
-                .any(|other| matches!(other, MeshKey::WireJoint(_)));
+            let intersecting = self.graph.neighbors(c.into()).next().is_some();
+
             if intersecting {
                 self.split_wire_on_joint(c, w.horizontal);
             }
@@ -1030,6 +1030,52 @@ mod tests {
         };
         let Some(k2) = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen) else {
             panic!("Expected port creation to succeed");
+        };
+
+        assert_eq!(k1, k2);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+        // Remove one of the split wires and readd it.
+        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        let Some(AddWireResult::NoJoin(k3)) = ws.add_wire(w(n01, n02), &mut value_keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_eq!(k1, k3);
+        // Adding wires should be the same because the port still exists.
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+
+        // Remove the port.
+        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
+        assert_range_map(&ws.ranges, [(n00, n02)]);
+    }
+    #[test]
+    fn wireset_mid_port_2() {
+        
+        let mut value_keygen = keygen();
+        let mut func_keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02] = [
+            (0, 0), (0, 1), (0, 2)
+        ];
+        let gate = func_keygen();
+        let port = FunctionPort { gate, index: 0 };
+        // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Add a port and put a wire in the middle of it
+        
+        let Some(k2) = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen) else {
+            panic!("Expected port creation to succeed");
+        };
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n00, n02), &mut value_keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
         };
 
         assert_eq!(k1, k2);
