@@ -58,7 +58,21 @@ const rotation = computed(() => {
             return 180;
     }
 });
+const handednessTransform = computed(() => {
+    const { orientation, handedness } = props.component;
 
+    switch (orientation) {
+        case "North":
+            return handedness === "TopLeft" ? "scale(-1, 1)" : "";
+        case "South":
+            return handedness === "DownRight" ? "scale(-1, 1)" : "";
+        case "East":
+            return handedness === "TopLeft" ? "scale(1, -1)" : "";
+        case "West":
+        default:
+            return handedness === "DownRight" ? "scale(1, -1)" : "";
+    }
+});
 const transform = computed(() => {
     const ShiftToWorldCoordinates = {
         x: props.component.pos.x * GRID_SIZE,
@@ -75,7 +89,10 @@ const transform = computed(() => {
     //rotate has to be next bc it rotates about world 0,0, so once we have fixed port on world 0,0 it rotates about ixed port
     //then we shift output port to be at the coordinates x,y
     return `
+
     translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})
+        ${handednessTransform.value}
+
     rotate(${angle})
     translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})
   `;
@@ -98,47 +115,29 @@ const transform = computed(() => {
             <use :href="`#${baseId}`" />
         </g>
         <!-- Selected outline -->
-        <rect
-            v-if="isComponentSelected(props.component.frontendId)"
-            :x="props.component.bounds[0].x * GRID_SIZE"
+        <rect v-if="isComponentSelected(props.component.frontendId)" :x="props.component.bounds[0].x * GRID_SIZE"
             :y="props.component.bounds[0].y * GRID_SIZE"
             :width="metadata.getDimensions(props.component).width * GRID_SIZE"
-            :height="metadata.getDimensions(props.component).height * GRID_SIZE"
-            fill="none"
-            stroke="#3b82f6"
-            stroke-width="2"
-        />
+            :height="metadata.getDimensions(props.component).height * GRID_SIZE" fill="none" stroke="#3b82f6"
+            stroke-width="2" />
         <!-- Ports -->
-        <circle
-            v-for="(point, index) in ports"
-            :key="`${index}`"
-            :cx="point.pos.x * GRID_SIZE"
-            :cy="point.pos.y * GRID_SIZE"
-            r="2"
-            :fill="
-                point.value.includes('X')
-                    ? 'rgb(255,0,0)'
-                    : point.value.includes('Z')
-                      ? 'rgb(0,0,255)'
-                      : point.value.includes('1')
+        <circle v-for="(point, index) in ports" :key="`${index}`" :cx="point.pos.x * GRID_SIZE"
+            :cy="point.pos.y * GRID_SIZE" r="2" :fill="point.value.includes('X')
+                ? 'rgb(255,0,0)'
+                : point.value.includes('Z')
+                    ? 'rgb(0,0,255)'
+                    : point.value.includes('1')
                         ? 'rgb(0,255,0)'
                         : '#006400'
-            "
-            stroke="transparent"
-            stroke-width="4"
-            draggable="true"
-            @mousedown="onPortDrag"
-            @click="
-                () => {
-                    let key = point.backendKey;
-                    let displayKey =
-                        typeof key !== 'undefined'
-                            ? `${key.kind}:${key.id[0]}v${key.id[1]}`
-                            : undefined;
-                    console.log('Port value:', point.value, displayKey);
-                }
-            "
-            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
-        />
+                " stroke="transparent" stroke-width="4" draggable="true" @mousedown="onPortDrag" @click="
+                    () => {
+                        let key = point.backendKey;
+                        let displayKey =
+                            typeof key !== 'undefined'
+                                ? `${key.kind}:${key.id[0]}v${key.id[1]}`
+                                : undefined;
+                        console.log('Port value:', point.value, displayKey);
+                    }
+                " class="rounded-full text-orange-500 outline-orange-500 hover:outline-2" />
     </g>
 </template>

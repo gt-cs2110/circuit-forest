@@ -9,7 +9,7 @@ export const decoder: ComponentMetadata = {
         return [
             { x: 3, y: 1, label: "0" },
             { x: 3, y: 3, label: "1" },
-            { x: 2, y: 4, label: "selector" },
+            { x: 1, y: 4, label: "selector" },
         ];
     },
     getDimensions: (component) => {
@@ -18,8 +18,8 @@ export const decoder: ComponentMetadata = {
             height: component.bounds[1].y - component.bounds[0].y,
         };
     },
-    getOriginToFixedPortOffset: () => {
-        // In the Decoder the fixed port is the selector which by default is at the top middle
-        return { x: 1, y: 0 };
+    getOriginToFixedPortOffset: (component) => {
+        // In the Decoder the fixed port is the selector which by default is at the bottom middle
+        return { x: 1, y: Math.pow(2, component ? component.selsize + 1 : 2) };
     },
 };
