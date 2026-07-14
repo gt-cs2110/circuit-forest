@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ConstantText from "@/components/ConstantText.vue";
 import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponentProps } from "@/lib/types";
@@ -8,13 +9,6 @@ const { component } = defineProps<CircuitComponentProps>();
 
 const width = computed(() => (component ? getDimensions(component.bounds).width - 2 : 0));
 const height = computed(() => (component ? getDimensions(component.bounds).height - 2 : 0));
-const textLines = computed(() => {
-    let value = component?.ports[0]?.value;
-    if (!value) return [];
-    return value.match(/.{1,8}/g) || [];
-});
-
-const totalLines = computed(() => textLines.value.length);
 </script>
 
 <template>
@@ -32,21 +26,5 @@ const totalLines = computed(() => textLines.value.length);
         fill="var(--color-component-fill)"
         stroke="var(--color-component-stroke)"
     />
-    <text
-        :x="(GRID_SIZE * (width + 2)) / 2"
-        :y="(GRID_SIZE * (height + 2)) / 2"
-        :letter-spacing="GRID_SIZE / 3"
-        text-anchor="middle"
-        dominant-baseline="central"
-        class="pointer-events-none fill-black font-mono text-xs select-none"
-    >
-        <tspan
-            v-for="(line, index) in textLines"
-            :key="index"
-            :x="((width + 2) * GRID_SIZE) / 2"
-            :dy="index === 0 ? `-${(totalLines - 1) * 0.6}em` : '1.2em'"
-        >
-            {{ line }}
-        </tspan>
-    </text>
+    <ConstantText :value="component?.ports[0]?.value" />
 </template>
