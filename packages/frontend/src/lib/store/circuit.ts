@@ -2,25 +2,28 @@ import { Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
-import { createTwoAndGateCircuit } from "./initialCircuit";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
 
-export const circuits = ref<Map<number, Subcircuit>>(createTwoAndGateCircuit()); //mapping from frontend id to subcircuit
+export const circuits = ref<Map<number, Subcircuit>>(defaultCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
 export const currentSubcircuit = computed(() => circuits.value.get(currentSubcircuitId.value)!);
 updateState();
 let nextFrontendId = 100;
 
-// // place selected components at end of map so that they appear on top
-// watch(selectedComponentId, (id) => {
-//     if (id === null) return;
+export function defaultCircuit(): Map<number, Subcircuit> {
+    const name = "Circuit";
+    const circuitKey = window.api.core.createCircuit(name);
 
-//     const component = currentCircuit.value.subcircuit.components.get(id);
-//     if (!component) return;
+    const subcircuit: Subcircuit = {
+        frontendId: 0,
+        backendKey: circuitKey,
+        name,
+        components: new Map<number, CircuitComponent>(),
+        wires: [],
+    };
 
-//     currentCircuit.value.subcircuit.components.delete(id);
-//     currentCircuit.value.subcircuit.components.set(id, component);
-// });
+    return new Map([[0, subcircuit]]);
+}
 
 export function keyEquals(k: Key, j: Key): boolean {
     return k.kind == j.kind && k.id[0] == j.id[0] && k.id[1] == j.id[1];
