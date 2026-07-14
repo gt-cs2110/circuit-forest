@@ -5,6 +5,7 @@ import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/s
 import { CircuitComponent, DragState } from "@/lib/types";
 import { componentMap } from ".";
 import { computed, inject, useId } from "vue";
+import { wireColor } from "@/lib/wire";
 
 const props = defineProps<{ component: CircuitComponent }>();
 const emit = defineEmits<{
@@ -125,15 +126,7 @@ const transform = computed(() => {
             :cx="point.pos.x * GRID_SIZE"
             :cy="point.pos.y * GRID_SIZE"
             r="2"
-            :fill="
-                point.value.includes('X')
-                    ? 'rgb(255,0,0)'
-                    : point.value.includes('Z')
-                      ? 'rgb(0,0,255)'
-                      : point.value.includes('1')
-                        ? 'rgb(0,255,0)'
-                        : '#006400'
-            "
+            :fill="wireColor(point.value)"
             stroke="transparent"
             stroke-width="4"
             draggable="true"

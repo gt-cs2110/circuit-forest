@@ -3,6 +3,7 @@ import { GRID_SIZE } from "@/lib/consts";
 import { currentSubcircuit } from "@/lib/store/circuit";
 import { deselectWire, isWireSelected, selectWire } from "@/lib/store/view";
 import { DragState, Wire } from "@/lib/types";
+import { wireColor } from "@/lib/wire";
 import { computed, inject, useId } from "vue";
 
 const { wire } = defineProps<{ wire: Wire }>();
@@ -39,7 +40,7 @@ function handleClick(e: MouseEvent) {
     if (!isWireSelected(index.value)) {
         selectWire(index.value, additive);
         let displayKey = `${wire.backendKey.kind}:${wire.backendKey.id[0]}v${wire.backendKey.id[1]}`;
-        console.log("Wire value:", displayKey);
+        console.log("Wire value:", wire.value, displayKey);
     }
 }
 </script>
@@ -76,15 +77,7 @@ function handleClick(e: MouseEvent) {
             stroke-width="2"
             stroke-linecap="round"
             :id="baseId"
-            :color="
-                wire.value.includes('X')
-                    ? 'rgb(255,0,0)'
-                    : wire.value.includes('Z')
-                      ? 'rgb(0,0,255)'
-                      : wire.value.includes('1')
-                        ? 'rgb(0,255,0)'
-                        : '#006400'
-            "
+            :color="wireColor(wire.value)"
         />
     </g>
 
