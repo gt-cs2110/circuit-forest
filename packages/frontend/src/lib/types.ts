@@ -37,7 +37,6 @@ export type ComponentMetadata = {
     displayName: string;
     component: Component<CircuitComponentProps>;
     getDefaultDimensions: () => Dimensions;
-    getDimensions: (component: CircuitComponent) => Dimensions;
     getDefaultPorts: () => Port[]; //Default Ports are only used for preview visualization before a component is created
     getOriginToFixedPortOffset: (component: CircuitComponent) => Location; //All components have a fixed port that they rotate around, generally the output port but can vary; we need the offset from the origin of the svg drawing to the output port to shift everything properly in Cricuit COmponet rendering
 };

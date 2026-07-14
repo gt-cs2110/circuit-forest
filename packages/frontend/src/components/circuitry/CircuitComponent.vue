@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/store/view";
 import { CircuitComponent, DragState } from "@/lib/types";
@@ -111,8 +112,8 @@ const transform = computed(() => {
             v-if="isComponentSelected(props.component.frontendId)"
             :x="props.component.bounds[0].x * GRID_SIZE"
             :y="props.component.bounds[0].y * GRID_SIZE"
-            :width="metadata.getDimensions(props.component).width * GRID_SIZE"
-            :height="metadata.getDimensions(props.component).height * GRID_SIZE"
+            :width="getDimensions(props.component.bounds).width * GRID_SIZE"
+            :height="getDimensions(props.component.bounds).height * GRID_SIZE"
             fill="none"
             stroke="#3b82f6"
             stroke-width="2"

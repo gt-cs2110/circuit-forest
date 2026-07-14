@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
-import { constant } from ".";
+
 const { component } = defineProps<CircuitComponentProps>();
-const width = computed(() => (component ? constant.getDimensions(component).width : 2));
-const height = computed(() => (component ? constant.getDimensions(component).height : 2));
+const width = computed(() => (component ? getDimensions(component.bounds).width : 2));
+const height = computed(() => (component ? getDimensions(component.bounds).height : 2));
 
 const textLines = computed(() => {
     if (!component?.constantValue) return [];

@@ -1,7 +1,7 @@
 import { Location } from "circuitsim-glue";
 import { Ref, ref } from "vue";
 
-import { componentMap } from "@/components/circuitry";
+import { getDimensions } from "@/lib/bounds";
 import type { Subcircuit } from "@/lib/types";
 
 type Rect = { left: number; top: number; right: number; bottom: number };
@@ -65,7 +65,7 @@ export function useMarquee(
 
 function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
     return [...subcircuit.components].map(([id, component]) => {
-        const dims = componentMap[component.type].getDimensions(component);
+        const dims = getDimensions(component.bounds);
         const { x, y } = component.pos;
         return {
             id,

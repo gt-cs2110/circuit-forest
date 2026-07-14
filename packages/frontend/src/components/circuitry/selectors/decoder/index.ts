@@ -12,12 +12,6 @@ export const decoder: ComponentMetadata = {
             { x: 1, y: 4, label: "selector" },
         ];
     },
-    getDimensions: (component) => {
-        return {
-            width: component.bounds[1].x - component.bounds[0].x,
-            height: component.bounds[1].y - component.bounds[0].y,
-        };
-    },
     getOriginToFixedPortOffset: (component) => {
         // In the Decoder the fixed port is the selector which by default is at the bottom middle
         return { x: 1, y: Math.pow(2, component ? component.selsize + 1 : 2) };

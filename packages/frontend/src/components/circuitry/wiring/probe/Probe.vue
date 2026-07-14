@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
-import { probe } from ".";
 
 const { component } = defineProps<CircuitComponentProps>();
 
-const width = computed(() => (component ? probe.getDimensions(component).width - 2 : 0));
-const height = computed(() => (component ? probe.getDimensions(component).height - 2 : 0));
+const width = computed(() => (component ? getDimensions(component.bounds).width - 2 : 0));
+const height = computed(() => (component ? getDimensions(component.bounds).height - 2 : 0));
 const textLines = computed(() => {
     let value = component?.ports[0]?.value;
     if (!value) return [];

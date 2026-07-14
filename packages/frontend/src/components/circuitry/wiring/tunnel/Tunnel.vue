@@ -1,12 +1,12 @@
 <script setup lang="ts">
+import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
-import { tunnel } from ".";
 
 const { component } = defineProps<CircuitComponentProps>();
 
-const width = computed(() => (component ? tunnel.getDimensions(component).width - 1 : 2));
+const width = computed(() => (component ? getDimensions(component.bounds).width - 1 : 2));
 </script>
 
 <template>
