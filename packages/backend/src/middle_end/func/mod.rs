@@ -23,9 +23,14 @@ use enum_dispatch::enum_dispatch;
 /// If you only wish to rotate, you can specify handedness with `Default::default()` [down-right handedness].
 fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness) -> CoordDelta {
     let (x, y) = c;
-    let y = match handedness {
-        Handedness::TopLeft   => -y,
-        Handedness::DownRight => y,
+    // Apply vertical flips for the cases that need it:
+    let y = match (orientation, handedness) {
+        | (Orientation::North | Orientation::East, Handedness::DownRight)
+        | (Orientation::South | Orientation::West, Handedness::TopLeft)
+        => y,
+        | (Orientation::North | Orientation::East, Handedness::TopLeft)
+        | (Orientation::South | Orientation::West, Handedness::DownRight)
+        => -y,
     };
     match orientation {
         // To transform east to north, we rotate 90 deg CCW,
@@ -350,33 +355,60 @@ mod tests {
     #[test]
     fn orient_ports_by_direction() {
         let base = RelativeComponentBounds {
-            bounds: [(-2, -1), (3, 4)],
-            ports: vec![(-1, 0), (0, 1), (2, -3)]
+            bounds: [(-2, -1), (3, 3)],
+            ports: vec![(1, 0), (0, -1), (2, -3)]
         };
 
-        let east = base.clone().orient(Orientation::East, Handedness::DownRight);
-        assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
+        //    -3 -2 -1  0  1  2  3
+        // -3  .  .  .  .  .  O  .
+        // -2  .  .  .  .  .  .  .
+        // -1  .  #  #  O  #  #  #
+        //  0  .  #  #  X  O  #  #
+        //  1  .  #  #  #  #  #  #
+        //  2  .  #  #  #  #  #  #
+        //  3  .  #  #  #  #  #  #
 
-        let north = base.clone().orient(Orientation::North, Handedness::DownRight);
-        assert_eq!(north.ports, vec![(0, 1), (1, 0), (-3, -2)]);
+        let east_dr = base.clone().orient(Orientation::East, Handedness::DownRight);
+        assert_eq!(east_dr.bounds, [(-2, -1), (3, 3)]);
+        assert_eq!(east_dr.ports, vec![(1, 0), (0, -1), (2, -3)]);
 
-        let south = base.clone().orient(Orientation::South, Handedness::DownRight);
-        assert_eq!(south.ports, vec![(0, -1), (-1, 0), (3, 2)]);
+        let north_dr = base.clone().orient(Orientation::North, Handedness::DownRight);
+        assert_eq!(north_dr.bounds, [(-1, -3), (3, 2)]);
+        assert_eq!(north_dr.ports, vec![(0, -1), (-1, 0), (-3, -2)]);
 
-        let west = base.clone().orient(Orientation::West, Handedness::DownRight);
-        assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
+        let west_tl = base.clone().orient(Orientation::West, Handedness::TopLeft);
+        assert_eq!(west_tl.bounds, [(-3, -3), (2, 1)]);
+        assert_eq!(west_tl.ports, vec![(-1, 0), (0, 1), (-2, 3)]);
 
-        let east = base.clone().orient(Orientation::East, Handedness::TopLeft);
-        assert_eq!(east.ports, vec![(-1, 0), (0, -1), (2, 3)]);
+        let south_tl = base.clone().orient(Orientation::South, Handedness::TopLeft);
+        assert_eq!(south_tl.bounds, [(-3, -2), (1, 3)]);
+        assert_eq!(south_tl.ports, vec![(0, 1), (1, 0), (3, 2)]);
 
-        let north = base.clone().orient(Orientation::North, Handedness::TopLeft);
-        assert_eq!(north.ports, vec![(0, 1), (-1, 0), (3, -2)]);
+        // (vertically flipped)
+        //    -3 -2 -1  0  1  2  3
+        // -3  .  #  #  #  #  #  #
+        // -2  .  #  #  #  #  #  #
+        // -1  .  #  #  #  #  #  #
+        //  0  .  #  #  X  O  #  #
+        //  1  .  #  #  O  #  #  #
+        //  2  .  .  .  .  .  .  .
+        //  3  .  .  .  .  .  O  .
 
-        let south = base.clone().orient(Orientation::South, Handedness::TopLeft);
-        assert_eq!(south.ports, vec![(0, -1), (1, 0), (-3, 2)]);
+        let east_tl = base.clone().orient(Orientation::East, Handedness::TopLeft);
+        assert_eq!(east_tl.bounds, [(-2, -3), (3, 1)]);
+        assert_eq!(east_tl.ports, vec![(1, 0), (0, 1), (2, 3)]);
 
-        let west = base.orient(Orientation::West, Handedness::TopLeft);
-        assert_eq!(west.ports, vec![(1, 0), (0, 1), (-2, -3)]);
+        let north_tl = base.clone().orient(Orientation::North, Handedness::TopLeft);
+        assert_eq!(north_tl.bounds, [(-3, -3), (1, 2)]);
+        assert_eq!(north_tl.ports, vec![(0, -1), (1, 0), (3, -2)]);
+
+        let west_dr = base.clone().orient(Orientation::West, Handedness::DownRight);
+        assert_eq!(west_dr.bounds, [(-3, -1), (2, 3)]);
+        assert_eq!(west_dr.ports, vec![(-1, 0), (0, -1), (-2, -3)]);
+
+        let south_dr = base.clone().orient(Orientation::South, Handedness::DownRight);
+        assert_eq!(south_dr.bounds, [(-1, -2), (3, 3)]);
+        assert_eq!(south_dr.ports, vec![(0, 1), (-1, 0), (-3, 2)]);
     }
 
     #[test]

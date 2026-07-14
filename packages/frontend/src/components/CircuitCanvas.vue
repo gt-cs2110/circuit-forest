@@ -308,8 +308,10 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
                 @click="
                     placeComponent(
                         placingComponent,
-                        placingComponentPosition.x + metadata.getDefaultDimensions().width,
-                        placingComponentPosition.y + metadata.getDefaultDimensions().height / 2,
+                        placingComponentPosition.x +
+                            metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].x,
+                        placingComponentPosition.y +
+                            metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].y,
                     )
                 "
             >

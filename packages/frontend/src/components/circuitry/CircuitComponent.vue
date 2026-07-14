@@ -58,11 +58,12 @@ const rotation = computed(() => {
             return 180;
     }
 });
-
 const transform = computed(() => {
+    const { orientation, handedness, pos } = props.component;
+
     const ShiftToWorldCoordinates = {
-        x: props.component.pos.x * GRID_SIZE,
-        y: props.component.pos.y * GRID_SIZE,
+        x: pos.x * GRID_SIZE,
+        y: pos.y * GRID_SIZE,
     };
 
     const OriginRelativeToFixedPortRelative = {
@@ -71,14 +72,22 @@ const transform = computed(() => {
     };
     const angle = rotation.value;
 
-    //Trnaformations are applied right to left, first we shift so output port to be at 0,0 using the fixed to origin offset
-    //rotate has to be next bc it rotates about world 0,0, so once we have fixed port on world 0,0 it rotates about ixed port
-    //then we shift output port to be at the coordinates x,y
-    return `
-    translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})
-    rotate(${angle})
-    translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})
-  `;
+    const flipVert =
+        ((orientation === "North" || orientation === "East") && handedness === "TopLeft") ||
+        ((orientation === "South" || orientation === "West") && handedness === "DownRight");
+    const handednessTransform = flipVert ? "scale(1, -1)" : "";
+
+    // We first shift the fixed port to be at (0,0),
+    //   then apply handedness,
+    //   then rotate around (0, 0),
+    //   and then translate it back.
+    // FIXME: This shouldn't actually transform the entire component, just the shape
+    return [
+        `translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})`,
+        `rotate(${angle})`,
+        handednessTransform,
+        `translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})`,
+    ].join("\n");
 });
 </script>
 
