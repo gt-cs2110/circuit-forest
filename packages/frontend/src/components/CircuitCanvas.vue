@@ -251,36 +251,68 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
 </script>
 
 <template>
-    <div ref="containerRef" class="relative flex-1 overflow-hidden bg-canvas-background"
-        :style="{ cursor: isPanning ? 'grabbing' : 'default' }" @mousedown="handleMouseDown"
-        @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp" @wheel.prevent="handleWheel">
-        <svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg">
+    <div
+        ref="containerRef"
+        class="relative flex-1 overflow-hidden bg-canvas-background"
+        :style="{ cursor: isPanning ? 'grabbing' : 'default' }"
+        @mousedown="handleMouseDown"
+        @mousemove="handleMouseMove"
+        @mouseup="handleMouseUp"
+        @mouseleave="handleMouseUp"
+        @wheel.prevent="handleWheel"
+    >
+        <svg
+            class="pointer-events-none absolute inset-0 h-full w-full"
+            xmlns="http://www.w3.org/2000/svg"
+        >
             <defs>
-                <pattern id="dotPattern" :x="offset.x % (GRID_SIZE * scale)" :y="offset.y % (GRID_SIZE * scale)"
-                    :width="GRID_SIZE * scale" :height="GRID_SIZE * scale" patternUnits="userSpaceOnUse">
-                    <circle :cx="(GRID_SIZE / 2) * scale" :cy="(GRID_SIZE / 2) * scale" :r="0.5 * scale"
-                        fill="var(--color-canvas-dots)" />
+                <pattern
+                    id="dotPattern"
+                    :x="offset.x % (GRID_SIZE * scale)"
+                    :y="offset.y % (GRID_SIZE * scale)"
+                    :width="GRID_SIZE * scale"
+                    :height="GRID_SIZE * scale"
+                    patternUnits="userSpaceOnUse"
+                >
+                    <circle
+                        :cx="(GRID_SIZE / 2) * scale"
+                        :cy="(GRID_SIZE / 2) * scale"
+                        :r="0.5 * scale"
+                        fill="var(--color-canvas-dots)"
+                    />
                 </pattern>
             </defs>
 
             <rect x="0" y="0" width="100%" height="100%" fill="url(#dotPattern)" />
         </svg>
 
-        <svg class="absolute origin-top-left overflow-visible" xmlns="http://www.w3.org/2000/svg" :style="{
-            transform: `translate(${offset.x + ORIGIN_OFFSET * scale}px, ${offset.y + ORIGIN_OFFSET * scale}px) scale(${scale})`,
-        }">
-            <CircuitComponent v-for="[id, component] in subcircuit.components" :key="id" :component="component"
-                @dragstart="handleComponentDragStart" @wiredrag="handleComponentWireDrag" />
+        <svg
+            class="absolute origin-top-left overflow-visible"
+            xmlns="http://www.w3.org/2000/svg"
+            :style="{
+                transform: `translate(${offset.x + ORIGIN_OFFSET * scale}px, ${offset.y + ORIGIN_OFFSET * scale}px) scale(${scale})`,
+            }"
+        >
+            <CircuitComponent
+                v-for="[id, component] in subcircuit.components"
+                :key="id"
+                :component="component"
+                @dragstart="handleComponentDragStart"
+                @wiredrag="handleComponentWireDrag"
+            />
 
-            <g v-if="placingComponent && placingComponentPosition !== null" opacity="0.5"
+            <g
+                v-if="placingComponent && placingComponentPosition !== null"
+                opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="
                     placeComponent(
                         placingComponent,
-                        placingComponentPosition.x + metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].x,
-                        placingComponentPosition.y + metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].y,
+                        placingComponentPosition.x + metadata.getDefaultDimensions().width,
+                        placingComponentPosition.y + metadata.getDefaultDimensions().height / 2,
                     )
-                    ">
+                "
+            >
                 <CircuitComponentPreview :type="placingComponent" />
             </g>
 
@@ -288,18 +320,31 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
                 <Wire :wire @wiredrag="handleComponentWireDrag" />
             </g>
             <template v-if="wireDrag.active">
-                <line v-for="(point, i) in wireDrag.points.slice(0, -1)" :key="i" :x1="point.x * GRID_SIZE"
-                    :y1="point.y * GRID_SIZE" :x2="wireDrag.points[i + 1].x * GRID_SIZE"
-                    :y2="wireDrag.points[i + 1].y * GRID_SIZE" stroke="black" stroke-width="2" stroke-linecap="round" />
+                <line
+                    v-for="(point, i) in wireDrag.points.slice(0, -1)"
+                    :key="i"
+                    :x1="point.x * GRID_SIZE"
+                    :y1="point.y * GRID_SIZE"
+                    :x2="wireDrag.points[i + 1].x * GRID_SIZE"
+                    :y2="wireDrag.points[i + 1].y * GRID_SIZE"
+                    stroke="black"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                />
             </template>
         </svg>
 
-        <div v-if="marquee.active" class="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
-            :style="marqueeStyle" />
+        <div
+            v-if="marquee.active"
+            class="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
+            :style="marqueeStyle"
+        />
 
-        <div v-if="tooltip.value"
+        <div
+            v-if="tooltip.value"
             class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
-            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+        >
             {{ tooltip.value }}
         </div>
     </div>

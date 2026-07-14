@@ -9,7 +9,6 @@ export const demux: ComponentMetadata = {
         return [
             { x: 3, y: 1, label: "0" },
             { x: 3, y: 3, label: "1" },
-            { x: 1, y: 4, label: "selector" },
             { x: 0, y: 2, label: "Out" },
         ];
     },
