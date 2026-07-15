@@ -1,4 +1,4 @@
-import { addWires, deleteWires, moveComponents } from "@/lib/store/circuit";
+import { addWires, deleteWires, updateComponent } from "@/lib/store/circuit";
 import type { Subcircuit } from "@/lib/types";
 import { Location } from "circuitsim-glue";
 import { Ref, ref } from "vue";
@@ -48,7 +48,17 @@ export function useDrag(
             addWires(newWires);
 
             // Update components:
-            moveComponents(Array.from(componentSelection.value), delta);
+            for (const id of componentSelection.value) {
+                const component = subcircuit.components.get(id);
+                if (component) {
+                    updateComponent(component.frontendId, {
+                        pos: {
+                            x: component.pos.x + delta.x,
+                            y: component.pos.y + delta.y,
+                        },
+                    });
+                }
+            }
         }
 
         drag.value.active = false;

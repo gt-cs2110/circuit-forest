@@ -238,9 +238,7 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
             component,
             &args.label.unwrap_or_default(),
             label_orient,
-            args.pos
-                .try_into()
-                .map_err(|_| anyhow!("Component addition failed"))?,
+            args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?,
         )
         .context("Component addition failed")?;
     Ok(comp_key.into_js())
@@ -255,31 +253,6 @@ pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> anyhow::Res
     circuit
         .remove_component(key)
         .context("Component removal failed")
-}
-#[napi]
-pub fn move_components(
-    circuit_key: JsKey,
-    component_keys: Vec<JsKey>,
-    dx: i32,
-    dy: i32,
-) -> anyhow::Result<()> {
-    let mut repr = REPR.lock().unwrap();
-    let mut circuit = get_circuit(&mut repr, circuit_key)?;
-    let keys: Vec<_> = component_keys
-        .into_iter()
-        .map(|k| {
-            k.into_key::<ComponentKey>()
-                .with_context(|| format!("could not convert key {k:?} to ComponentKey"))
-                .and_then(|k| match circuit.has_component(k) {
-                    true => Ok(k),
-                    false => Err(anyhow!("key {k:?} does not exist")),
-                })
-        })
-        .collect::<anyhow::Result<_>>()?;
-
-    circuit
-        .move_components(&keys, (dx, dy))
-        .context("Could not move components")
 }
 
 /// Tries to add the wire to the circuit, returning whether it was successful.
@@ -379,39 +352,33 @@ pub fn get_transient_state(
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
     let component_states = get_component_states(&circuit)
-        .map(
-            |DComponentState {
-                 key: ckey,
-                 ports,
-                 bounds,
-             }| {
-                let ports = ports
-                    .into_iter()
-                    .map(|(pos, d_value)| {
-                        let (vkey, value, issues) = match d_value {
-                            Some(DValueState { key, value, issues }) => (
-                                Some(key.into_js()),
-                                value.to_string(),
-                                issues.into_iter().map(|s| s.to_string()).collect(),
-                            ),
-                            None => (None, String::from("0"), vec![]),
-                        };
-                        PortTransientState {
-                            pos: pos.into(),
-                            backend_key: vkey,
-                            value,
-                            issues,
-                        }
-                    })
-                    .collect();
-                let bounds = bounds.map(Into::into).into();
-                TransientComponentState {
-                    backend_key: ckey.into_js(),
-                    ports,
-                    bounds,
-                }
-            },
-        )
+        .map(|DComponentState { key: ckey, ports, bounds }| {
+            let ports = ports
+                .into_iter()
+                .map(|(pos, d_value)| {
+                    let (vkey, value, issues) = match d_value {
+                        Some(DValueState { key, value, issues }) => (
+                            Some(key.into_js()),
+                            value.to_string(),
+                            issues.into_iter().map(|s| s.to_string()).collect(),
+                        ),
+                        None => (None, String::from("0"), vec![]),
+                    };
+                    PortTransientState {
+                        pos: pos.into(),
+                        backend_key: vkey,
+                        value,
+                        issues,
+                    }
+                })
+                .collect();
+            let bounds = bounds.map(Into::into).into();
+            TransientComponentState {
+                backend_key: ckey.into_js(),
+                ports,
+                bounds,
+            }
+        })
         .collect();
 
     let wire_states = get_wire_states(&circuit)

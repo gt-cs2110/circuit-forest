@@ -593,7 +593,6 @@ module.exports.createCircuit = nativeBinding.createCircuit
 module.exports.getTransientState = nativeBinding.getTransientState
 module.exports.Handedness = nativeBinding.Handedness
 module.exports.KeyKind = nativeBinding.KeyKind
-module.exports.moveComponents = nativeBinding.moveComponents
 module.exports.Orientation = nativeBinding.Orientation
 module.exports.printCircuit = nativeBinding.printCircuit
 module.exports.propagate = nativeBinding.propagate
