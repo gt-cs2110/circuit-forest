@@ -176,12 +176,14 @@ impl MiddleCircuit<'_> {
         let CircuitArea { name: _, components, wires, tunnel_interner } = &mut circ!(self.physical);
         let props = &components[key];
         if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
+            if !props.label.is_empty() {
             // Add tunnel to wire set:
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = tunnel_interner.add_ref(&props.label);
                 let result = wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node())
                     .ok_or(ReprEditErr::RedundantTunnel)?;
                 self.handle_add(result);
+            }
         } else {
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
@@ -213,12 +215,14 @@ impl MiddleCircuit<'_> {
         
         // Handle tunnels specially:
         if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
+            if !props.label.is_empty() {
                 let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                     .expect("Tunnel should have an assigned symbol");
     
                 let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym)
                     .expect("Tunnel removal should succeed");
                 self.handle_remove(result);
+            }
             
         } else {
             // Remove all ports from wire set:
