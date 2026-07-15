@@ -40,8 +40,15 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     // Create object with new changes:
     console.log(`Updating component with frontend id ${frontendId}`);
     const newComponent = Object.assign({}, toRaw(component), updates);
-    //attempt to update the component, if it fails flash a error
-    try {
+
+    const args = {
+        ...newComponent,
+        circuitKey: currentSubcircuit.value.backendKey,
+        componentType: String(component.type).toUpperCase(),
+    };
+    if (window.api.core.validatePlacement(args)) {
+        // Remove the original version of this component:
+        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
         // Add new component with changes applied & update backend key.
         currentSubcircuit.value.components.set(frontendId, {
             ...newComponent,
@@ -51,9 +58,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
                 componentType: String(component.type).toUpperCase(),
             }),
         });
-        // Remove the original version of this component:
-        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
-    } catch {
+    } else {
         toast.error("Update Unsucessful", {
             description: "Make sure not to place component out of bounds.",
             style: {

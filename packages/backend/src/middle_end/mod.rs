@@ -232,6 +232,12 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
+    /// Validates whether a certain placement configuration is in bounds
+    pub fn validate_placement<C: Into<PhysicalComponentEnum>>(&self, physical: C, label: &str, pos: Coord) -> bool {
+        let ctx = PhysicalInitContext { circuit: self, label }; // read-only context
+        let physical = physical.into();
+        physical.init_bounds(ctx).into_absolute(pos).is_some()
+    }
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
     /// 
     /// This function handles multiple cases:

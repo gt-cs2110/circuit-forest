@@ -1,7 +1,7 @@
 use std::num::TryFromIntError;
 use std::sync::{LazyLock, Mutex};
 
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, Error, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::state::ValueIssue;
@@ -190,24 +190,54 @@ pub fn create_circuit(name: String) -> JsKey {
 #[napi]
 pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let mut repr = REPR.lock().unwrap();
+    
+    let component = convert_to_component(&args).unwrap();
+   
+    let label_orient = args.label_orientation.map_or_else(Default::default, From::from);
+    let circuit_key = args.circuit_key.into_key()?;
+
+
+
+
+    let mut circuit = repr.circuit(circuit_key);
+    let comp_key = circuit
+        .add_component(
+            component,
+            &args.label.unwrap_or_default(),
+            label_orient,
+            args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?,
+        )
+        .context("Component addition failed")?;
+    Ok(comp_key.into_js())
+}
+
+ #[napi]
+ pub fn validate_placement(args: CreateComponentArgs)-> anyhow::Result<bool>{
+    let mut repr = REPR.lock().unwrap();
+    
+    let component = convert_to_component(&args).unwrap();
+   
+    let circuit_key = args.circuit_key.into_key()?;
+    let circuit = repr.circuit(circuit_key);
+    Ok(circuit.validate_placement(component, &args.label.unwrap_or_default(), args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?))
+ }
+
+pub fn convert_to_component(args:&CreateComponentArgs)->Result<PhysicalComponentEnum, Error>{
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
-
-    let orient = args.orientation.map_or_else(Default::default, From::from);
-    let label_orient = args
-        .label_orientation
-        .map_or_else(Default::default, From::from);
     let handedness = args.handedness.map_or_else(Default::default, From::from);
-    let bit_array = match args.constant_value {
+    let orient = args.orientation.map_or_else(Default::default, From::from);
+    let bit_array = match &args.constant_value {
         Some(s) => s.parse().context("Could not parse constant value")?,
         None => bitarr![0],
     }
     .resize(bitsize, bitstate![0]);
-
-    let inputs = args.inputs.unwrap_or(2);
     let circuit_key = args.circuit_key.into_key()?;
+        let inputs = args.inputs.unwrap_or(2);
 
-    let component: PhysicalComponentEnum = match args.component_type.as_str() {
+
+
+     let component = match args.component_type.as_str() {
         "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
         "CONSTANT" => func::Constant::new(bit_array, orient).into(),
         "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
@@ -230,18 +260,7 @@ pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
         "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
         _ => bail!("Unknown gate type"),
     };
-
-    let mut circuit = repr.circuit(circuit_key);
-
-    let comp_key = circuit
-        .add_component(
-            component,
-            &args.label.unwrap_or_default(),
-            label_orient,
-            args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?,
-        )
-        .context("Component addition failed")?;
-    Ok(comp_key.into_js())
+    Ok(component)
 }
 #[napi]
 pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> anyhow::Result<()> {
@@ -429,6 +448,14 @@ pub struct CreateComponentArgs {
     pub selsize: Option<u8>,
     pub text_content: Option<String>,
     pub handedness: Option<js_enum::Handedness>,
+}
+#[napi(object)]
+pub struct UpdateComponentArgs {
+    pub circuit_key: JsKey,
+    pub label: Option<String>,
+    pub label_orientation: Option<js_enum::Orientation>,
+    pub orientation: Option<js_enum::Orientation>,
+    pub text_content: Option<String>,
 }
 #[napi(object)]
 pub struct TransientComponentState {

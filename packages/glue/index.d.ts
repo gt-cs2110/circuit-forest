@@ -79,3 +79,13 @@ export interface TransientWireState {
   value: string
   issues: Array<string>
 }
+
+export interface UpdateComponentArgs {
+  circuitKey: Key
+  label?: string
+  labelOrientation?: Orientation
+  orientation?: Orientation
+  textContent?: string
+}
+
+export declare function validatePlacement(args: CreateComponentArgs): boolean
