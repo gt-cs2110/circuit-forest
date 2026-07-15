@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -231,6 +231,30 @@ impl MiddleCircuit<'_> {
                     .expect("Port removal should succeed");
                 self.handle_remove(result);
             }
+        }
+
+        Ok(())
+    }
+
+    // FIXME: Cleanup? Reduce redundancy with add/remove_component?
+    /// Move a set of components, if such a move would not result in errors.
+    pub fn move_components(&mut self, keys: &[ComponentKey], delta: CoordDelta) -> Result<(), ReprEditErr> {
+        let new_bounds: Vec<_> = keys.iter()
+            .map(|&k| {
+                let component = &circ!(self.physical).components[k];
+                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
+                let new_origin = coord_add(component.origin, delta)?;
+                
+                component.inner.init_bounds(ctx)
+                    .into_absolute(new_origin)
+            })
+            .collect::<Option<_>>()
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
+
+        for (&k, ComponentBounds { bounds, ports }) in std::iter::zip(keys, new_bounds) {
+            let component = &mut circ!(self.physical).components[k];
+            component.bounds = bounds;
+            component.ports = ports;
         }
 
         Ok(())

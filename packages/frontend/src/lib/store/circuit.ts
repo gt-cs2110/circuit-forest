@@ -70,6 +70,32 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     updateState();
 }
 
+/// Moves components (described by frontendIds) by the specified delta.
+export function moveComponents(frontendIds: number[], delta: { x: number; y: number }) {
+    const backendKeys = frontendIds
+        .map((k) => currentSubcircuit.value.components.get(k)?.backendKey)
+        .filter((k) => typeof k !== "undefined");
+
+    try {
+        window.api.core.moveComponents(
+            currentSubcircuit.value.backendKey,
+            backendKeys,
+            delta.x,
+            delta.y,
+        );
+    } catch {
+        toast.error("Update Unsucessful", {
+            description: "Make sure not to place component out of bounds.",
+            style: {
+                background: "#ef4444",
+                color: "#ffffff",
+                borderColor: "#dc2626",
+            },
+            duration: 4000,
+        });
+    }
+}
+
 export function deleteComponent(frontendId: number) {
     const component = currentSubcircuit.value.components.get(frontendId);
     if (component) {

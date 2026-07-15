@@ -160,6 +160,16 @@ pub type RelativeComponentBounds = ComponentBounds<CoordDelta>;
 /// Component bounds with absolute physical positions.
 pub type AbsoluteComponentBounds = ComponentBounds<Coord>;
 
+pub(super) fn axis_add(p: Axis, delta: AxisDelta) -> Option<Axis> {
+    // Bound coordinate to maximum i32::MAX
+    p.checked_add_signed(delta)
+        .filter(|&c| AxisDelta::try_from(c).is_ok())
+}
+pub(super) fn coord_add(p: Coord, delta: CoordDelta) -> Option<Coord> {
+    axis_add(p.0, delta.0)
+        .zip(axis_add(p.1, delta.1))
+}
+
 impl<C: Default> ComponentBounds<C> {
     /// Creates a new [`ComponentBounds`].
     pub fn new(dims: C, ports: impl IntoIterator<Item = C>) -> Self {
@@ -227,20 +237,10 @@ impl RelativeComponentBounds {
     }
 
     pub(crate) fn into_absolute(self, origin: Coord) -> Option<AbsoluteComponentBounds> {
-        fn add_axis(p: Axis, delta: AxisDelta) -> Option<Axis> {
-            // Bound coordinate to maximum i32::MAX
-            p.checked_add_signed(delta)
-                .filter(|&c| AxisDelta::try_from(c).is_ok())
-        }
-        fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
-            add_axis(p.0, delta.0)
-                .zip(add_axis(p.1, delta.1))
-        }
-
         let Self { bounds: [b0, b1], ports } = self;
-        let bounds = [add(origin, b0)?, add(origin, b1)?];
+        let bounds = [coord_add(origin, b0)?, coord_add(origin, b1)?];
         let ports = ports.into_iter()
-            .map(|delta| add(origin, delta))
+            .map(|delta| coord_add(origin, delta))
             .collect::<Option<_>>()?;
         Some(AbsoluteComponentBounds { bounds, ports })
     }

@@ -46,6 +46,8 @@ export interface Location {
   y: number
 }
 
+export declare function moveComponents(circuitKey: Key, componentKeys: Array<Key>, dx: number, dy: number): void
+
 export type Orientation =  'North'|
 'South'|
 'East'|

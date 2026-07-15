@@ -84,6 +84,24 @@ impl<V> std::ops::Index<UIKey> for ComponentMap<V> {
         &self.ui[index]
     }
 }
+impl<V> std::ops::IndexMut<ComponentKey> for ComponentMap<V> {
+    fn index_mut(&mut self, index: ComponentKey) -> &mut Self::Output {
+        match index {
+            ComponentKey::Function(k) => &mut self[k],
+            ComponentKey::UI(k) => &mut self[k],
+        }
+    }
+}
+impl<V> std::ops::IndexMut<FunctionKey> for ComponentMap<V> {
+    fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
+        &mut self.func[index]
+    }
+}
+impl<V> std::ops::IndexMut<UIKey> for ComponentMap<V> {
+    fn index_mut(&mut self, index: UIKey) -> &mut Self::Output {
+        &mut self.ui[index]
+    }
+}
 impl<V> Default for ComponentMap<V> {
     fn default() -> Self {
         Self { func: Default::default(), ui: Default::default() }
