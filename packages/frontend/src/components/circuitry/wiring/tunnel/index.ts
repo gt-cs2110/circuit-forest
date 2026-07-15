@@ -8,7 +8,7 @@ export const tunnel: ComponentMetadata = {
     getDefaultDimensions: () => ({ width: 3, height: 2 }),
     getDefaultPorts: () => [{ x: 3, y: 1 }],
     getOriginToFixedPortOffset: (component) => {
-        const width = component.bounds[1].x - component.bounds[0].x;
+        const width = Math.max(component.label.length + 1, 3);
 
         return { x: width, y: 1 };
     },
