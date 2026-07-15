@@ -3,7 +3,7 @@ import type { Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
-    addWire,
+    addPolyWire,
     deleteComponent,
     deleteWiresFromIds,
     placeComponent,
@@ -188,14 +188,8 @@ function stopWireDrag() {
     if (!wireDrag.value.active) return;
 
     let drag = toRaw(wireDrag);
-    if (drag.value.points.length >= 2) {
-        for (let i = 0; i < drag.value.points.length - 1; i++) {
-            let start = drag.value.points[i];
-            let end = drag.value.points[i + 1];
-            addWire(start, end);
-        }
-    }
 
+    addPolyWire(drag.value.points);
     wireDrag.value = {
         active: false,
         points: [],

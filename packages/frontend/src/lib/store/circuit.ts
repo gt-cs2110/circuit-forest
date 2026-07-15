@@ -55,7 +55,7 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
         window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
     } catch {
         toast.error("Update Unsucessful", {
-            description: "Ensure you arent forcing a component out of bounds",
+            description: "Make sure not to place component out of bounds.",
             style: {
                 background: "#ef4444",
                 color: "#ffffff",
@@ -88,13 +88,21 @@ export function deleteWires(wires: [Location, Location][]) {
     }
     updateState();
 }
-export function addWires(wires: [Location, Location][]) {
-    for (const endpoints of wires) {
-        window.api.core.addWire(currentSubcircuit.value.backendKey, ...toRaw(endpoints));
+export function addWires(wires: (readonly [Location, Location])[]) {
+    for (const [start, end] of wires) {
+        window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw(start), toRaw(end));
     }
     updateState();
 }
+export function addPolyWire(points: Location[]) {
+    if (points.length <= 1) return;
 
+    const wires = Array.from(
+        { length: points.length - 1 },
+        (_, i) => [toRaw(points[i]), toRaw(points[i + 1])] as const,
+    );
+    addWires(wires);
+}
 /// Adds a new component to the frontend and updates the backend
 export function placeComponent(type: ComponentType, x: number, y: number) {
     if (x < 0 || y < 0) {
@@ -134,13 +142,6 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     updateState(); //will update the ports and bounds values from the backend
 
     placingComponent.value = null;
-}
-export function addWire(start: Location, end: Location) {
-    console.log("adding");
-    console.log(
-        window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw(start), toRaw(end)),
-    );
-    updateState();
 }
 export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
