@@ -371,7 +371,12 @@ pub fn get_transient_state(
     let circuit = get_circuit(&mut repr, circuit_key)?;
 
     let component_states = get_component_states(&circuit)
-        .map(|DComponentState { key: ckey, ports, bounds }| {
+        .map(|state| {
+            let DComponentState {
+                key: ckey,
+                ports,
+                bounds,
+            } = state;
             let ports = ports
                 .into_iter()
                 .map(|(pos, d_value)| {
