@@ -1,7 +1,7 @@
 use std::num::TryFromIntError;
 use std::sync::{LazyLock, Mutex};
 
-use anyhow::{Context, Error, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::state::ValueIssue;
@@ -187,42 +187,7 @@ pub fn create_circuit(name: String) -> JsKey {
     repr.add_circuit(&name).into_js()
 }
 
-#[napi]
-pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
-    let mut repr = REPR.lock().unwrap();
-    
-    let component = convert_to_component(&args).unwrap();
-   
-    let label_orient = args.label_orientation.map_or_else(Default::default, From::from);
-    let circuit_key = args.circuit_key.into_key()?;
-
-
-
-
-    let mut circuit = repr.circuit(circuit_key);
-    let comp_key = circuit
-        .add_component(
-            component,
-            &args.label.unwrap_or_default(),
-            label_orient,
-            args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?,
-        )
-        .context("Component addition failed")?;
-    Ok(comp_key.into_js())
-}
-
- #[napi]
- pub fn validate_placement(args: CreateComponentArgs)-> anyhow::Result<bool>{
-    let mut repr = REPR.lock().unwrap();
-    
-    let component = convert_to_component(&args).unwrap();
-   
-    let circuit_key = args.circuit_key.into_key()?;
-    let circuit = repr.circuit(circuit_key);
-    Ok(circuit.validate_placement(component, &args.label.unwrap_or_default(), args.pos.try_into().map_err(|_| anyhow!("Component addition failed"))?))
- }
-
-pub fn convert_to_component(args:&CreateComponentArgs)->Result<PhysicalComponentEnum, Error>{
+pub fn parse_component(args: &CreateComponentArgs) -> anyhow::Result<PhysicalComponentEnum> {
     let bitsize = args.bitsize.unwrap_or(1);
     let selsize = args.selsize.unwrap_or(1);
     let handedness = args.handedness.map_or_else(Default::default, From::from);
@@ -233,11 +198,9 @@ pub fn convert_to_component(args:&CreateComponentArgs)->Result<PhysicalComponent
     }
     .resize(bitsize, bitstate![0]);
     let circuit_key = args.circuit_key.into_key()?;
-        let inputs = args.inputs.unwrap_or(2);
+    let inputs = args.inputs.unwrap_or(2);
 
-
-
-     let component = match args.component_type.as_str() {
+    let component = match args.component_type.as_str() {
         "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
         "CONSTANT" => func::Constant::new(bit_array, orient).into(),
         "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
@@ -262,6 +225,52 @@ pub fn convert_to_component(args:&CreateComponentArgs)->Result<PhysicalComponent
     };
     Ok(component)
 }
+
+#[napi]
+pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
+    let mut repr = REPR.lock().unwrap();
+
+    let component = parse_component(&args).unwrap();
+
+    let label_orient = args
+        .label_orientation
+        .map_or_else(Default::default, From::from);
+    let circuit_key = args.circuit_key.into_key()?;
+
+    let mut circuit = repr.circuit(circuit_key);
+    let comp_key = circuit
+        .add_component(
+            component,
+            &args.label.unwrap_or_default(),
+            label_orient,
+            args.pos
+                .try_into()
+                .map_err(|_| anyhow!("Component addition failed"))?,
+        )
+        .context("Component addition failed")?;
+    Ok(comp_key.into_js())
+}
+
+#[napi]
+pub fn validate_placement(args: CreateComponentArgs) -> anyhow::Result<bool> {
+    let mut repr = REPR.lock().unwrap();
+
+    let component = parse_component(&args).unwrap();
+
+    let circuit_key = args.circuit_key.into_key()?;
+    let circuit = repr.circuit(circuit_key);
+    let validated = circuit
+        .validate_bounds(
+            component,
+            &args.label.unwrap_or_default(),
+            args.pos
+                .try_into()
+                .map_err(|_| anyhow!("Component addition failed"))?,
+        )
+        .is_ok();
+    Ok(validated)
+}
+
 #[napi]
 pub fn remove_component(circuit_key: JsKey, component_key: JsKey) -> anyhow::Result<()> {
     let mut repr = REPR.lock().unwrap();

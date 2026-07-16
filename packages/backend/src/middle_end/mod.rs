@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -145,11 +145,8 @@ impl MiddleCircuit<'_> {
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
-        let ctx = PhysicalInitContext { circuit: self, label };
         let physical = physical.into();
-        let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
-            .into_absolute(pos)
-            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
+        let ComponentBounds { bounds, ports } = self.validate_bounds(physical, label, pos)?;
         let props = ComponentProps {
             label: label.to_string(),
             label_location,
@@ -236,12 +233,14 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
-    /// Validates whether a certain placement configuration is in bounds
-    pub fn validate_placement<C: Into<PhysicalComponentEnum>>(&self, physical: C, label: &str, pos: Coord) -> bool {
-        let ctx = PhysicalInitContext { circuit: self, label }; // read-only context
-        let physical = physical.into();
-        physical.init_bounds(ctx).into_absolute(pos).is_some()
+    /// Validates whether a certain placement configuration is in bounds.
+    pub fn validate_bounds(&self, physical: PhysicalComponentEnum, label: &str, pos: Coord) -> Result<AbsoluteComponentBounds, ReprEditErr> {
+        let ctx = PhysicalInitContext { circuit: self, label };
+        physical.init_bounds(ctx)
+            .into_absolute(pos)
+            .ok_or(ReprEditErr::ComponentOutOfBounds)
     }
+    
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
     /// 
     /// This function handles multiple cases:
