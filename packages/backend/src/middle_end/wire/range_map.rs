@@ -4,229 +4,49 @@ use std::num::NonZero;
 use crate::middle_end::{Axis, Coord};
 use crate::middle_end::wire::Wire;
 
-#[derive(PartialEq, Eq, Clone, Copy, Default)]
-pub enum WireAtResult {
-    #[default]
-    None,
-    One(Wire1D),
-    Two([Wire1D; 2])
-}
-impl Iterator for WireAtResult {
-    type Item = Wire1D;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (result, state) = match *self {
-            WireAtResult::None => (None, WireAtResult::None),
-            WireAtResult::One(w) => (Some(w), WireAtResult::None),
-            WireAtResult::Two([w1, w2]) => (Some(w1), WireAtResult::One(w2)),
-        };
-
-        *self = state;
-        result
+/// Converts a coordinate of (x, y) into (main, cross)
+/// (based on the `horizontal` value) or vice versa.
+/// 
+/// In other words, it switches the coordinate system
+/// between XY and main-cross.
+/// 
+/// The "main" axis refers to the direction that the wire grows,
+/// whereas the "cross" axis refers to the direction perpendicular.
+fn switch_sys(coord: Coord, horizontal: bool) -> Coord {
+    let (x, y) = coord;
+    match horizontal {
+        true  => (x, y),
+        false => (y, x)
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
-pub struct WireRangeMap1D {
-    map: BTreeMap<Axis, NonZero<Axis>>
-}
-impl WireRangeMap1D {
-    /// Creates a new wire range map.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// If the index intersects a wire, then split the wires.
-    /// Returns whether this split was successful.
-    pub fn split(&mut self, index: Axis) -> Option<([Wire1D; 2], Wire1D)> {
-        let WireAtResult::One(w) = self.wire_at(index) else {
-            return None;
-        };
-        let left_len = NonZero::new(index - w.start)?;
-        let right_len = NonZero::new(w.start + w.length.get() - index)?;
-
-        let wire_len = self.map.get_mut(&w.start).unwrap();
-        *wire_len = left_len;
-
-        let add_result = self.map.insert(index, right_len);
-        debug_assert!(add_result.is_none(), "Expected wire addition without conflict");
-        Some(([Wire1D { start: w.start, length: left_len }, Wire1D { start: index, length: right_len }], w))
-    }
-    /// If the index is a joint between two wires, then merge the two wires.
-    /// Returns three wires:
-    /// - The two wires that are joined
-    /// - The resulting joined wire
-    pub fn join(&mut self, index: Axis) -> Option<([Wire1D; 2], Wire1D)> {
-        let WireAtResult::Two([l, r]) = self.wire_at(index) else {
-            return None;
-        };
-
-        let result = self.map.remove(&r.start);
-        debug_assert_eq!(result, Some(r.length), "Expected successful wire removal");
-
-        let wire_len = self.map.get_mut(&l.start).unwrap();
-        *wire_len = wire_len.checked_add(r.length.get()).unwrap();
-
-        Some(([l, r], Wire1D { start: l.start, length: *wire_len }))
-    }
-    /// Insert a wire.
-    /// This returns which wires were actually added (if there was a wire already in the range).
-    pub fn insert(&mut self, w: Wire1D) -> Vec<Wire1D> {
-        let Wire1D { start, length } = w;
-        let (mut a_start, a_end) = match self.wire_at(start) {
-            // Start point doesn't intersect anything, so we tentatively start here:
-            WireAtResult::None => (start, start + length.get()),
-
-            // If there is a wire at this point, we need to remove the excess at the beginning.
-            // We get the end of this wire (current_end),
-            // and add up to the end of the inserting wire (adding_end).
-            | WireAtResult::One(w)
-            | WireAtResult::Two([_, w])
-            => {
-                let current_end = w.endpoints()[1];
-                let adding_end = start + length.get();
-
-                if current_end >= adding_end {
-                    return vec![];
-                }
-
-                // current_end < adding_end
-                (current_end, adding_end)
-            },
-        };
-        let mut added = vec![];
-
-        for w in self.map.range(a_start .. a_end)
-            .map(|(&start, &length)| Wire1D { start, length })
-        {
-            let [c_start, c_end] = w.endpoints();
-
-            // Add a wire if there's space between the addition space
-            // and the current wires in the map
-            if let Some(length) = NonZero::new(c_start - a_start) {
-                added.push(Wire1D { start: a_start, length });
-            }
-            
-            a_start = c_end;
-        }
-        if a_start < a_end && let Some(length) = NonZero::new(a_end - a_start) {
-            added.push(Wire1D { start: a_start, length });
-        }
-        
-        for w in &added {
-            self.map.insert(w.start, w.length);
-        }
-        added
-    }
-    /// Removes a wire.
-    /// This returns which wires were actually removed (if there was negative space in the range).
-    pub fn remove(&mut self, w: Wire1D) -> (Vec<Wire1D>, Vec<Wire1D>) {
-        let Wire1D { start, length } = w;
-        let end = start + length.get();
-
-        let mut removed = vec![];
-        let mut added = vec![];
-
-        // Split start joint
-        if let Some(([spl, spr], joined)) = self.split(start) {
-            removed.push(joined);
-            
-            added.push(spl);
-            if spr.endpoints()[1] <= end {
-                // spr is a synthetically added wire,
-                // so if it exists and is not going to be split later,
-                // then remove it so it doesn't get tracked later.
-                self.map.remove(&spr.start);
-            } else {
-                added.push(spr);
-            }
-        }
-        // Split end joint
-        if let Some(([spl, spr], joined)) = self.split(end) {
-            // joined also needs to be removed as long as
-            // it wasn't synthetically created (in the last split step)
-            if added.pop_if(|&mut w| w == joined).is_none() {
-                removed.push(joined);
-            }
-            
-            self.map.remove(&spl.start);
-            added.push(spr);
-        }
-
-        // Add any extra wires between
-        let len = removed.len();
-        removed.extend({
-            self.map.range(start .. start + length.get())
-                .map(|(&start, &length)| Wire1D { start, length })
-        });
-        // Update map
-        for w in &removed[len..] {
-            self.map.remove(&w.start);
-        }
-
-        (removed, added)
-    }
-
-    /// Gets the wires at the specified coordinate
-    /// (including when the coordinate is not an endpoint, but intersects the wire).
-    /// 
-    /// The result is sorted by coordinate order.
-    pub fn wire_at(&self, c: Axis) -> WireAtResult {
-        let wire2 = self.map.get(&c)
-            .map(|&length| Wire1D { start: c, length });
-        
-        let wire1 = self.map.range(..c)
-            .next_back()
-            .map(|(&start, &length)| Wire1D { start, length })
-            .filter(|w| w.contains(c));
-        
-        match (wire1, wire2) {
-            (None, None) => WireAtResult::None,
-            (None, Some(w)) => WireAtResult::One(w),
-            (Some(w), None) => WireAtResult::One(w),
-            (Some(w1), Some(w2)) => WireAtResult::Two([w1, w2]),
-        }
-    }
-    /// All wires of the range map.
-    pub fn wires(&self) -> impl DoubleEndedIterator<Item=Wire1D> {
-        self.map.iter()
-            .map(|(&start, &length)| Wire1D { start, length })
-    }
-
-    pub fn len(&self) -> usize {
-        self.map.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-}
-
+/// A 1-dimensional wire.
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub struct Wire1D {
+struct Wire1D {
     start: Axis,
     length: NonZero<Axis>
 }
 impl Wire1D {
-    pub(super) fn new(start: Axis, length: NonZero<Axis>) -> Self {
+    pub fn new(start: Axis, length: NonZero<Axis>) -> Self {
         let _ = start.strict_add(length.get());
         Self { start, length }
     }
 
-    pub fn to_2d(self, horizontal: bool, cross: Axis) -> Wire {
-        match horizontal {
-            true  => Wire::new_raw(self.start, cross, self.length, horizontal),
-            false => Wire::new_raw(cross, self.start, self.length, horizontal),
-        }
+    /// Projects the wire to 2D by specifying the wire's horizontality
+    /// and the coordinate of the perpendicular axis 
+    /// (the "cross" axis;
+    ///     the x-coord if vertical, y-coord if horizontal).
+    pub fn to_2d(self, cross: Axis, horizontal: bool) -> Wire {
+        let (x, y) = switch_sys((self.start, cross), horizontal);
+        Wire::new_raw(x, y, self.length, horizontal)
     }
 
+    /// Converts a 2D wire to its 1D wire, the cross-axis coordinate,
+    /// and the wire's horizontality.
     pub fn from_2d(w: Wire) -> (Self, Axis, bool) {
         let Wire { x, y, length, horizontal } = w;
-        let (w1d, cross) = match horizontal {
-            true  => (Self { start: x, length }, y),
-            false => (Self { start: y, length }, x),
-        };
-
-        (w1d, cross, horizontal)
+        let (start, cross) = switch_sys((x, y), horizontal);
+        (Self { start, length }, cross, horizontal)
     }
 
     fn endpoints(self) -> [Axis; 2] {
@@ -237,16 +57,186 @@ impl Wire1D {
     }
 }
 
-// Two-dimension range map:
+/// The possible wires at a given point.
+#[derive(PartialEq, Eq, Clone, Copy, Default)]
+enum WireAtResult {
+    /// No wires at this point.
+    #[default]
+    None,
 
-/// Convert a 1D split-join return value into a 2D split-join return value.
-fn sj_to_2d(split_join: ([Wire1D; 2], Wire1D), horizontal: bool, cross: Axis) -> ([Wire; 2], Wire) {
-    let (operands, result) = split_join;
-    (
-        operands.map(|w| w.to_2d(horizontal, cross)),
-        result.to_2d(horizontal, cross)
-    )
+    /// 1 wire adjacent left at this point
+    /// (this point acts as the right endpoint of this wire).
+    LWire(Wire1D),
+    /// 1 wire at this point, which the point intersects with.
+    Intersect(Wire1D),
+    /// 1 wire adjacent right at this point
+    /// (this point acts as the left endpoint of this wire).
+    RWire(Wire1D),
+    
+    /// 2 wires at this point
+    /// (this point is the endpoint of both).
+    BiWire([Wire1D; 2])
 }
+impl Iterator for WireAtResult {
+    type Item = Wire1D;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (result, state) = match *self {
+            // Zero wire:
+            WireAtResult::None => (None, WireAtResult::None),
+            // One wire:
+            | WireAtResult::LWire(w)
+            | WireAtResult::Intersect(w)
+            | WireAtResult::RWire(w)
+            => (Some(w), WireAtResult::None),
+            // Two wires:
+            WireAtResult::BiWire([w1, w2]) => (Some(w1), WireAtResult::RWire(w2)),
+        };
+
+        *self = state;
+        result
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = match self {
+            WireAtResult::None => 0,
+            WireAtResult::LWire(_) => 1,
+            WireAtResult::Intersect(_) => 1,
+            WireAtResult::RWire(_) => 1,
+            WireAtResult::BiWire(_) => 2,
+        };
+
+        (len, Some(len))
+    }
+}
+impl ExactSizeIterator for WireAtResult {}
+
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+struct WireRangeMap1D {
+    map: BTreeMap<Axis, NonZero<Axis>>
+}
+impl WireRangeMap1D {
+    /// Number of wires in this range map.
+    #[expect(unused)]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+    /// Returns `true` if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    /// Gets the wires at the specified coordinate
+    /// (including when the coordinate is not an endpoint, but intersects the wire).
+    /// 
+    /// The result is sorted by coordinate order.
+    #[must_use]
+    pub fn wire_at(&self, c: Axis) -> WireAtResult {
+        // Find wire that is directly adjacent right of `c`
+        // (i.e., c is the left endpoint).
+        let wire_right = self.map.get(&c)
+            .map(|&length| Wire1D { start: c, length });
+        
+        // Find the wire that is directly adjacent left of `c`
+        //    or intersecting the middle of the wire.
+        let wire_left = self.map.range(..c)
+            .next_back()
+            .map(|(&start, &length)| Wire1D { start, length })
+            .filter(|w| w.contains(c));
+        
+        match (wire_left, wire_right) {
+            (None, None) => WireAtResult::None,
+            (Some(w), None) if w.endpoints()[1] == c => WireAtResult::LWire(w),
+            (Some(w), None) => WireAtResult::Intersect(w),
+            (None, Some(w)) => WireAtResult::RWire(w),
+            (Some(w1), Some(w2)) => WireAtResult::BiWire([w1, w2]),
+        }
+    }
+    /// All wires of the range map.
+    pub fn wires(&self) -> impl DoubleEndedIterator<Item=Wire1D> {
+        self.map.iter()
+            .map(|(&start, &length)| Wire1D { start, length })
+    }
+
+    /// Finds all wires which overlap with the specified 1D wire.
+    pub fn overlapping_wires(&self, w: Wire1D) -> impl DoubleEndedIterator<Item=Wire1D> {
+        let [wire_left, wire_right] = w.endpoints();
+
+        let l = match self.wire_at(wire_left) {
+            | WireAtResult::None
+            | WireAtResult::LWire(_)
+            | WireAtResult::RWire(_)
+            | WireAtResult::BiWire(_) => wire_left,
+            
+            WireAtResult::Intersect(w) => w.start,
+        };
+        let r = match self.wire_at(wire_right) {
+            | WireAtResult::None
+            | WireAtResult::LWire(_)
+            | WireAtResult::RWire(_)
+            | WireAtResult::BiWire(_) => wire_right,
+
+            WireAtResult::Intersect(w) => w.start + w.length.get(),
+        };
+        
+        self.map.range(l..r)
+            .map(|(&start, &length)| Wire1D::new(start, length))
+    }
+
+
+    /// Insert a wire.
+    /// 
+    /// This returns whether the wire was added.
+    /// Note that for this wire to be added, it must not overlap any other wire.
+    pub fn insert(&mut self, w: Wire1D) -> bool {
+        let [start, end] = w.endpoints();
+
+        let is_not_overlapping = self.map.range(..end).next_back()
+            .is_none_or(|(st, sz)| st + sz.get() <= start);
+        if is_not_overlapping {
+            self.map.insert(w.start, w.length);
+            true
+        } else {
+            false
+        }
+    }
+    /// Removes a wire.
+    /// 
+    /// This returns whether the wire was removed.
+    /// Note that the wire must exist in the map EXACTLY as specified by the argument
+    /// in order for removal to succeed.
+    pub fn remove(&mut self, w: Wire1D) -> bool {
+        use std::collections::btree_map::Entry;
+
+        if let Entry::Occupied(e) = self.map.entry(w.start) && e.get() == &w.length {
+            e.remove();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// If the index intersects a wire, then split the wires.
+    /// 
+    /// Returns the wire that was split.
+    pub fn split(&mut self, index: Axis) -> Option<Wire1D> {
+        let WireAtResult::Intersect(w) = self.wire_at(index) else {
+            return None;
+        };
+        let left_len = NonZero::new(index - w.start)?;
+        let right_len = NonZero::new(w.start + w.length.get() - index)?;
+
+        let wire_len = self.map.get_mut(&w.start).unwrap();
+        *wire_len = left_len;
+
+        let add_result = self.map.insert(index, right_len);
+        debug_assert!(add_result.is_none(), "Expected wire addition without conflict");
+        
+        Some(w)
+    }
+}
+
+// Two-dimension range map:
 
 struct WireAtPointIter {
     entry: WireAtResult,
@@ -255,12 +245,7 @@ struct WireAtPointIter {
 }
 impl WireAtPointIter {
     fn new(map: &WR1DSet, horizontal: bool, coord: Coord) -> Self {
-        let (x, y) = coord;
-        let (main, cross) = match horizontal {
-            true  => (x, y),
-            false => (y, x)
-        };
-
+        let (main, cross) = switch_sys(coord, horizontal);
         let entry = map.get(&cross).map_or_else(Default::default, |m| m.wire_at(main));
         Self { entry, horizontal, cross }
     }
@@ -270,11 +255,11 @@ impl Iterator for WireAtPointIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.entry.next()
-            .map(|w| w.to_2d(self.horizontal, self.cross))
+            .map(|w| w.to_2d(self.cross, self.horizontal))
     }
 }
 fn wires_all_iter(map: &WR1DSet, horizontal: bool) -> impl Iterator<Item=Wire> {
-    map.iter().flat_map(move |(&cross, m)| m.wires().map(move |w| w.to_2d(horizontal, cross)))
+    map.iter().flat_map(move |(&cross, m)| m.wires().map(move |w| w.to_2d(cross, horizontal)))
 }
 type WR1DSet = HashMap<Axis, WireRangeMap1D>;
 /// A helper struct which is Coord-indexable, indicating whether a wire exists along a coord.
@@ -288,72 +273,56 @@ pub struct WireRangeMap {
 }
 impl WireRangeMap {
     /// Adds a wire to the range map.
-    /// This returns the wires that are created as a result.
-    pub fn add_wire(&mut self, w: Wire) -> Vec<Wire> {
+    /// 
+    /// This returns whether adding the wire was successful
+    /// (this wire cannot overlap any other wire).
+    pub fn add_wire(&mut self, w: Wire) -> bool {
         let (w1d, cross, horizontal) = Wire1D::from_2d(w);
         
         self.axis_map_mut(horizontal)
             .entry(cross)
             .or_default()
             .insert(w1d)
-            .into_iter()
-            .map(|w| w.to_2d(horizontal, cross))
-            .collect()
     }
 
     /// Removes a wire from the range map.
     /// 
-    /// This returns the wires that are deleted & added as a result of this removal.
-    /// (A wire can be added if the wire overlaps another wire, requiring it to split).
-    pub fn remove_wire(&mut self, w: Wire) -> (Vec<Wire>, Vec<Wire>) {
+    /// This returns whether removing the wire was successful
+    /// (this wire must exist exactly as specified in the map).
+    pub fn remove_wire(&mut self, w: Wire) -> bool {
         use std::collections::hash_map::Entry;
 
         let (w1d, cross, horizontal) = Wire1D::from_2d(w);
-        let Entry::Occupied(mut map1d) = self.axis_map_mut(horizontal).entry(cross) else {
-            return (vec![], vec![]);
-        };
-
-        let (removed, added) = map1d.get_mut().remove(w1d);
-        // Clear out excessive rows:
-        if map1d.get().is_empty() {
-            map1d.remove();
+        if let Entry::Occupied(mut map1d) = self.axis_map_mut(horizontal).entry(cross) {
+            let removed = map1d.get_mut().remove(w1d);
+            if removed && map1d.get().is_empty() {
+                map1d.remove();
+            }
+            removed
+        } else {
+            false
         }
-
-        [removed, added]
-            .map(|wires| wires.into_iter()
-                .map(|w| w.to_2d(horizontal, cross))
-                .collect()
-            )
-            .into()
     }
     /// Splits wire of the specified orientation at a given coordinate.
-    pub fn split_wire(&mut self, horizontal: bool, c: Coord) -> Option<([Wire; 2], Wire)> {
-        let (x, y) = c;
-        let (main, cross) = match horizontal {
-            true  => (x, y),
-            false => (y, x)
-        };
-
+    /// 
+    /// This returns the wire that was split.
+    pub fn split_wire(&mut self, horizontal: bool, c: Coord) -> Option<Wire> {
+        let (main, cross) = switch_sys(c, horizontal);
         self.axis_map_mut(horizontal)
             .get_mut(&cross)?
             .split(main) // Try to split at the coordinate in 1D
-            .map(|sj| sj_to_2d(sj, horizontal, cross))
+            .map(|w| w.to_2d(cross, horizontal))
     }
-    /// Tries to join two wires on a joint.
-    pub fn join_wire(&mut self, c: Coord) -> Option<([Wire; 2], Wire)> {
-        let (x, y) = c;
-        let h_wire_at = self.horiz_wires.get_mut(&y)
-            .map(|m| (m.wire_at(x), m));
-        let v_wire_at = self.vert_wires.get_mut(&x)
-            .map(|m| (m.wire_at(y), m));
-        
-        match (h_wire_at, v_wire_at) {
-            (Some((WireAtResult::Two(_), h_map)), None | Some((WireAtResult::None, _))) 
-                => Some(sj_to_2d(h_map.join(x).expect("successful join"), true, y)),
-            (None | Some((WireAtResult::None, _)), Some((WireAtResult::Two(_), v_map))) 
-                => Some(sj_to_2d(v_map.join(y).expect("successful join"), false, x)),
-            _ => None
-        }
+
+    /// Gets all the wires which overlap with the specified wire, on the same axis.
+    pub fn parallel_overlapping_wires(&self, w: Wire) -> impl DoubleEndedIterator<Item = Wire> {
+        let (w1d, cross, horizontal) = Wire1D::from_2d(w);
+
+        self.axis_map(horizontal)
+            .get(&cross)
+            .into_iter()
+            .flat_map(move |m| m.overlapping_wires(w1d))
+            .map(move |w| w.to_2d(cross, horizontal))
     }
 
     /// Gets the wire map for the corresponding `horizontal` value.
@@ -418,8 +387,8 @@ pub(super) fn assert_range_map(actual: &WireRangeMap, edges: impl IntoIterator<I
         let [(px, py), (qx, qy)] = minmax(p, q);
         match (NonZero::new(qx - px), NonZero::new(qy - py)) {
             (None, None) => panic!("all edges in expected should be non-zero-length"),
-            (None, Some(l)) => assert!(vw.entry(px).or_default().insert(Wire1D::new(py, l)).len() == 1, "there should not be two edges with the same starting endpoint in expected"),
-            (Some(l), None) => assert!(hw.entry(py).or_default().insert(Wire1D::new(px, l)).len() == 1, "there should not be two edges with the same starting endpoint in expected"),
+            (None, Some(l)) => assert!(vw.entry(px).or_default().insert(Wire1D::new(py, l)), "addition of wire should've been successful"),
+            (Some(l), None) => assert!(hw.entry(py).or_default().insert(Wire1D::new(px, l)), "addition of wire should've been successful"),
             (_, _) => panic!("all edges in expected should be horizontal or vertical")
         }
     }

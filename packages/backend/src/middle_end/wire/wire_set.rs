@@ -105,7 +105,7 @@ impl WireSet {
     /// This function will successfully split if there is a wire at `c`
     /// which can be broken up into two parts on both sides of `c`.
     fn split_wire_on_joint(&mut self, c: Coord, horizontal: bool) {
-        if let Some((_, joined)) = self.ranges.split_wire(horizontal, c) {
+        if let Some(joined) = self.ranges.split_wire(horizontal, c) {
             let [p, q] = joined.endpoints();
             // Split wires in graph:
             let Some(k) = self.graph_remove_wire(joined) else {
@@ -122,34 +122,38 @@ impl WireSet {
         self.split_wire_on_joint(c, false);
     }
 
-    /// Checks whether coordinate has any conditions which would prevent wire joins.
-    /// This returns true if none of those cases are met.
-    /// 
-    /// Joining is handled by the range map, but some logic is not known by the range map
-    /// (particularly, coordinate connections to ports).
-    /// This is used to check the graph cases that would not be known by the range map.
-    fn graph_joinable(&self, c: Coord) -> bool {
-        // Succeeds if <=2 neighbors and if no neighbors are non-joints (all neighbors are joints)
-        let mut neighbors = self.graph.neighbors(c.into());
-
-        neighbors.by_ref().take(2).all(|n| matches!(n, MeshKey::WireJoint(_)))
-            && neighbors.next().is_none()
-    }
-
     /// Performs a join at the given coord,
     /// allowing two wires at the given point to be joined
     /// if it would make sense for the geometry of the graph.
     fn join_at_coord(&mut self, c: Coord) {
-        if self.graph_joinable(c)
-            && let Some(([l, r], j)) = self.ranges.join_wire(c)
+        self.join_at_coord_with(c, |lk, rk| {
+            assert_eq!(lk, rk, "Joined wires should have same keys");
+            lk
+        });
+    }
+    /// Performs a join at the given coord,
+    /// allowing two wires at the given point to be joined
+    /// if it would make sense for the geometry of the graph.
+    fn join_at_coord_with(&mut self, c: Coord, merge: impl FnOnce(ValueKey, ValueKey) -> ValueKey) {
+        let mut neighbors = self.graph.neighbors(c.into());
+
+        // Exactly two neighbors, two of which are wire joints, which form a straight wire
+        if let Some(MeshKey::WireJoint(p)) = neighbors.next()
+            && let Some(MeshKey::WireJoint(q)) = neighbors.next()
+            && neighbors.next().is_none()
+            && let Some(joined) = Wire::from_endpoints(p, q)
         {
-                let lk = self.graph_remove_wire(l).expect("removable wire");
-                let rk = self.graph_remove_wire(r).expect("removable wire");
-                assert_eq!(lk, rk, "Joined wires should have same keys");
-        
-                let [j0, j1] = j.endpoints();
-                self.graph.add_edge(j0.into(), j1.into(), lk);
-            }
+            let left = Wire::from_endpoints(p, c).expect("graph edge should've formed valid wire");
+            let right = Wire::from_endpoints(c, q).expect("graph edge should've formed valid wire");
+            // Update graph:
+            let lk = self.graph_remove_wire(left).expect("removable wire");
+            let rk = self.graph_remove_wire(right).expect("removable wire");
+            self.graph.add_edge(p.into(), q.into(), merge(lk, rk));
+            // Update ranges:
+            assert!(self.ranges.remove_wire(left));
+            assert!(self.ranges.remove_wire(right));
+            assert!(self.ranges.add_wire(joined));
+        }
     }
 
     /// Removes an edge from the graph and removes any singleton nodes.
@@ -176,7 +180,7 @@ impl WireSet {
 
     /// Takes a group of keys and tries to separate each coordinate into ValueKey groups.
     ///
-    /// This ignores any keys which no longer have an associated ValueKey.
+    /// This ignores any coords which no longer have an associated ValueKey.
     fn compute_meshes<K: Into<MeshKey>>(&mut self, coords: impl IntoIterator<Item=K>) -> SplitGroupMap {
         let mut split_groups = HashMap::new();
         
@@ -211,59 +215,54 @@ impl WireSet {
     /// with different [`ValueKey`]s (if applicable).
     #[must_use]
     pub fn add_wire(&mut self, w: Wire, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
-        // If horizontal or vertical, these two points can be connected.
         let [p, q] = w.endpoints();
 
-        // If endpoints intersect the middle of a wire, create an intersection:
-        self.split_wire_on_joint(p, !w.horizontal);
-        self.split_wire_on_joint(q, !w.horizontal);
-        // All keys along wire:
-        let keys: HashSet<_> = w.coord_iter()
-            .filter_map(|c| self.find_key(c))
+        let removed_wires: Vec<_> = self.ranges
+            .parallel_overlapping_wires(w)
             .collect();
 
-        // Add to wire maps:
-        let mut removed = vec![];
-        let mut added = vec![];
-        for subwire in self.ranges.add_wire(w) {
-            // For the two endpoints, try merging wires,
-            // and keeping track of which wires are added/removed
-            added.push(subwire);
-            let [l, r] = subwire.endpoints();
-            if self.graph_joinable(l) && let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
-                // Remove spl:
-                if added.pop_if(|&mut w| w == spl).is_none() {
-                    removed.push(spl);
-                }
-                // Remove spr:
-                let result = added.pop();
-                debug_assert_eq!(result, Some(spr));
-                // Add joined:
-                added.push(joined);
-            }
-            if self.graph_joinable(r) && let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
-                // Remove spl:
-                let result = added.pop();
-                debug_assert_eq!(result, Some(spl));
-                // Remove spr, add joined:
-                removed.push(spr);
-                added.push(joined);
-            }
-        }
-        if removed.is_empty() && added.is_empty() {
+        // Check there's actually something to add.
+        // If the overlap range envelops the wire's range and all wires connect,
+        //    then there's nothing to add.
+        let range = match *removed_wires {
+            [] => None,
+            [w] => Some(w.endpoints()),
+            [wl, .., wr] => Some([wl.endpoints()[0], wr.endpoints()[1]])
+        };
+        // Overlap range envelops wire's range & all wires connect
+        if
+            let Some([l, r]) = range
+            && l <= p && q <= r
+            && removed_wires.array_windows().all(|[lw, rw]| lw.endpoints()[1] == rw.endpoints()[0])
+        {
             return None;
         }
 
-        // Delete each wire in `removed`.
-        for w in removed {
+        let [p, q] = range.map_or([p, q], |[l, r]| [l.min(p), r.max(q)]);
+        let w = Wire::from_endpoints(p, q)
+            .unwrap_or_else(|| unreachable!("new wire should've existed"));
+
+        // If endpoint intersects a perpendicular wire, make a joint:
+        self.split_wire_on_joint(p, !w.horizontal);
+        self.split_wire_on_joint(q, !w.horizontal);
+
+        let (mut intersections, keys): (Vec<_>, HashSet<_>) = w.coord_iter()
+            .filter_map(|c| Some((c, self.find_key(c)?)))
+            .collect();
+
+        // Delete each wire in the range.
+        for &w in &removed_wires {
             let removed = self.graph_remove_wire(w);
             debug_assert!(
                 removed.is_some_and(|k| keys.contains(&k)),
                 "Removal of edge should have value key which is already accounted for"
             );
+
+            let removed = self.ranges.remove_wire(w);
+            debug_assert!(removed);
         }
 
-        // Determine which key we should use to fill & whether a join is needed
+        // Determine which key we should use to fill & whether a join is needed.
         let keys = Vec::from_iter(keys);
         let (fill_key, result) = match keys.as_slice() {
             [] => {
@@ -273,22 +272,20 @@ impl WireSet {
             &[k] => (k, AddWireResult::NoJoin(k)),
             &[_, k2, ..] => (k2, AddWireResult::Join(p, keys))
         };
-        // Add all the wires
-        self.graph.extend(
-            added.into_iter().map(|w| {
-                let [l, r] = w.endpoints();
-                (l.into(), r.into(), fill_key)
-            })
-        );
-        // Break up any new wires with any joints or ports that connect to this wire.
-        for c in w.coord_iter() {
-            let intersecting = self.graph.neighbors(c.into()).next().is_some();
 
-            if intersecting {
-                self.split_wire_on_joint(c, w.horizontal);
-            }
+        
+        // Add the wire, split it, and check if the edges need to be joined.
+        self.graph.add_edge(p.into(), q.into(), fill_key);
+        let added = self.ranges.add_wire(w);
+        debug_assert!(added);
+        intersections.retain(|&c| self.graph.contains_node(c.into()));
+        for ix in intersections {
+            self.split_wire_on_joint(ix, w.horizontal);
         }
 
+        self.join_at_coord_with(p, |_, _| fill_key);
+        self.join_at_coord_with(q, |_, _| fill_key);
+        
         Some(result)
     }
     
@@ -357,42 +354,49 @@ impl WireSet {
     pub fn remove_wire(&mut self, w: Wire) -> Option<RemoveWireResult> {
         let [p, q] = w.endpoints();
         
-        // Remove from wire graph & map:
-        let (removed, added) = self.ranges.remove_wire(w);
-        // No activity occurred, so no need to continue:
-        if removed.is_empty() && added.is_empty() {
+        self.split_wire_on_joint(p, w.horizontal);
+        self.split_wire_on_joint(q, w.horizontal);
+
+        let removed: Vec<_> = self.ranges
+            .parallel_overlapping_wires(w)
+            .collect();
+        // Nothing to remove, so no need to continue:
+        if removed.is_empty() {
             return None;
         }
 
-        for w in added {
-            let [l, r] = w.endpoints();
-            let k = self.find_key(l)
-                .or_else(|| self.find_key(r))
-                .expect("Added wire should have corresponding key");
-            self.graph.add_edge(l.into(), r.into(), k);
+        let mut deleted_keys = HashSet::new();
+        for &w in &removed {
+            let k = self.graph_remove_wire(w).expect("key should be deleted");
+            deleted_keys.insert(k);
+
+            let result = self.ranges.remove_wire(w);
+            debug_assert!(result);
         }
 
-        let mut deleted_keys = HashSet::new();
+        // Get any points attached to the removed wire.
+        // Since we're going to join right after this, make sure to have an extra point
+        //    in case the wire gets joined.
+        let mut coords = Vec::from_iter(w.coord_iter());
+        coords.extend({
+            w.coord_iter().filter_map(|c| match self.graph.neighbors(c.into()).next()? {
+                MeshKey::WireJoint(w) => Some(w),
+                _ => None
+            })
+        });
+        // Join any wires with excess splits.
         for w in removed {
             let [l, r] = w.endpoints();
-
-            self.split_wire_on_joint(l, w.horizontal);
-            self.split_wire_on_joint(r, w.horizontal);
-
-            let k = self.graph_remove_wire(w).expect("Key should be deleted");
-            deleted_keys.insert(k);
+            self.join_at_coord(l);
+            self.join_at_coord(r);
         }
 
-        // Determine how the old key is split:
-        let mut split_groups = self.compute_meshes(w.coord_iter());
+        // Get the group of attached points.
+        let mut split_groups = self.compute_meshes(coords);
         split_groups.retain(|k, groups| {
             deleted_keys.remove(k);
             groups.len() > 1 // if <= 1, then this key doesn't need to be split
         });
-
-        // See if any edges can be joined:
-        self.join_at_coord(p);
-        self.join_at_coord(q);
 
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
@@ -1010,6 +1014,46 @@ mod tests {
         let edges = [(n00, n01), (n04, n05)];
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
+    }
+
+    #[test]
+    fn wireset_remove_intersect() {
+        let mut keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n01, n02, n10, n11, n12, n13, n21, n22] = [
+                    (0, 1), (0, 2),
+            (1, 0), (1, 1), (1, 2), (1, 3),
+                    (2, 1), (2, 2),
+        ];
+
+        // Add nodes ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        let Some(AddWireResult::NoJoin(k0)) = ws.add_wire(w(n11, n12), &mut keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        assert_eq!(ws.add_wire(w(n01, n11), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n11, n21), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n02, n12), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n12, n22), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n10, n11), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        assert_eq!(ws.add_wire(w(n12, n13), &mut keygen), Some(AddWireResult::NoJoin(k0)));
+        
+        // Remove nodes
+        assert_remove(
+            ws.remove_wire(w(n10, n13)),
+            [],
+            [(k0, vec![HashSet::from([n01, n21]), HashSet::from([n02, n22])])]
+        );
+
+        // Check wire set was constructed correctly
+        assert_graph_nodes(&ws.graph, [n01, n21, n02, n22]);
+        assert_graph_edges(&ws.graph, [
+            (k0, vec![(n01, n21), (n02, n22)]),
+        ]);
+        assert_range_map(&ws.ranges, [
+            (n01, n21),
+            (n02, n22),
+        ]);
     }
 
     #[test]
