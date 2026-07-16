@@ -23,7 +23,8 @@ pub use state::CircuitState;
 #[cfg(test)]
 mod tests {
     use crate::bitarray::{bitarr, BitArray, BitState};
-    use crate::engine::state::ValueIssue;
+    use crate::engine::func::SplitterConfig;
+use crate::engine::state::ValueIssue;
     use super::*;
 
     #[test]
@@ -501,7 +502,7 @@ mod tests {
 
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
-        let splitter = circuit.add_function_node(func::Splitter::new(8));
+        let splitter = circuit.add_function_node(func::Splitter::new(SplitterConfig::new((0..8).map(|f| Some(f)).collect::<Vec<_>>().try_into().unwrap(), 8 ,8 ).unwrap()));
         circuit.connect_all(splitter, &nodes);
 
         // joined -> split

@@ -1,5 +1,7 @@
+use std::io::Split;
+
 use crate::bitarray::BitArray;
-use crate::engine::func::{self, BitSize};
+use crate::engine::func::{self, BitSize, SplitterConfig};
 use crate::bitarr;
 use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
@@ -115,23 +117,23 @@ impl PhysicalComponent for Ground {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Splitter {
-    bitsize: BitSize,
-    orientation: Orientation,
-    handedness: Handedness
+    config:SplitterConfig,
+    orientation:Orientation,
+    handedness:Handedness,
 }
 impl Splitter {
     /// Creates a new instance of the splitter with specified bitsize.
-    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+    pub fn new(port_assignments: [Option<u8>; 64], num_legs: u8, bitsize:u8, orientation:Orientation, handedness:Handedness) -> Self {
+        
         Self {
-            bitsize: BitSize::new_clamped(bitsize),
-            orientation,
-            handedness
+             config:SplitterConfig::new(port_assignments, num_legs,bitsize).unwrap(),orientation,handedness
         }
     }
+    
 }
 impl PhysicalComponent for Splitter {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Splitter::new(self.bitsize.get()).into())
+        Some(func::Splitter::new(self.config).into())
     }
 
     fn component_name(&self) -> &'static str {
@@ -139,7 +141,7 @@ impl PhysicalComponent for Splitter {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let bitsize = i32::from(self.bitsize.get());
+        let bitsize = i32::from(self.config.get_bitsize().get());
         let mut ports = vec![(0, 0)];
         ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
 
