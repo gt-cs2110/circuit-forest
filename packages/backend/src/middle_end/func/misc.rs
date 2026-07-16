@@ -32,7 +32,7 @@ mod subcircuit_serde {
     
     use crate::middle_end::MiddleRepr;
     use crate::middle_end::func::Subcircuit;
-    use crate::middle_end::func::pcom_serde::PComDeserCtx;
+    use crate::middle_end::func::PComDeserCtx;
     use crate::middle_end::serialize::{DeserializeWithCtx, SerializeWithCtx};
 
     #[derive(Serialize, Deserialize)]

@@ -13,7 +13,9 @@ use crate::bitarray::{BitArray, BitState, RangedByte};
 use crate::engine::CircuitGraphMap;
 use crate::engine::state::InnerFunctionState;
 
-use enum_dispatch::enum_dispatch;
+pub(crate) use component::enum_dispatch;
+pub use component::{Component, ComponentFn};
+
 pub use gates::*;
 pub use memory::*;
 pub use muxes::*;
@@ -21,6 +23,7 @@ pub use wiring::*;
 pub use misc::*;
 pub use arithmetic::*;
 
+mod component;
 mod gates;
 mod memory;
 mod muxes;
@@ -75,71 +78,6 @@ pub struct PortUpdate {
     pub index: usize,
     /// The new value to be assigned to the port at the given index.
     pub value: BitArray
-}
-
-/// The interface defining how a digital logic component operates.
-#[enum_dispatch]
-pub trait Component {
-    /// Returns the vector holding the properties of all ports associated with the component.
-    /// 
-    /// This is called only once during initialization.
-    /// It is assumed that the result of this function will not change when called multiple times.
-    fn ports(&self, graphs: &CircuitGraphMap) -> Vec<PortProperties>;
-    
-    /// Initializes the port state of the component.
-    /// 
-    /// If not specified, by default, the initial port state is set to all floating.
-    fn initialize_port_state(&self, _state: &mut [BitArray]) {}
-    
-    /// Initializes the internal state of the component.
-    /// 
-    /// If not specified, by default, this is `Default::default()`.
-    fn initialize_inner_state(&self, _graphs: &CircuitGraphMap) -> Option<InnerFunctionState> {
-        None
-    }
-    
-    /// "Runs" the component's function on a set of inputs, outputting a vector of updated ports
-    /// after the function is applied.
-    /// 
-    /// This function is called after an update is propagated to this component.
-    /// When that occurs, this function is called with the original state and updated state
-    /// of this component's ports.
-    /// 
-    /// This function may also panic if the port fields of [`RunContext`] do not match the port properties
-    /// specified by [`Component::ports`].
-    #[must_use]
-    fn run(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        // Only run in debug mode
-        if cfg!(debug_assertions) {
-            let props = self.ports(ctx.graphs);
-            validate_ports(&props, ctx.old_ports);
-            validate_ports(&props, ctx.new_ports);
-        }
-        self.run_inner(ctx)
-    }
-
-    /// Inner run function that, given a set of inputs, applies its modifications to output a vector
-    /// of updated ports. This function is wrapped by run to ensure input validation
-    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate>;
-}
-
-/// An enum that represents all supported digital logic components.
-#[enum_dispatch(Component)]
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[allow(missing_docs)]
-pub enum ComponentFn {
-    // Gates
-    Gate, Not, TriState,
-    // Wiring
-    Input, Output, Constant, Splitter,
-    // Muxes
-    Mux, Demux, Decoder,
-    // Memory
-    Register,
-    // Misc
-    Subcircuit,
-    // Arithmetic
-
 }
 
 /// The triggering conditions for components based on a signal change.
@@ -209,19 +147,6 @@ pub struct RunContext<'a> {
     pub inner_state: Option<&'a mut InnerFunctionState>
 }
 
-/// Helper function to validate ports.
-/// 
-/// This panics if the ports do not align with the port properties.
-fn validate_ports(props: &[PortProperties], ports: &[BitArray]) {
-    assert_eq!(ports.len(), props.len(), "Expected correct number of ports");
-    for (i, (bit_vec, port)) in ports.iter().zip(props).enumerate() {
-        assert_eq!(
-            bit_vec.len(),
-            port.bitsize,
-            "Port {i} has incorrect bit width"
-        );
-    }
-}
 /// Helper function to more easily define port lists (for [`Component::ports`]).
 fn port_list(config: &[(PortProperties, usize)]) -> Vec<PortProperties> {
     config.iter()
