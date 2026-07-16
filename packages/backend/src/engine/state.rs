@@ -16,7 +16,7 @@ use crate::engine::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, Valu
 use crate::engine::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
 
 /// Issues which can occur to a value node.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, strum::Display)]
 pub enum ValueIssue {
     /// Represents a collision of bit values (short circuit).
     ShortCircuit,
@@ -341,6 +341,11 @@ impl FunctionState {
         func.initialize_port_state(&mut ports);
         let inner = func.initialize_inner_state(graphs);
         Self { ports, inner }
+    }
+    
+    /// Gets the number of ports this function has
+    pub fn get_num_ports(&self) -> usize {
+        self.ports.len()
     }
 
     /// Gets the bit value of a port.

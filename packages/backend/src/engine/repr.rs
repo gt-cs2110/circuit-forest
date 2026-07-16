@@ -23,8 +23,8 @@ pub(super) type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// as a subcircuit.
 #[derive(Default, Debug)]
 pub struct CircuitForest {
-    graphs: CircuitGraphMap,
-    states: SecondaryMap<CircuitKey, CircuitState>,
+    pub(crate) graphs: CircuitGraphMap,
+    pub(crate) states: SecondaryMap<CircuitKey, CircuitState>,
 }
 impl CircuitForest {
     /// Creates an empty [`CircuitForest`].

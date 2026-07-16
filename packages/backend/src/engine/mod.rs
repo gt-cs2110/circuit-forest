@@ -620,4 +620,29 @@ mod tests {
         circuit.run(&[din, enable, clock, clear]);
         assert_eq!(circuit.get_output(dout_g), bitarr![0; 8]);
     }
+
+    #[test]
+    fn double_input() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        let inp1 = circuit.add_function_node(func::Input::new(1));
+        let inp2 = circuit.add_function_node(func::Input::new(1));
+        let value = circuit.add_value_node();
+
+        assert!(circuit.set_input(inp1, bitarr![0]).is_ok());
+        assert!(circuit.set_input(inp2, bitarr![0]).is_ok());
+        
+        circuit.connect_all(inp1, &[value]);
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(value), bitarr![0]);
+        
+        circuit.connect_all(inp2, &[value]);
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(value), bitarr![0]);
+
+        assert!(circuit.set_input(inp2, bitarr![1]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(value), bitarr![X]);
+    }
 }

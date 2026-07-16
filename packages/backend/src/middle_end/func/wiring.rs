@@ -11,6 +11,16 @@ pub struct Pin {
     is_input: bool,
     orientation: Orientation
 }
+impl Pin{
+    /// Creates a new instance of the pin with specified bitsize and whether it's an input or output.
+    pub fn new(bitsize: u8, is_input: bool, orientation: Orientation) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            is_input,
+            orientation
+        }
+    }
+}
 impl PhysicalComponent for Pin {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(match self.is_input {
@@ -39,6 +49,18 @@ pub struct Constant {
     value: BitArray,
     orientation: Orientation
 }
+impl Constant {
+    /// Creates a new instance of the constant with specified value.
+    pub fn new(value: BitArray, orientation: Orientation) -> Self {
+        Self { value, orientation }
+    }
+
+    /// Gets the value associated with this constant.
+    pub fn get_value(&self) -> BitArray {
+        self.value
+    }
+}
+
 impl PhysicalComponent for Constant {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Constant::new(self.value).into())
@@ -47,15 +69,16 @@ impl PhysicalComponent for Constant {
     fn component_name(&self) -> &'static str {
         "Constant"
     }
+    
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.value.len())
+        RelativeComponentBounds::single_port_from_bitsize(std::cmp::max(self.value.len(), 2))
             .orient(self.orientation, Default::default())
     }
 }
 
 /// Power (essentially a constant 1).
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Power;
 impl PhysicalComponent for Power {
@@ -73,7 +96,7 @@ impl PhysicalComponent for Power {
 }
 
 /// Ground (essentially a constant 0).
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ground;
 impl PhysicalComponent for Ground {
@@ -98,6 +121,16 @@ pub struct Splitter {
     orientation: Orientation,
     handedness: Handedness
 }
+impl Splitter {
+    /// Creates a new instance of the splitter with specified bitsize.
+    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation,
+            handedness
+        }
+    }
+}
 impl PhysicalComponent for Splitter {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Splitter::new(self.bitsize.get()).into())
@@ -117,11 +150,17 @@ impl PhysicalComponent for Splitter {
     }
 }
 
-/// A tunnel.
+/// A tunnel. TODO names for linking tunnels
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tunnel {
-    orientation: Orientation
+    orientation: Orientation,
+}
+impl Tunnel {
+    /// Creates a new instance of a tunnel with the specified orientation.
+    pub fn new(orientation: Orientation) -> Self {
+        Self { orientation }
+    }
 }
 impl PhysicalComponent for Tunnel {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -132,8 +171,9 @@ impl PhysicalComponent for Tunnel {
         "Tunnel"
     }
 
-    fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_with_origin(3, 2, (3, 1))
+    fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
+        let width = std::cmp::max(3, ctx.label.len() as u32 + 1);
+        RelativeComponentBounds::single_port_with_origin(width, 2, (width, 1))
             .orient(self.orientation, Default::default())
     }
 }
@@ -142,7 +182,14 @@ impl PhysicalComponent for Tunnel {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Probe {
-    orientation: Orientation
+    orientation: Orientation,
+    bitsize: BitSize
+}
+impl Probe {
+    /// Creates a new instance of the probe with specified orientation.
+    pub fn new(orientation: Orientation, bitsize: u8) -> Self {
+        Self { orientation, bitsize: BitSize::new_clamped(bitsize) }
+    }
 }
 impl PhysicalComponent for Probe {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -154,7 +201,7 @@ impl PhysicalComponent for Probe {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port(2, 2)
+        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
             .orient(self.orientation, Default::default())
     }
 }

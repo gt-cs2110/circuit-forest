@@ -2,7 +2,7 @@
 import { componentCategories } from "@/lib/types";
 import { componentMap } from "./circuitry";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
-import { placingComponent } from "@/lib/store/circuit";
+import { placingComponent } from "@/lib/store/view";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 </script>
 

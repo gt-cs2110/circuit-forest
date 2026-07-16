@@ -138,12 +138,14 @@ impl NotTwoValuedErr {
 }
 
 /// An error which occurs when trying to set to a bitarray using one of a different length.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("cannot set bitarray to another bitarray of a different bitsize")]
 pub struct MismatchedBitsizes(());
 
 /// This error can occur when converting a [`char`] to a [`BitState`]
 /// if the [`char`] does not map to any [`BitState`] character.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("character does not correspond to valid bitstate")]
 pub struct InvalidStateErr(());
 
 impl TryFrom<BitState> for bool {
@@ -632,19 +634,26 @@ impl BitArray {
     /// A join operation is as follows:
     /// - Z join a = a
     /// - a join Z = a
+    /// - a join a = a
     /// - anything else = X
     pub fn join(self, rhs: BitArray) -> BitArray {
         // TODO: assert size
         // __ | 00 | 01 | 10 | 11
-        // 00 | 11 | 11 | 00 | 11
-        // 01 | 11 | 11 | 01 | 11
+        // 00 | 00 | 11 | 00 | 11
+        // 01 | 11 | 01 | 01 | 11
         // 10 | 00 | 01 | 10 | 11
         // 11 | 11 | 11 | 11 | 11
+        let l0 = self.is(BitState::Low);
+        let l1 = self.is(BitState::High);
         let lz = self.is(BitState::Imped);
+        let lu = self.is(BitState::Unk);
+        let r0 = rhs.is(BitState::Low);
+        let r1 = rhs.is(BitState::High);
         let rz = rhs.is(BitState::Imped);
+        let ru = rhs.is(BitState::Unk);
 
-        let data = (!lz & !rz) | (lz & !rz & rhs.data) | (rz & self.data);
-        let spec = (!lz & !rz) | (lz & !rz & rhs.spec) | (rz & self.spec);
+        let data = self.data | rhs.data;
+        let spec = lu | ru | (l0 & r1) | (l1 & r0) | (lz & rz);
         
         Self { data, spec, len: self.len }
     }
@@ -847,6 +856,59 @@ mod tests {
         let expected = BitArray::from(result);
         let actual = BitArray::from(a) ^ BitArray::from(b);
         assert_eq!(actual, expected);
+    }
+
+    fn assert_comprehensive(a: BitArray, b: BitArray, op: &'static str, actual: BitArray, expected: BitArray) {
+        assert_eq!(actual, expected, concat!(
+            "\n",
+            "     {}\n",
+            "{:>4} {}\n",
+            "  == {} (actual)\n",
+            "  == {} (expected)\n"
+        ), a, op, b, actual, expected)
+    }
+    #[test]
+    fn and_comprehensive() {
+        let a = bitarr![0, 0, 0, 0, 1, 1, 1, 1, Z, Z, Z, Z, X, X, X, X];
+        let b = bitarr![0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X];
+        let e = bitarr![0, 0, 0, 0, 0, 1, X, X, 0, X, X, X, 0, X, X, X];
+
+        let actual = a & b;
+        let expected = e;
+        assert_comprehensive(a, b, "&", actual, expected);
+    }
+
+    #[test]
+    fn or_comprehensive() {
+        let a = bitarr![0, 0, 0, 0, 1, 1, 1, 1, Z, Z, Z, Z, X, X, X, X];
+        let b = bitarr![0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X];
+        let e = bitarr![0, 1, X, X, 1, 1, 1, 1, X, 1, X, X, X, 1, X, X];
+
+        let actual = a | b;
+        let expected = e;
+        assert_comprehensive(a, b, "|", actual, expected);
+    }
+
+    #[test]
+    fn xor_comprehensive() {
+        let a = bitarr![0, 0, 0, 0, 1, 1, 1, 1, Z, Z, Z, Z, X, X, X, X];
+        let b = bitarr![0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X];
+        let e = bitarr![0, 1, X, X, 1, 0, X, X, X, X, X, X, X, X, X, X];
+
+        let actual = a ^ b;
+        let expected = e;
+        assert_comprehensive(a, b, "^", actual, expected);
+    }
+
+    #[test]
+    fn join_comprehensive() {
+        let a = bitarr![0, 0, 0, 0, 1, 1, 1, 1, Z, Z, Z, Z, X, X, X, X];
+        let b = bitarr![0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X, 0, 1, Z, X];
+        let e = bitarr![0, X, 0, X, X, 1, 1, X, 0, 1, Z, X, X, X, X, X];
+
+        let actual = a.join(b);
+        let expected = e;
+        assert_comprehensive(a, b, "join", actual, expected);
     }
 
     #[test]

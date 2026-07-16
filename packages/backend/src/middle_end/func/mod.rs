@@ -11,7 +11,7 @@ pub use misc::*;
 pub use gates::*;
 
 use crate::engine::func::ComponentFn;
-use crate::middle_end::{AxisDelta, Coord, CoordDelta, MiddleCircuit};
+use crate::middle_end::{Axis, AxisDelta, Coord, CoordDelta, MiddleCircuit};
 use enum_dispatch::enum_dispatch;
 
 /// Helper which rotates a coordinate around the origin to match the provided orientation.
@@ -23,19 +23,29 @@ use enum_dispatch::enum_dispatch;
 /// If you only wish to rotate, you can specify handedness with `Default::default()` [down-right handedness].
 fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness) -> CoordDelta {
     let (x, y) = c;
-    let y = match handedness {
-        Handedness::TopLeft   => -y,
-        Handedness::DownRight => y,
+    // Apply vertical flips for the cases that need it:
+    let y = match (orientation, handedness) {
+        | (Orientation::North | Orientation::East, Handedness::DownRight)
+        | (Orientation::South | Orientation::West, Handedness::TopLeft)
+        => y,
+        | (Orientation::North | Orientation::East, Handedness::TopLeft)
+        | (Orientation::South | Orientation::West, Handedness::DownRight)
+        => -y,
     };
     match orientation {
         // To transform east to north, we rotate 90 deg CCW,
         // which transforms (x, y) to (-y, x)
-        Orientation::North => (-y,  x),
+        Orientation::North => ( y, -x),
         Orientation::East  => ( x,  y),
-        Orientation::South => ( y, -x),
+        Orientation::South => (-y,  x),
         Orientation::West  => (-x, -y)
     }
 }
+
+/// Cast from number to [`Orientation`] or [`Handedness`] failed.
+#[derive(Debug, thiserror::Error)]
+#[error("cannot convert number to type")]
+pub struct InvalidNum(());
 
 /// Orientation.
 /// 
@@ -45,6 +55,19 @@ fn orient_coord(c: CoordDelta, orientation: Orientation, handedness: Handedness)
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Orientation {
     North, South, #[default] East, West
+}
+impl TryFrom<u8> for Orientation {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Orientation::North),
+            1 => Ok(Orientation::South),
+            2 => Ok(Orientation::East),
+            3 => Ok(Orientation::West),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// The handedness (or mirror orientation).
@@ -73,6 +96,17 @@ pub enum Handedness {
     /// For north-oriented components, the chiral port is pointed eastwards (right).
     #[default]
     DownRight
+}
+impl TryFrom<u8> for Handedness {
+    type Error = InvalidNum;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Handedness::TopLeft),
+            1 => Ok(Handedness::DownRight),
+            _ => Err(InvalidNum(()))
+        }
+    }
 }
 
 /// Context available during [`PhysicalComponent`] initialization.
@@ -126,6 +160,16 @@ pub type RelativeComponentBounds = ComponentBounds<CoordDelta>;
 /// Component bounds with absolute physical positions.
 pub type AbsoluteComponentBounds = ComponentBounds<Coord>;
 
+pub(super) fn axis_add(p: Axis, delta: AxisDelta) -> Option<Axis> {
+    // Bound coordinate to maximum i32::MAX
+    p.checked_add_signed(delta)
+        .filter(|&c| AxisDelta::try_from(c).is_ok())
+}
+pub(super) fn coord_add(p: Coord, delta: CoordDelta) -> Option<Coord> {
+    axis_add(p.0, delta.0)
+        .zip(axis_add(p.1, delta.1))
+}
+
 impl<C: Default> ComponentBounds<C> {
     /// Creates a new [`ComponentBounds`].
     pub fn new(dims: C, ports: impl IntoIterator<Item = C>) -> Self {
@@ -155,10 +199,10 @@ impl RelativeComponentBounds {
         match bitsize {
             // If two bits, use a 2 x 2 tile
             ..=2 => Self::single_port(2, height),
-            // If 2-8 bits, use a 2n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port(2 * w, height),
+            // If 2-8 bits, use a n x 2 tile
+            w @ ..=MAX_COLS => Self::single_port(w, height),
             // If 9+ bits, use a 16 x h tile
-            _ => Self::single_port(2 * MAX_COLS, height)
+            _ => Self::single_port( MAX_COLS, height)
         }
     }
 
@@ -193,15 +237,10 @@ impl RelativeComponentBounds {
     }
 
     pub(crate) fn into_absolute(self, origin: Coord) -> Option<AbsoluteComponentBounds> {
-        fn add(p: Coord, delta: CoordDelta) -> Option<Coord> {
-            p.0.checked_add_signed(delta.0)
-                .zip(p.1.checked_add_signed(delta.1))
-        }
-
         let Self { bounds: [b0, b1], ports } = self;
-        let bounds = [add(origin, b0)?, add(origin, b1)?];
+        let bounds = [coord_add(origin, b0)?, coord_add(origin, b1)?];
         let ports = ports.into_iter()
-            .map(|delta| add(origin, delta))
+            .map(|delta| coord_add(origin, delta))
             .collect::<Option<_>>()?;
         Some(AbsoluteComponentBounds { bounds, ports })
     }
@@ -316,33 +355,60 @@ mod tests {
     #[test]
     fn orient_ports_by_direction() {
         let base = RelativeComponentBounds {
-            bounds: [(-2, -1), (3, 4)],
-            ports: vec![(-1, 0), (0, 1), (2, -3)]
+            bounds: [(-2, -1), (3, 3)],
+            ports: vec![(1, 0), (0, -1), (2, -3)]
         };
 
-        let east = base.clone().orient(Orientation::East, Handedness::DownRight);
-        assert_eq!(east.ports, vec![(-1, 0), (0, 1), (2, -3)]);
+        //    -3 -2 -1  0  1  2  3
+        // -3  .  .  .  .  .  O  .
+        // -2  .  .  .  .  .  .  .
+        // -1  .  #  #  O  #  #  #
+        //  0  .  #  #  X  O  #  #
+        //  1  .  #  #  #  #  #  #
+        //  2  .  #  #  #  #  #  #
+        //  3  .  #  #  #  #  #  #
 
-        let north = base.clone().orient(Orientation::North, Handedness::DownRight);
-        assert_eq!(north.ports, vec![(0, -1), (-1, 0), (3, 2)]);
+        let east_dr = base.clone().orient(Orientation::East, Handedness::DownRight);
+        assert_eq!(east_dr.bounds, [(-2, -1), (3, 3)]);
+        assert_eq!(east_dr.ports, vec![(1, 0), (0, -1), (2, -3)]);
 
-        let south = base.clone().orient(Orientation::South, Handedness::DownRight);
-        assert_eq!(south.ports, vec![(0, 1), (1, 0), (-3, -2)]);
+        let north_dr = base.clone().orient(Orientation::North, Handedness::DownRight);
+        assert_eq!(north_dr.bounds, [(-1, -3), (3, 2)]);
+        assert_eq!(north_dr.ports, vec![(0, -1), (-1, 0), (-3, -2)]);
 
-        let west = base.clone().orient(Orientation::West, Handedness::DownRight);
-        assert_eq!(west.ports, vec![(1, 0), (0, -1), (-2, 3)]);
+        let west_tl = base.clone().orient(Orientation::West, Handedness::TopLeft);
+        assert_eq!(west_tl.bounds, [(-3, -3), (2, 1)]);
+        assert_eq!(west_tl.ports, vec![(-1, 0), (0, 1), (-2, 3)]);
 
-        let east = base.clone().orient(Orientation::East, Handedness::TopLeft);
-        assert_eq!(east.ports, vec![(-1, 0), (0, -1), (2, 3)]);
+        let south_tl = base.clone().orient(Orientation::South, Handedness::TopLeft);
+        assert_eq!(south_tl.bounds, [(-3, -2), (1, 3)]);
+        assert_eq!(south_tl.ports, vec![(0, 1), (1, 0), (3, 2)]);
 
-        let north = base.clone().orient(Orientation::North, Handedness::TopLeft);
-        assert_eq!(north.ports, vec![(0, -1), (1, 0), (-3, 2)]);
+        // (vertically flipped)
+        //    -3 -2 -1  0  1  2  3
+        // -3  .  #  #  #  #  #  #
+        // -2  .  #  #  #  #  #  #
+        // -1  .  #  #  #  #  #  #
+        //  0  .  #  #  X  O  #  #
+        //  1  .  #  #  O  #  #  #
+        //  2  .  .  .  .  .  .  .
+        //  3  .  .  .  .  .  O  .
 
-        let south = base.clone().orient(Orientation::South, Handedness::TopLeft);
-        assert_eq!(south.ports, vec![(0, 1), (-1, 0), (3, -2)]);
+        let east_tl = base.clone().orient(Orientation::East, Handedness::TopLeft);
+        assert_eq!(east_tl.bounds, [(-2, -3), (3, 1)]);
+        assert_eq!(east_tl.ports, vec![(1, 0), (0, 1), (2, 3)]);
 
-        let west = base.orient(Orientation::West, Handedness::TopLeft);
-        assert_eq!(west.ports, vec![(1, 0), (0, 1), (-2, -3)]);
+        let north_tl = base.clone().orient(Orientation::North, Handedness::TopLeft);
+        assert_eq!(north_tl.bounds, [(-3, -3), (1, 2)]);
+        assert_eq!(north_tl.ports, vec![(0, -1), (1, 0), (3, -2)]);
+
+        let west_dr = base.clone().orient(Orientation::West, Handedness::DownRight);
+        assert_eq!(west_dr.bounds, [(-3, -1), (2, 3)]);
+        assert_eq!(west_dr.ports, vec![(-1, 0), (0, -1), (-2, -3)]);
+
+        let south_dr = base.clone().orient(Orientation::South, Handedness::DownRight);
+        assert_eq!(south_dr.bounds, [(-1, -2), (3, 3)]);
+        assert_eq!(south_dr.ports, vec![(0, 1), (-1, 0), (-3, 2)]);
     }
 
     #[test]

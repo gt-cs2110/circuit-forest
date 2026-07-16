@@ -1,4 +1,4 @@
 import { defineConfig } from "vite";
 
 // https://vitejs.dev/config
-export default defineConfig({ build: { rollupOptions: { external: ["circuitsim-core"] } } });
+export default defineConfig({ build: { rollupOptions: { external: ["circuitsim-glue"] } } });

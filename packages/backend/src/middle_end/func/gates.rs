@@ -1,5 +1,5 @@
 use crate::engine::func::{self, BitSize, GateInputs};
-use crate::middle_end::func::{AbsoluteComponentBounds, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 pub use func::GateKind;
 
@@ -11,6 +11,17 @@ pub struct Gate {
     bitsize: BitSize,
     n_inputs: GateInputs,
     orientation: Orientation
+}
+impl Gate {
+    /// Creates a new instance of the gate with specified kind, bitsize, and input count.
+    pub fn new(kind: GateKind, bitsize: u8, n_inputs: u8, orientation: Orientation) -> Self {
+        Self {
+            kind,
+            bitsize: BitSize::new_clamped(bitsize),
+            n_inputs: GateInputs::new_clamped(n_inputs),
+            orientation
+        }
+    }
 }
 impl PhysicalComponent for Gate {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -45,6 +56,15 @@ pub struct Not {
     bitsize: BitSize,
     orientation: Orientation
 }
+impl Not {
+    /// Creates a new instance of the NOT gate with specified bitsize.
+    pub fn new(bitsize: u8, orientation: Orientation) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation
+        }
+    }
+}
 
 impl PhysicalComponent for Not {
     fn init_engine(&self) -> Option<func::ComponentFn> {
@@ -68,7 +88,18 @@ impl PhysicalComponent for Not {
 /// A tri-state buffer.
 pub struct TriState {
     bitsize: BitSize,
-    orientation: Orientation
+    orientation: Orientation,
+    handedness: Handedness
+}
+impl TriState {
+    /// Creates a new instance of the tri-state buffer with specified bitsize.
+    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            orientation,
+            handedness
+        }
+    }
 }
 
 impl PhysicalComponent for TriState {
@@ -82,8 +113,8 @@ impl PhysicalComponent for TriState {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let origin = (2, 1);
-        AbsoluteComponentBounds::new((2, 2), [(0, 1), (1, 2), origin])
-            .into_relative(origin)
-            .orient(self.orientation, Default::default())
+        AbsoluteComponentBounds::new((2, 2), [(1, 2), (0, 1), origin])
+        .into_relative(origin)
+        .orient(self.orientation, self.handedness)
     }
 }

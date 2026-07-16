@@ -55,9 +55,9 @@ pub enum AddWireResult {
     /// Joining is necessary.
     /// The parameters are:
     /// - The coordinate to start a flood fill from.
-    /// - The value key the new wire is set to.
-    /// - The value keys which need to be replaced with the new wire's key.
-    Join(Coord, ValueKey, Vec<ValueKey>)
+    /// - The value keys which must be joined.
+    ///   They should be replaced with the first key in the vector.
+    Join(Coord, Vec<ValueKey>)
 }
 
 type SplitGroupMap = HashMap<ValueKey, Vec<HashSet<MeshKey>>>;
@@ -90,9 +90,20 @@ impl WireSet {
             .map(|(_, _, &k)| k)
     }
 
-    /// Checks if there is a wire to split, and splitting it into two if needed.
+    /// Finds the [`ValueKey`] corresponding to a given wire.
     /// 
-    /// This function accepts the coordinate to split at.
+    /// This is `None` if the wire is not present on the graph.
+    /// The two endpoints must be joints (i.e., the specified wire cannot be a subwire).
+    pub fn find_key_of_wire(&self, w: Wire) -> Option<ValueKey> {
+        let [p, q] = w.endpoints();
+        self.graph.edge_weight(p.into(), q.into()).copied()
+    }
+
+    /// Tries to split the wire facing the specified horizontality
+    /// at the point of where `c` is.
+    /// 
+    /// This function will successfully split if there is a wire at `c`
+    /// which can be broken up into two parts on both sides of `c`.
     fn split_wire_on_joint(&mut self, c: Coord, horizontal: bool) {
         if let Some((_, joined)) = self.ranges.split_wire(horizontal, c) {
             let [p, q] = joined.endpoints();
@@ -105,7 +116,42 @@ impl WireSet {
         }
     }
 
-    
+    /// Splits all wires at a given coord.
+    fn split_at_coord(&mut self, c: Coord) {
+        self.split_wire_on_joint(c, true);
+        self.split_wire_on_joint(c, false);
+    }
+
+    /// Checks whether coordinate has any conditions which would prevent wire joins.
+    /// This returns true if none of those cases are met.
+    /// 
+    /// Joining is handled by the range map, but some logic is not known by the range map
+    /// (particularly, coordinate connections to ports).
+    /// This is used to check the graph cases that would not be known by the range map.
+    fn graph_joinable(&self, c: Coord) -> bool {
+        // Succeeds if <=2 neighbors and if no neighbors are non-joints (all neighbors are joints)
+        let mut neighbors = self.graph.neighbors(c.into());
+
+        neighbors.by_ref().take(2).all(|n| matches!(n, MeshKey::WireJoint(_)))
+            && neighbors.next().is_none()
+    }
+
+    /// Performs a join at the given coord,
+    /// allowing two wires at the given point to be joined
+    /// if it would make sense for the geometry of the graph.
+    fn join_at_coord(&mut self, c: Coord) {
+        if self.graph_joinable(c)
+            && let Some(([l, r], j)) = self.ranges.join_wire(c)
+        {
+                let lk = self.graph_remove_wire(l).expect("removable wire");
+                let rk = self.graph_remove_wire(r).expect("removable wire");
+                assert_eq!(lk, rk, "Joined wires should have same keys");
+        
+                let [j0, j1] = j.endpoints();
+                self.graph.add_edge(j0.into(), j1.into(), lk);
+            }
+    }
+
     /// Removes an edge from the graph and removes any singleton nodes.
     fn graph_remove_edge(&mut self, l: MeshKey, r: MeshKey) -> Option<ValueKey> {
         /// Removes node if it is not connected to any wire.
@@ -167,8 +213,6 @@ impl WireSet {
     pub fn add_wire(&mut self, w: Wire, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         // If horizontal or vertical, these two points can be connected.
         let [p, q] = w.endpoints();
-        let pk = self.find_key(p);
-        let qk = self.find_key(q);
 
         // If endpoints intersect the middle of a wire, create an intersection:
         self.split_wire_on_joint(p, !w.horizontal);
@@ -186,7 +230,7 @@ impl WireSet {
             // and keeping track of which wires are added/removed
             added.push(subwire);
             let [l, r] = subwire.endpoints();
-            if let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
+            if self.graph_joinable(l) && let Some(([spl, spr], joined)) = self.ranges.join_wire(l) {
                 // Remove spl:
                 if added.pop_if(|&mut w| w == spl).is_none() {
                     removed.push(spl);
@@ -197,7 +241,7 @@ impl WireSet {
                 // Add joined:
                 added.push(joined);
             }
-            if let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
+            if self.graph_joinable(r) && let Some(([spl, spr], joined)) = self.ranges.join_wire(r) {
                 // Remove spl:
                 let result = added.pop();
                 debug_assert_eq!(result, Some(spl));
@@ -227,24 +271,7 @@ impl WireSet {
                 (new_key, AddWireResult::NoJoin(new_key))
             },
             &[k] => (k, AddWireResult::NoJoin(k)),
-            &[k1, k2, ..] => {
-                // If multiple keys, then we know we need to eventually join
-                // and we need to determine which key to use.
-                // 
-                // fill_point: Where a flood fill needs to start
-                // fill_key: The key to temporarily fill the wire with
-                // post_fill_key: The key to actually fill with (using flood fill)
-                //
-                // This is set up this way so that any adjacent wires to this wire
-                // are all flood-filled properly.
-                let (fill_point, post_fill_key, fill_key) = match (pk, qk) {
-                    (Some(pk), _) => (p, pk, *keys.iter().find(|&&k| k != pk).unwrap()),
-                    (_, Some(qk)) => (q, qk, *keys.iter().find(|&&k| k != qk).unwrap()),
-                    _ => (p, k1, k2)
-                };
-
-                (fill_key, AddWireResult::Join(fill_point, post_fill_key, keys))
-            }
+            &[_, k2, ..] => (k2, AddWireResult::Join(p, keys))
         };
         // Add all the wires
         self.graph.extend(
@@ -253,10 +280,10 @@ impl WireSet {
                 (l.into(), r.into(), fill_key)
             })
         );
-        // Break up any new wires with any joints that connect to this wire.
+        // Break up any new wires with any joints or ports that connect to this wire.
         for c in w.coord_iter() {
-            let intersecting = self.graph.neighbors(c.into())
-                .any(|other| matches!(other, MeshKey::WireJoint(_)));
+            let intersecting = self.graph.neighbors(c.into()).next().is_some();
+
             if intersecting {
                 self.split_wire_on_joint(c, w.horizontal);
             }
@@ -272,18 +299,19 @@ impl WireSet {
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists or if port already exists as a node).
     pub fn add_port(&mut self, c: Coord, key: ComponentKey, index: usize, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
-        let c = c.into();
         let port = (key, index).into();
 
         if self.graph.contains_node(port) {
             return None;
         }
-        if self.graph.contains_edge(c, port) {
+
+        if self.graph.contains_edge(c.into(), port) {
             return None;
         }
 
+        self.split_at_coord(c); // If point is in middle of wire, split it
         let key = self.find_key(c).unwrap_or_else(new_vk);
-        self.graph.add_edge(c, port, key);
+        self.graph.add_edge(c.into(), port, key);
         Some(key)
     }
 
@@ -293,14 +321,29 @@ impl WireSet {
     /// 
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists).
-    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
+    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         if self.graph.contains_edge(c.into(), tunnel.into()) {
             return None;
         }
 
-        let key = self.find_key(c).unwrap_or_else(new_vk);
-        self.graph.add_edge(c.into(), tunnel.into(), key);
-        Some(key)
+        self.split_at_coord(c); // If point is in middle of wire, split it
+
+        // Get the key of the new coordinate (if it exists) and get the key of the tunnel.
+        let added_key = self.find_key(c);
+        let tunnel_key = self.find_key(tunnel);
+
+        let (edge_key, result) = match (added_key, tunnel_key) {
+            (None, None) => {
+                let k = new_vk();
+                (k, AddWireResult::NoJoin(k))
+            },
+            (None, Some(k)) | (Some(k), None) => (k, AddWireResult::NoJoin(k)),
+            (Some(a), Some(t)) if a == t => (t, AddWireResult::NoJoin(t)),
+            (Some(a), Some(t)) => (t, AddWireResult::Join(c, vec![a, t])),
+        };
+
+        self.graph.add_edge(c.into(), tunnel.into(), edge_key);
+        Some(result)
     }
 
     /// Removes the wire from the graph.
@@ -348,16 +391,8 @@ impl WireSet {
         });
 
         // See if any edges can be joined:
-        for c in [p, q] {
-            if let Some(([l, r], j)) = self.ranges.join_wire(c) {
-                let lk = self.graph_remove_wire(l).expect("removable wire");
-                let rk = self.graph_remove_wire(r).expect("removable wire");
-                assert_eq!(lk, rk, "Joined wires should have same keys");
-
-                let [j0, j1] = j.endpoints();
-                self.graph.add_edge(j0.into(), j1.into(), lk);
-            }
-        }
+        self.join_at_coord(p);
+        self.join_at_coord(q);
 
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
@@ -386,6 +421,7 @@ impl WireSet {
             true  => HashSet::new(),
             false => HashSet::from([k]),
         };
+        self.join_at_coord(c);
 
         Some(RemoveWireResult { deleted_keys, split_groups: Default::default() })
     }
@@ -407,6 +443,7 @@ impl WireSet {
         // Find groups:
         let mut split_groups = self.compute_meshes::<MeshKey>([c.into(), tunnel.into()]);
         split_groups.retain(|_, groups| groups.len() > 1);
+        self.join_at_coord(c);
 
         Some(RemoveWireResult { deleted_keys, split_groups })
     }
@@ -417,7 +454,17 @@ impl WireSet {
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
     pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-        let mut frontier = vec![p.into()];
+        // Pick a point on the graph to flood fill from.
+        //    If p is a wire endpoint or a port, we can start from p.
+        //    Otherwise, if p is on a wire, we can start from any of the endpoints on p.
+        // If no point can be found, we just give up.
+        let m_entry_point = match self.graph.contains_node(p.into()) {
+            true => Some(p.into()),
+            false => self.wires_at_coord(p)
+                .next()
+                .map(|w| MeshKey::from(w.endpoints()[0]))
+        };
+        let mut frontier = Vec::from_iter(m_entry_point);
 
         while let Some(k) = frontier.pop() {
             let edges_to_flood: Vec<_> = self.graph.edges(k)
@@ -445,6 +492,15 @@ impl WireSet {
     pub fn wires(&self) -> impl Iterator<Item=Wire> {
         self.ranges.wires()
     }
+
+    /// Gets all of the wires in the set and their associated value keys.
+    pub fn wire_values_iter(&self) -> impl Iterator<Item=(Wire, ValueKey)> {
+        self.graph.all_edges()
+            .filter_map(|(m1, m2, &vk)| match (m1, m2) {
+                (MeshKey::WireJoint(p), MeshKey::WireJoint(q)) => Some((Wire::from_endpoints(p, q).unwrap(), vk)),
+                _ => None
+            })
+    }
 }
 
 #[cfg(test)]
@@ -457,7 +513,7 @@ mod tests {
 
     use super::*;
     
-    fn keygen() -> impl FnMut() -> ValueKey {
+    fn keygen<K: slotmap::Key>() -> impl FnMut() -> K {
         let mut map = SlotMap::with_key();
         move || map.insert(())
     }
@@ -467,7 +523,9 @@ mod tests {
         let expected: BTreeSet<_> = nodes.into_iter().map(Into::into).collect();
         assert_eq!(actual, expected, "nodes in graph should match");
     }
-    fn assert_graph_edges<const N: usize>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(Coord, Coord)>); N]) {
+    fn assert_graph_edges<const N: usize, K>(graph: &WireGraph, all_edges: [(ValueKey, Vec<(K, K)>); N])
+        where K: Into<MeshKey> + Copy
+    {
         use crate::middle_end::wire::minmax;
         
         let expected_edgemap = HashMap::from(all_edges);
@@ -564,12 +622,14 @@ mod tests {
         assert_range_map(&ws.ranges, edges);
 
         // Join ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let Some(AddWireResult::Join(ffpt, src_key, dst_key)) = ws.add_wire(w(n01, n11), &mut keygen) else {
+        let Some(AddWireResult::Join(ffpt, keys)) = ws.add_wire(w(n01, n11), &mut keygen) else {
             panic!("Expected join")
         };
+        let &main_key = keys.first().expect("keys list should've had at least 1 key");
+
         assert!(ffpt == n01 || ffpt == n11);
-        assert!(src_key == k0 || src_key == k1);
-        assert!(dst_key.contains(&k0) && dst_key.contains(&k1));
+        assert!(main_key == k0 || main_key == k1);
+        assert!(keys.contains(&k0) && keys.contains(&k1));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
@@ -759,9 +819,9 @@ mod tests {
         assert_remove(ws.remove_wire(w(n01, n11)), [], []);
         assert_remove(ws.remove_wire(w(n00, n01)), [key], []);
 
-        // Check corre0ct construction
+        // Check correct construction
         assert_graph_nodes(&ws.graph, []);
-        assert_graph_edges(&ws.graph, []);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, []);
         assert_range_map(&ws.ranges, []);
     }
 
@@ -950,5 +1010,96 @@ mod tests {
         let edges = [(n00, n01), (n04, n05)];
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
+    }
+
+    #[test]
+    fn wireset_mid_port() {
+        let mut value_keygen = keygen();
+        let mut func_keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02] = [
+            (0, 0), (0, 1), (0, 2)
+        ];
+        let gate = func_keygen();
+        let port = FunctionPort { gate, index: 0 };
+        // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Add a wire and put a port in the middle of it.
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n00, n02), &mut value_keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+        let Some(k2) = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen) else {
+            panic!("Expected port creation to succeed");
+        };
+
+        assert_eq!(k1, k2);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+        // Remove one of the split wires and readd it.
+        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        let Some(AddWireResult::NoJoin(k3)) = ws.add_wire(w(n01, n02), &mut value_keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_eq!(k1, k3);
+        // Adding wires should be the same because the port still exists.
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+
+        // Remove the port.
+        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
+        assert_range_map(&ws.ranges, [(n00, n02)]);
+    }
+    #[test]
+    fn wireset_mid_port_2() {
+        
+        let mut value_keygen = keygen();
+        let mut func_keygen = keygen();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n02] = [
+            (0, 0), (0, 1), (0, 2)
+        ];
+        let gate = func_keygen();
+        let port = FunctionPort { gate, index: 0 };
+        // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Add a port and put a wire in the middle of it
+        
+        let Some(k2) = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen) else {
+            panic!("Expected port creation to succeed");
+        };
+        let Some(AddWireResult::NoJoin(k1)) = ws.add_wire(w(n00, n02), &mut value_keygen) else {
+            panic!("Expected first wire add to be successful and require no joins");
+        };
+
+        assert_eq!(k1, k2);
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+        // Remove one of the split wires and readd it.
+        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        let Some(AddWireResult::NoJoin(k3)) = ws.add_wire(w(n01, n02), &mut value_keygen) else {
+            panic!("Expected second wire add to be successful and require no joins");
+        };
+        assert_eq!(k1, k3);
+        // Adding wires should be the same because the port still exists.
+        assert_graph_edges::<_, MeshKey>(&ws.graph, [(k1, vec![
+            (n00.into(), n01.into()), (n01.into(), n02.into()), (n01.into(), port.into())
+        ])]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
+
+
+        // Remove the port.
+        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
+        assert_range_map(&ws.ranges, [(n00, n02)]);
     }
 }

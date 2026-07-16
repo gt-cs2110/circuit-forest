@@ -1,6 +1,6 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-import * as core from "circuitsim-core";
+import * as core from "circuitsim-glue";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("api", {

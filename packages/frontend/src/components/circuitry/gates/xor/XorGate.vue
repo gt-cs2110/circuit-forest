@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
+import { CircuitComponentProps } from "@/lib/types";
 
+defineProps<CircuitComponentProps>();
 const XOR_OFFSET = 0.5;
 </script>
 

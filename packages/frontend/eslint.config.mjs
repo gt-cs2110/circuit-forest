@@ -17,7 +17,7 @@ export default defineConfig(
             pluginImport.flatConfigs.recommended,
             pluginImport.flatConfigs.electron,
             pluginImport.flatConfigs.typescript,
-            pluginVue.configs["flat/recommended"],
+            pluginVue.configs["flat/essential"],
         ],
 
         // Apply these rules to these types of files

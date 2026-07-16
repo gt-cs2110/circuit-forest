@@ -160,7 +160,6 @@ impl super::MiddleRepr {
                 name: area.name.to_string(),
                 components: {
                     area.components.values()
-                        .chain(area.ui_components.values())
                         .map(|props| {
                             let (x, y) = props.origin;
                             Ok(ComponentInfo {

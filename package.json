@@ -6,5 +6,5 @@
     "start": "pnpm --filter frontend start",
     "build:glue": "pnpm --filter glue build"
   },
-  "packageManager": "pnpm@10.8.0"
+  "packageManager": "pnpm@11.11.0"
 }

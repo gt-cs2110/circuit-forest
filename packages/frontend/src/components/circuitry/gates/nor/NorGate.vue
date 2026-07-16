@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { BUBBLE_SIZE, GRID_SIZE } from "@/lib/consts";
+import { CircuitComponentProps } from "@/lib/types";
+
+defineProps<CircuitComponentProps>();
 </script>
 
 <template>

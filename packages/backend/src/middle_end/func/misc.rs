@@ -7,6 +7,12 @@ use crate::middle_end::func::{PhysicalComponent, PhysicalInitContext, RelativeCo
 pub struct Subcircuit {
     key: CircuitKey
 }
+impl Subcircuit {
+    /// Creates a new instance of the subcircuit with specified circuit key.
+    pub fn new(key: CircuitKey) -> Self {
+        Self { key }
+    }
+}
 impl PhysicalComponent for Subcircuit {
     fn init_engine(&self) -> Option<func::ComponentFn> {
         Some(func::Subcircuit::new(self.key).into())
@@ -56,7 +62,7 @@ mod subcircuit_serde {
 }
 
 /// Text.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Text;
 impl PhysicalComponent for Text {

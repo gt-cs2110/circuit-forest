@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "anyhow"
+version = "1.0.103"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
+
+[[package]]
 name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,10 +170,13 @@ dependencies = [
 name = "glue"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "circuitsim-engine",
  "napi",
  "napi-build",
  "napi-derive",
+ "once_cell",
+ "slotmap",
 ]
 
 [[package]]
@@ -229,6 +238,7 @@ version = "3.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1d395473824516f38dd1071a1a37bc57daa7be65b293ebba4ead5f7abb017a2"
 dependencies = [
+ "anyhow",
  "bitflags",
  "ctor",
  "futures",

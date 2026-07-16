@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Theme, theme, themes } from "@/lib/store/settings";
-import { SettingsIcon } from "lucide-vue-next";
+import { SettingsIcon } from "@lucide/vue";
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
 
 const themeNames: Record<Theme, string> = {
@@ -22,7 +22,7 @@ const themeNames: Record<Theme, string> = {
                 align="start"
                 side="bottom"
                 :side-offset="8"
-                class="data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in left-2 w-64 border bg-panel-dark p-4"
+                class="left-2 w-64 border bg-panel-dark p-4 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in"
             >
                 <fieldset class="text-xs">
                     <span class="flex justify-between font-medium"> Theme </span>

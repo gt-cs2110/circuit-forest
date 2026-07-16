@@ -12,6 +12,17 @@ pub struct Mux {
     orientation: Orientation,
     handedness: Handedness
 }
+impl Mux {
+    /// Creates a new instance of the mux with specified bitsize and selector size.
+    pub fn new(bitsize: u8, selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
+    }
+}
 impl PhysicalComponent for Mux {
     fn init_engine(&self) -> Option<ComponentFn> {
         Some(func::Mux::new(self.bitsize.get(), self.selsize.get()).into())
@@ -23,7 +34,7 @@ impl PhysicalComponent for Mux {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_inputs: u32 = func::Mux::n_inputs_from(self.selsize) as u32;
-        
+
         let width = PLEXER_WIDTH;
         let height = 2 * n_inputs;
 
@@ -48,6 +59,17 @@ pub struct Demux {
     orientation: Orientation,
     handedness: Handedness
 }
+impl Demux {
+    /// Creates a new instance of the demux with specified bitsize and selector size.
+    pub fn new(bitsize: u8, selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            bitsize: BitSize::new_clamped(bitsize),
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
+    }
+}
 impl PhysicalComponent for Demux {
     fn init_engine(&self) -> Option<ComponentFn> {
         Some(func::Demux::new(self.bitsize.get(), self.selsize.get()).into())
@@ -59,7 +81,6 @@ impl PhysicalComponent for Demux {
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
         let n_outputs = func::Demux::n_outputs_from(self.selsize) as u32;
-        
         let width = PLEXER_WIDTH;
         let height = 2 * n_outputs;
 
@@ -80,6 +101,16 @@ pub struct Decoder {
     selsize: SelSize,
     orientation: Orientation,
     handedness: Handedness
+}
+impl Decoder {
+    /// Creates a new instance of the decoder with specified selector size.
+    pub fn new(selsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
+        Self {
+            selsize: SelSize::new_clamped(selsize),
+            orientation,
+            handedness
+        }
+    }
 }
 impl PhysicalComponent for Decoder {
     fn init_engine(&self) -> Option<ComponentFn> {
@@ -105,3 +136,4 @@ impl PhysicalComponent for Decoder {
             .orient(self.orientation, self.handedness)
     }
 }
+

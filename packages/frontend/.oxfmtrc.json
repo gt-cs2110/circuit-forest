@@ -1,0 +1,9 @@
+{
+    "printWidth": 100,
+    "tabWidth": 4,
+    "sortPackageJson": false,
+    "sortTailwindcss": {
+        "stylesheet": "./src/index.css"
+    },
+    "ignorePatterns": [".vite", "node_modules", "out", "pnpm-lock.yaml"]
+}
