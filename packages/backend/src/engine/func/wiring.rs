@@ -174,7 +174,7 @@ impl Splitter {
 impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         let mut ports = vec![PortProperties { ty: PortType::Inout, bitsize: self.config.get_bitsize().get() }];
-        ports.extend((0..self.config.get_bitsize().get()).into_iter().map(|leg| PortProperties { ty: PortType::Inout, bitsize: self.config.leg_width(leg) as u8 }));
+        ports.extend((0..self.config.get_num_legs()).into_iter().map(|leg| PortProperties { ty: PortType::Inout, bitsize: self.config.leg_width(leg) as u8 }));
         ports
     }
 
@@ -325,7 +325,7 @@ mod tests {
         let splitter = Splitter::new(config);
         let props = splitter.ports(&Default::default());
 
-        assert_eq!(props.len(), 6);
+        assert_eq!(props.len(), 3);
         assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize: 5 });
         assert_eq!(props[1], PortProperties { ty: PortType::Inout, bitsize: 3 });
         assert_eq!(props[2], PortProperties { ty: PortType::Inout, bitsize: 2 });

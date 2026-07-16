@@ -22,7 +22,7 @@ export interface CreateComponentArgs {
   textContent?: string
   handedness?: Handedness
   portAssingments?: Array<number | undefined | null>
-  numLegs: number
+  numLegs?: number
 }
 
 /** Function Get Transient State, gets the relevant data and state of all components in a circuit */

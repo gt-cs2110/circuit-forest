@@ -502,7 +502,11 @@ use crate::engine::state::ValueIssue;
 
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
-        let splitter = circuit.add_function_node(func::Splitter::new(SplitterConfig::new((0..8).map(|f| Some(f)).collect::<Vec<_>>().try_into().unwrap(), 8 ,8 ).unwrap()));
+        let mut port_assignments = [None; 64];
+        for leg in 0..8 {
+            port_assignments[leg] = Some(leg as u8);
+        }
+        let splitter = circuit.add_function_node(func::Splitter::new(SplitterConfig::new(port_assignments, 8, 8).unwrap()));
         circuit.connect_all(splitter, &nodes);
 
         // joined -> split

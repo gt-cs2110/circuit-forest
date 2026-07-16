@@ -431,7 +431,7 @@ pub struct CreateComponentArgs {
     pub text_content: Option<String>,
     pub handedness: Option<js_enum::Handedness>,
     pub port_assingments: Option<Vec<Option<u8>>>,
-    pub num_legs: u8,
+    pub num_legs: Option<u8>,
 }
 impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
     type Error = anyhow::Error;

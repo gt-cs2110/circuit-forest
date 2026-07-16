@@ -141,11 +141,12 @@ impl PhysicalComponent for Splitter {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let bitsize = i32::from(self.config.get_bitsize().get());
-        let mut ports = vec![(0, 0)];
-        ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
+         let num_legs = i32::from(self.config.get_num_legs());
 
-        RelativeComponentBounds::new((bitsize * 2, 2), ports)
+        let mut ports = vec![(0, 0)];
+        ports.extend((1..=num_legs).map(|i| (2,2 * i,)));
+
+        RelativeComponentBounds::new((2,num_legs * 2,), ports)
             .orient(self.orientation, self.handedness)
     }
 }
