@@ -1,3 +1,4 @@
+use crate::bitarr;
 use crate::bitarray::BitArray;
 use crate::engine::CircuitGraphMap;
 use crate::engine::func::SplitterConfigError::AssignmentOutOfBitsize;
@@ -122,7 +123,7 @@ impl SplitterConfig{
         for (bit,&leg) in port_assignments.iter().enumerate() {
             let Some(leg) = leg else {continue};
 
-            if bit > bitsize as usize{
+            if bit >= bitsize as usize{
                 return Err(AssignmentOutOfBitsize((bit), (bitsize)))
             }
 
@@ -180,9 +181,13 @@ impl Component for Splitter {
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         if Sensitivity::Anyedge.activated(ctx.old_ports[0], ctx.new_ports[0]) {
-           (0..self.config.get_num_legs()).map(|leg|{
+            //set the leg values
+           let mut updates:Vec<PortUpdate> = (0..self.config.get_num_legs()).map(|leg|{
                 PortUpdate{index:leg as usize +1, value:self.config.bits_for_leg(leg).map(|bit|ctx.new_ports[0].index(bit as u8)).collect()}
-           }).collect()
+           }).collect();
+           //set the joined value to unknow
+           updates.push(PortUpdate{index:0, value:bitarr![Z;self.config.get_bitsize().get()]});
+           updates
 
         } else if Sensitivity::Anyedge.any_activated(&ctx.old_ports[1..], &ctx.new_ports[1..]) {
            // combine each legs bits back into position
@@ -192,7 +197,13 @@ impl Component for Splitter {
                     value = value.with(bit as u8, ctx.new_ports[(leg as usize) + 1].index(i as u8));
                 }
             }
-            vec![PortUpdate { index: 0, value }]
+            //Drive the joined value 
+            let mut updates = vec![PortUpdate { index: 0, value }];
+            //set the legs to unknow so that they dont drive backwards and cause a short circuit
+            updates.extend((0..self.config.get_num_legs()).map(|leg| {
+            PortUpdate { index: leg as usize + 1, value: bitarr![Z; self.config.leg_width(leg) as u8] }
+        }));
+        updates
 
 
         } else {
@@ -220,6 +231,17 @@ mod tests {
         (0..bitsize)
             .map(|i| if i % 2 == 0 { BitState::High } else { BitState::Low })
             .collect()
+    }
+    /// Builds an all-Z BitArray of the given width, for asserting a passive
+    /// port was reset after the splitter stopped driving it.
+    fn imped(width: u8) -> BitArray {
+        crate::bitarr![Z; width]
+    }
+
+    /// Sorts a Vec<PortUpdate> by index, for order-independent comparison.
+    fn sorted(mut v: Vec<PortUpdate>) -> Vec<PortUpdate> {
+        v.sort_by_key(|u| u.index);
+        v
     }
 
     // ---------- SplitterConfig::new validation ----------
@@ -277,11 +299,12 @@ mod tests {
                 new_ports: &new_ports,
                 inner_state: None,
             });
-            let expected: Vec<_> = data.iter().enumerate()
-                .map(|(i, &st)| PortUpdate { index: 1 + i, value: BitArray::from(st) })
-                .collect();
+            let mut expected: Vec<_> = data.iter().enumerate()
+            .map(|(i, &st)| PortUpdate { index: 1 + i, value: BitArray::from(st) })
+            .collect();
+            expected.push(PortUpdate { index: 0, value: imped(bitsize) });
 
-            assert_eq!(actual, expected, "identity splitter should split each bit to its own leg");
+            assert_eq!(sorted(actual), sorted(expected), "identity splitter should split each bit to its own leg");
         }
     }
 
@@ -309,9 +332,9 @@ mod tests {
                 new_ports: &new_ports,
                 inner_state: None,
             });
-            let expected = vec![PortUpdate { index: 0, value: joined }];
-
-            assert_eq!(actual, expected, "identity splitter should rejoin legs into the bus");
+            let mut expected = vec![PortUpdate { index: 0, value: joined }];
+            expected.extend((0..bitsize).map(|i| PortUpdate { index: 1 + i as usize, value: imped(1) }));
+            assert_eq!(sorted(actual), sorted(expected), "identity splitter should rejoin legs into the bus");
         }
     }
 
@@ -345,12 +368,13 @@ mod tests {
             inner_state: None,
         });
 
-        let expected = vec![
-            PortUpdate { index: 1, value: BitArray::from_iter(data[0..3].iter().copied()) },
-            PortUpdate { index: 2, value: BitArray::from_iter(data[3..5].iter().copied()) },
+       let expected = vec![
+        PortUpdate { index: 1, value: BitArray::from_iter(data[0..3].iter().copied()) },
+        PortUpdate { index: 2, value: BitArray::from_iter(data[3..5].iter().copied()) },
+        PortUpdate { index: 0, value: imped(5) },
         ];
 
-        assert_eq!(actual, expected, "uneven split should group bits per leg in ascending order");
+        assert_eq!(sorted(actual), sorted(expected),"uneven-leg join should reassemble the bus correctly");
     }
 
     #[test]
@@ -377,9 +401,12 @@ mod tests {
             new_ports: &new_ports,
             inner_state: None,
         });
-        let expected = vec![PortUpdate { index: 0, value: joined }];
-
-        assert_eq!(actual, expected, "uneven-leg join should reassemble the bus correctly");
+        let expected = vec![
+            PortUpdate { index: 0, value: joined },
+            PortUpdate { index: 1, value: imped(3) },
+            PortUpdate { index: 2, value: imped(2) },
+        ];
+        assert_eq!(sorted(actual), sorted(expected), "uneven-leg join should reassemble the bus correctly");
     }
 
     // ---------- floating bits ----------
@@ -414,8 +441,12 @@ mod tests {
         });
 
         let expected_joined = BitArray::from_iter([BitState::High, BitState::High, BitState::High]);
-        let expected = vec![PortUpdate { index: 0, value: expected_joined }];
+        let expected = vec![
+            PortUpdate { index: 0, value: expected_joined },
+            PortUpdate { index: 1, value: imped(1) },
+            PortUpdate { index: 2, value: imped(1) },
+        ];
 
-        assert_eq!(actual, expected, "floating bit 1 should retain its prior value across a leg-driven join");
+        assert_eq!(sorted(actual), sorted(expected), "floating bit 1 should retain its prior value across a leg-driven join");
     }
 }

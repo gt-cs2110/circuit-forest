@@ -173,6 +173,9 @@ impl Circuit<'_> {
                 circ!(self.graphs).connect(wire, FunctionPort { gate, index });
                 circ!(self.states).transient.mark_update(wire, true);
             });
+        
+        circ!(self.states).transient.functions.insert(gate);//add gate to transient functions for state to be reupdated
+
     }
 
     /// Propagates an update through the circuit

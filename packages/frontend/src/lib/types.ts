@@ -57,7 +57,7 @@ export type CircuitComponent = TransientComponentState & {
     orientation: Orientation;
     handedness: Handedness;
     labelOrientation: Orientation;
-    portAssingments: Array<number | undefined>;
+    portAssignments: Array<number | undefined>;
     numLegs: number;
 };
 

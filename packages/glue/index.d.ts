@@ -21,7 +21,7 @@ export interface CreateComponentArgs {
   selsize?: number
   textContent?: string
   handedness?: Handedness
-  portAssingments?: Array<number | undefined | null>
+  portAssignments?: Array<number | undefined | null>
   numLegs?: number
 }
 

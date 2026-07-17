@@ -147,7 +147,6 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
     }
 
     const frontendId = generateFrontendId();
-    console.log("placing");
     const new_component: CircuitComponent = {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
             componentType: String(type).toUpperCase(),
@@ -156,7 +155,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         frontendId: frontendId,
         type: type,
         label: "",
-        bitsize: 1,
+        bitsize: type == "splitter" ? 2 : 1,
         inputs: 2,
         ports: [],
         bounds: [
@@ -171,7 +170,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         isInput: false,
         textContent: "",
         constantValue: "0",
-        portAssingments: [0, 1],
+        portAssignments: [0, 1],
         numLegs: 2,
     };
 
