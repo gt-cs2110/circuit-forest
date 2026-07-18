@@ -13,8 +13,4 @@ export const demux: ComponentMetadata = {
             { x: 0, y: 2, label: "Out" },
         ];
     },
-    getOriginToFixedPortOffset: (component) => {
-        // In the Demux The Fied Port is the input and is on the same x position as origin, and is Math.pow(2,selBit) +2/2
-        return { x: 0, y: Math.pow(2, component.selsize + 1) / 2 };
-    },
 };

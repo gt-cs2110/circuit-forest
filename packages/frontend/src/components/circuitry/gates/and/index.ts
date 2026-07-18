@@ -13,11 +13,4 @@ export const and: ComponentMetadata = {
             { x: 4, y: 2, label: "Out" },
         ];
     },
-    getOriginToFixedPortOffset: (component) => {
-        // gate is a square, port to origin will always be the full width in the x and half the height in the y bc heigh == width
-        return {
-            x: component.bounds[1].x - component.bounds[0].x,
-            y: (component.bounds[1].y - component.bounds[0].y) / 2,
-        };
-    },
 };

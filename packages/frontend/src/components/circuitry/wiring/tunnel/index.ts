@@ -7,9 +7,4 @@ export const tunnel: ComponentMetadata = {
     component: Tunnel,
     getDefaultDimensions: () => ({ width: 2, height: 2 }),
     getDefaultPorts: () => [{ x: 2, y: 1 }],
-    getOriginToFixedPortOffset: (component) => {
-        const width = Math.max(component.label.length + 1, 3);
-
-        return { x: width, y: 1 };
-    },
 };

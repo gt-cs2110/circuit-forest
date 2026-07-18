@@ -14,8 +14,4 @@ export const mux: ComponentMetadata = {
             { x: 3, y: 2, label: "Out" },
         ];
     },
-    getOriginToFixedPortOffset: (component) => {
-        // In the mux the origin is alwys 3 away from the fixed point in the x, and is Math.pow(2,selsize+1)/2
-        return { x: 3, y: Math.pow(2, component.selsize + 1) / 2 };
-    },
 };
