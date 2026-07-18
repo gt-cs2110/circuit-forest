@@ -31,13 +31,22 @@ type AxisDelta = i32;
 type CoordDelta = (AxisDelta, AxisDelta);
 
 /// A group of middle circuits.
-#[derive(Debug, Default)]
+#[derive(Default)]
 #[cfg_attr(feature="serde", derive(serde::Deserialize), serde(try_from = "serialize::CircuitFile"))]
 pub struct MiddleRepr {
     engine: CircuitForest,
     physical: SecondaryMap<CircuitKey, CircuitArea>
 }
+impl std::fmt::Debug for MiddleRepr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::engine::debug::DebugMap;
 
+        f.debug_struct("MiddleRepr")
+            .field("engine", &self.engine)
+            .field("physical", &DebugMap(&self.physical))
+            .finish()
+    }
+}
 /// A circuit's middle-end components and wires,
 ///   including their locations and properties.
 #[derive(Debug, Default)]

@@ -75,7 +75,7 @@ impl FunctionNode {
 }
 
 /// A circuit structure.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct CircuitGraph {
     /// All value nodes of the circuit.
     pub(crate) values: SlotMap<ValueKey, ValueNode>,
@@ -232,6 +232,16 @@ impl Index<FunctionKey> for CircuitGraph {
 impl IndexMut<FunctionKey> for CircuitGraph {
     fn index_mut(&mut self, index: FunctionKey) -> &mut Self::Output {
         &mut self.functions[index]
+    }
+}
+impl std::fmt::Debug for CircuitGraph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::engine::debug::DebugMap;
+
+        f.debug_struct("CircuitGraph")
+            .field("values", &DebugMap(&self.values))
+            .field("functions", &DebugMap(&self.functions))
+            .finish()
     }
 }
 

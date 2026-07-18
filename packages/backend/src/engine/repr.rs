@@ -21,7 +21,7 @@ pub(super) type CircuitGraphMap = SlotMap<CircuitKey, CircuitGraph>;
 /// Circuits within this CircuitForest 
 /// can use any circuit within the forest
 /// as a subcircuit.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct CircuitForest {
     pub(crate) graphs: CircuitGraphMap,
     pub(crate) states: SecondaryMap<CircuitKey, CircuitState>,
@@ -59,7 +59,16 @@ impl CircuitForest {
         &self.states[k]
     }
 }
+impl std::fmt::Debug for CircuitForest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::engine::debug::DebugMap;
 
+        f.debug_struct("CircuitForest")
+            .field("graphs", &DebugMap(&self.graphs))
+            .field("states", &DebugMap(&self.states))
+            .finish()
+    }
+}
 /// A mutable view of a circuit, 
 /// which includes its structure ([`CircuitGraph`]) and its state ([`CircuitState`]).
 #[derive(Debug)]

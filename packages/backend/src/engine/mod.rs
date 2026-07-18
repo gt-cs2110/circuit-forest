@@ -11,6 +11,8 @@
 pub mod func;
 pub mod graph;
 pub mod state;
+
+pub(crate) mod debug;
 mod repr;
 
 pub use repr::*;

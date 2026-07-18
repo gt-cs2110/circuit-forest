@@ -31,7 +31,7 @@ pub enum ValueIssue {
 /// The state of the circuit.
 /// 
 /// This includes all wire values, all port values, and internal function state.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct CircuitState {
     pub(crate) values: SecondaryMap<ValueKey, ValueState>,
     pub(crate) functions: SecondaryMap<FunctionKey, FunctionState>,
@@ -259,6 +259,17 @@ impl IndexMut<FunctionKey> for CircuitState {
         &mut self.functions[index]
     }
 }
+impl std::fmt::Debug for CircuitState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::engine::debug::DebugMap;
+
+        f.debug_struct("CircuitState")
+            .field("values", &DebugMap(&self.values))
+            .field("functions", &DebugMap(&self.functions))
+            .field("transient", &self.transient)
+            .finish()
+    }
+}
 
 /// The state of a [`ValueNode`].
 /// 
@@ -373,7 +384,7 @@ pub(crate) struct PropagationState {
 }
 
 /// Temporary propagation state.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub(crate) struct TransientState {
     /// Determines which values need to be propagated.
     pub(crate) values: SparseSecondaryMap<ValueKey, PropagationState>,
@@ -383,5 +394,15 @@ pub(crate) struct TransientState {
 impl TransientState {
     pub fn resolved(&self) -> bool {
         self.values.is_empty() && self.functions.is_empty()
+    }
+}
+impl std::fmt::Debug for TransientState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::engine::debug::DebugMap;
+
+        f.debug_struct("TransientState")
+            .field("values", &DebugMap(&self.values))
+            .field("functions", &self.functions)
+            .finish()
     }
 }
