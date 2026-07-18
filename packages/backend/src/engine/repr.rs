@@ -237,6 +237,7 @@ impl Circuit<'_> {
                 circ!(self.states).remove_node_value(k);
             }
 
+            std::mem::take(&mut circ!(self.states)[main].value);
             circ!(self.states).add_transient(main, true);
         }
     }
