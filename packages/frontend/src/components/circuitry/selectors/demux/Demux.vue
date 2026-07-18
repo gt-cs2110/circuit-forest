@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { GRID_SIZE } from "@/lib/consts";
+import { getDimensions, invertOrientation } from "@/lib/bounds";
+import { trapezoid } from "@/lib/svg";
 import { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
 
 const { component } = defineProps<CircuitComponentProps>();
-const mainAxis = computed(() => Math.pow(2, component ? component.selsize + 1 : 2));
+// FIXME: Don't hardcode default?
+const dim = computed(() => (component ? getDimensions(component.bounds) : { width: 3, height: 4 }));
 </script>
 
 <template>
     <g>
         <path
-            :d="`M 0 ${GRID_SIZE}
-                L ${GRID_SIZE * 3} ${0}
-                L ${GRID_SIZE * 3} ${mainAxis * GRID_SIZE} 
-                L 0 ${(mainAxis - 1) * GRID_SIZE}
-                Z`"
+            :d="trapezoid(invertOrientation(component?.orientation ?? 'East'), dim.width, dim.height)"
             fill="var(--color-component-fill)"
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"

@@ -47,49 +47,9 @@ function onPortDrag(e: MouseEvent) {
 const metadata = computed(() => componentMap[props.component.type]);
 
 const ports = computed(() => props.component.ports);
-const rotation = computed(() => {
-    switch (props.component.orientation) {
-        case "North":
-            return 270;
-        case "South":
-            return 90;
-        case "East":
-            return 0;
-        case "West":
-        default:
-            return 180;
-    }
-});
 const transform = computed(() => {
-    const { orientation, handedness, pos } = props.component;
-
-    const ShiftToWorldCoordinates = {
-        x: pos.x * GRID_SIZE,
-        y: pos.y * GRID_SIZE,
-    };
-
-    const OriginRelativeToFixedPortRelative = {
-        x: metadata.value.getOriginToFixedPortOffset(props.component).x * GRID_SIZE,
-        y: metadata.value.getOriginToFixedPortOffset(props.component).y * GRID_SIZE,
-    };
-    const angle = rotation.value;
-
-    const flipVert =
-        ((orientation === "North" || orientation === "East") && handedness === "TopLeft") ||
-        ((orientation === "South" || orientation === "West") && handedness === "DownRight");
-    const handednessTransform = flipVert ? "scale(1, -1)" : "";
-
-    // We first shift the fixed port to be at (0,0),
-    //   then apply handedness,
-    //   then rotate around (0, 0),
-    //   and then translate it back.
-    // FIXME: This shouldn't actually transform the entire component, just the shape
-    return [
-        `translate(${ShiftToWorldCoordinates.x}, ${ShiftToWorldCoordinates.y})`,
-        `rotate(${angle})`,
-        handednessTransform,
-        `translate(${-OriginRelativeToFixedPortRelative.x}, ${-OriginRelativeToFixedPortRelative.y})`,
-    ].join("\n");
+    const start = props.component.bounds[0];
+    return `translate(${start.x * GRID_SIZE}, ${start.y * GRID_SIZE})`;
 });
 </script>
 
@@ -97,7 +57,7 @@ const transform = computed(() => {
     <!-- The original component, which is also responsible for interactions -->
     <!-- On drag, it becomes translucent to indicate a move is occurring -->
     <g :class="[{ 'opacity-50': isDragging }]">
-        <g :transform="transform" @mousedown="handleMouseDown" :id="baseId">
+        <g :transform @mousedown="handleMouseDown" :id="baseId">
             <component :is="metadata.component" :component="props.component" />
         </g>
     </g>

@@ -37,8 +37,7 @@ impl PhysicalComponent for Pin {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
-            .orient(self.orientation, Default::default())
+        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get(), self.orientation)
     }
 }
 
@@ -72,8 +71,7 @@ impl PhysicalComponent for Constant {
     
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(std::cmp::max(self.value.len(), 2))
-            .orient(self.orientation, Default::default())
+        RelativeComponentBounds::single_port_from_bitsize(std::cmp::max(self.value.len(), 2), self.orientation)
     }
 }
 
@@ -172,9 +170,8 @@ impl PhysicalComponent for Tunnel {
     }
 
     fn init_bounds(&self, ctx: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let width = std::cmp::max(3, ctx.label.len() as u32 + 1);
-        RelativeComponentBounds::single_port_with_origin(width, 2, (width, 1))
-            .orient(self.orientation, Default::default())
+        let width = std::cmp::max(2, ctx.label.len() as u32).next_multiple_of(2);
+        RelativeComponentBounds::single_port(width, 2, self.orientation)
     }
 }
 
@@ -201,8 +198,7 @@ impl PhysicalComponent for Probe {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get())
-            .orient(self.orientation, Default::default())
+        RelativeComponentBounds::single_port_from_bitsize(self.bitsize.get(), self.orientation)
     }
 }
 

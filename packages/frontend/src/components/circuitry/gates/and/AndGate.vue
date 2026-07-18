@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
+import { rotateFromComponent } from "@/lib/svg";
 import { CircuitComponentProps } from "@/lib/types";
 
-defineProps<CircuitComponentProps>();
+const { component } = defineProps<CircuitComponentProps>();
 </script>
 
 <template>
-    <g>
+    <g :transform="rotateFromComponent(component)">
         <path
             :d="`M 0 0
                 H ${GRID_SIZE * 2}

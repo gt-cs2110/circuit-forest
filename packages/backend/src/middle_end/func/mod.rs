@@ -157,8 +157,14 @@ impl<C: Default> ComponentBounds<C> {
     }
 }
 impl RelativeComponentBounds {
-    fn single_port(width: u32, height: u32) -> Self {
-        Self::single_port_with_origin(width, height, (width, height / 2))
+    fn single_port(width: u32, height: u32, orientation: Orientation) -> Self {
+        let origin = match orientation {
+            Orientation::North => (width / 2, 0),
+            Orientation::South => (width / 2, height),
+            Orientation::East => (width, height / 2),
+            Orientation::West => (0, height / 2),
+        };
+        Self::single_port_with_origin(width, height, origin)
     }
 
     fn single_port_with_origin(width: u32, height: u32, origin: Coord) -> Self {
@@ -166,21 +172,19 @@ impl RelativeComponentBounds {
             .into_relative(origin)
     }
 
-    fn single_port_from_bitsize(bitsize: u8) -> Self {
+    fn single_port_from_bitsize(bitsize: u8, orientation: Orientation) -> Self {
         const MAX_COLS: u32 = 8;
         
         let bitsize = u32::from(bitsize);
         let n_rows = bitsize.div_ceil(MAX_COLS);
+
+        // If 1-2 bits, use a 2 x 2 tile
+        // If 2-8 bits, use a n x 2 tile
+        // If 9+ bits, use a 8 x h tile
+        let width = bitsize.clamp(2, MAX_COLS);
         let height = 2 * n_rows;
-        
-        match bitsize {
-            // If two bits, use a 2 x 2 tile
-            ..=2 => Self::single_port(2, height),
-            // If 2-8 bits, use a n x 2 tile
-            w @ ..=MAX_COLS => Self::single_port(w, height),
-            // If 9+ bits, use a 16 x h tile
-            _ => Self::single_port( MAX_COLS, height)
-        }
+
+        Self::single_port(width, height, orientation)
     }
 
     /// Orients the component bounds and ports around the origin
