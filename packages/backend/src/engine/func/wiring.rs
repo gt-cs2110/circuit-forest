@@ -120,14 +120,15 @@ pub enum SplitterConfigError {
 
 impl SplitterConfig{
     pub fn new(port_assignments: [Option<u8>; 64], num_legs: u8, bitsize:u8) -> Result<Self, SplitterConfigError> {
+                   
+
         for (bit,&leg) in port_assignments.iter().enumerate() {
             let Some(leg) = leg else {continue};
-
             if bit >= bitsize as usize{
                 return Err(AssignmentOutOfBitsize((bit), (bitsize)))
             }
 
-            if leg >= num_legs {
+            if leg > num_legs {
                 return Err(SplitterConfigError::LegOutOfRange(leg, num_legs));
             }
         }
@@ -153,6 +154,9 @@ impl SplitterConfig{
      pub fn get_num_legs(&self)->u8{
         self.num_legs
     }
+    pub fn get_num_active_legs(&self)->usize{
+        (0..self.get_num_legs()).filter(|&l| self.leg_width(l)>0).count()
+    }
 }
 
 
@@ -175,15 +179,19 @@ impl Splitter {
 impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         let mut ports = vec![PortProperties { ty: PortType::Inout, bitsize: self.config.get_bitsize().get() }];
-        ports.extend((0..self.config.get_num_legs()).into_iter().map(|leg| PortProperties { ty: PortType::Inout, bitsize: self.config.leg_width(leg) as u8 }));
+        ports.extend((0..self.config.get_num_legs()).into_iter().filter_map(|leg| (self.config.leg_width(leg)>0).then_some(PortProperties { ty: PortType::Inout, bitsize: self.config.leg_width(leg) as u8 })));
         ports
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        //removes inactive legs and shifts from leg index to corresponding port index
+
+        let active_legs:Vec<(u8,usize)> = (0..self.config.get_num_legs()).filter(|&l| self.config.leg_width(l)>0).enumerate().map(|(index, leg)| (leg, index+1)).collect();
+        
         if Sensitivity::Anyedge.activated(ctx.old_ports[0], ctx.new_ports[0]) {
             //set the leg values
-           let mut updates:Vec<PortUpdate> = (0..self.config.get_num_legs()).map(|leg|{
-                PortUpdate{index:leg as usize +1, value:self.config.bits_for_leg(leg).map(|bit|ctx.new_ports[0].index(bit as u8)).collect()}
+           let mut updates:Vec<PortUpdate> = active_legs.iter().map(|&(leg,index)|{
+                PortUpdate{index:index, value:self.config.bits_for_leg(leg).map(|bit|ctx.new_ports[0].index(bit as u8)).collect()}
            }).collect();
            //set the joined value to unknow
            updates.push(PortUpdate{index:0, value:bitarr![Z;self.config.get_bitsize().get()]});

@@ -1,21 +1,34 @@
 <script setup lang="ts">
+import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { CircuitComponentProps } from "@/lib/types";
+import { computed } from "vue";
 
 const { component } = defineProps<CircuitComponentProps>();
-const numLegs = component?.numLegs ?? 2;
-let svg = `M ${0 * GRID_SIZE}, ${0 * GRID_SIZE} 
-        L ${1 * GRID_SIZE}, ${1 * GRID_SIZE} `;
-[...Array(numLegs).keys()].forEach(leg => {
-    svg += `L ${1 * GRID_SIZE}, ${2 * (leg + 1) * GRID_SIZE}
-            L ${2 * GRID_SIZE}, ${2 * (leg + 1) * GRID_SIZE}
-            M ${1 * GRID_SIZE}, ${2 * (leg + 1) * GRID_SIZE} `
+const numLegs = computed(() => component ? component.numLegs : 2);
+const dimensions = computed(()=>component?getDimensions(component.bounds):{width:2,height:4}); 
+//Lets compute if there is a leg that has never been used
 
-})
+const svgPath = computed(() => {
+    let pathString = `M ${0 * GRID_SIZE}, ${0 * GRID_SIZE} L ${1 * GRID_SIZE}, ${1 * GRID_SIZE} `;
+    const assignedPorts = new Set(component?.portAssignments);
+    // Create the range using a standard array loop
+    let legs_created = 0;
+    Array.from({ length: numLegs.value }).forEach((_, leg) => {
+        if (component && !assignedPorts.has(leg)) return;
+        pathString += `L ${1 * GRID_SIZE}, ${2 * (legs_created + 1) * GRID_SIZE}
+                       L ${2 * GRID_SIZE}, ${2 * (legs_created + 1) * GRID_SIZE}
+                       M ${1 * GRID_SIZE}, ${2 * (legs_created + 1) * GRID_SIZE} `;
+        legs_created++;
+    });
+
+    return pathString;
+});
 </script>
 
 <template>>
-    <rect x="0" y="0" :width="2 * GRID_SIZE" :height="numLegs ?? 2 * GRID_SIZE" fill="transparent"
+    <rect x="0" y="0" :width="dimensions.width* GRID_SIZE" :height="dimensions.height * GRID_SIZE" fill="white"
+        fill-opacity="0"
         pointer-events="all" />
-    <path :d=svg fill="none" stroke="var(--color-component-stroke)" />
+    <path :d=svgPath fill="none" stroke="var(--color-component-stroke)" />
 </template>

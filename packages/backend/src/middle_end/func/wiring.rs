@@ -144,9 +144,9 @@ impl PhysicalComponent for Splitter {
          let num_legs = i32::from(self.config.get_num_legs());
 
         let mut ports = vec![(0, 0)];
-        ports.extend((1..=num_legs).map(|i| (2,2 * i,)));
+        ports.extend((1..=self.config.get_num_active_legs()).map(|i| (2,(2 * i) as i32,)));
 
-        RelativeComponentBounds::new((2,num_legs * 2,), ports)
+        RelativeComponentBounds::new((2,self.config.get_num_active_legs()as i32 * 2,), ports)
             .orient(self.orientation, self.handedness)
     }
 }
