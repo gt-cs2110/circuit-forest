@@ -8,11 +8,11 @@
 use slotmap::{SecondaryMap};
 use thiserror::Error;
 
-use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
+use crate::engine::{Circuit, CircuitForest, CircuitKey, CircuitState, FunctionPort, ValueKey};
 use crate::middle_end::comp_key::ComponentMap;
 use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
-use crate::middle_end::wire::{Wire, WireSet};
+use crate::middle_end::wire::{ValueFinalizer, Wire, WireSet};
 
 mod comp_key;
 mod string_interner;
@@ -135,6 +135,29 @@ impl MiddleRepr {
     }
 }
 
+impl ValueFinalizer for Circuit<'_> {
+    fn gen_key(&mut self) -> ValueKey {
+        self.add_value_node()
+    }
+
+    fn delete_key(&mut self, k: ValueKey) {
+        // TODO: Add bool?
+        self.remove_value_node(k);
+    }
+
+    fn join(&mut self, into: ValueKey, keys: &[ValueKey]) {
+        self.join(into, keys);
+    }
+
+    fn split(&mut self, key: ValueKey, split_off: &[(ComponentKey, usize)]) -> ValueKey {
+        let split_off = split_off.iter()
+            .filter_map(|&(c, index)| match c {
+                ComponentKey::Function(gate) => Some(FunctionPort { gate, index }),
+                ComponentKey::UI(_) => None,
+            });
+        self.split(key, split_off)
+    }
+}
 /// Basic macro to pretend Circuit has the "graph" and "state" fields.
 /// 
 /// This cannot be done with a function
@@ -176,14 +199,13 @@ impl MiddleCircuit<'_> {
             // Add tunnel to wire set:
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = tunnel_interner.add_ref(&props.label);
-                let result = wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node())
+                wires.add_tunnel(coord, sym, &mut circ!(self.engine))
                     .ok_or(ReprEditErr::RedundantTunnel)?;
-                self.handle_add(result);
             }
         } else {
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
-                let value = wires.add_port(c, key, index, || circ!(self.engine).add_value_node())
+                let value = wires.add_port(c, key, index, &mut circ!(self.engine))
                     .expect("Expected port addition to be successful");
                 
                 if let ComponentKey::Function(gate) = key {
@@ -248,13 +270,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This raises an error if no wire is added.
     pub fn add_wire(&mut self, w: Wire) -> bool {
-        match circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node()) {
-            Some(result) => {
-                self.handle_add(result);
-                true
-            },
-            None => false,
-        }
+        circ!(self.physical).wires.add_wire(w, &mut circ!(self.engine)).is_some()
     }
 
     /// Removes a wire to the circuit and updates the circuit
@@ -325,16 +341,15 @@ impl MiddleCircuit<'_> {
                             .expect("removal to work");
                         self.handle_remove(r);
                         
-                        let a = circ!(self.physical).wires.add_tunnel(new_port, sym, || circ!(self.engine).add_value_node())
+                        let a = circ!(self.physical).wires.add_tunnel(new_port, sym, &mut circ!(self.engine))
                             .expect("addition to work");
-                        self.handle_add(a);
                     },
                     _ => {
                         let r = circ!(self.physical).wires.remove_port(k, i)
                             .expect("removal to work");
                         self.handle_remove(r);
 
-                        let a = circ!(self.physical).wires.add_port(new_port, k, i, || circ!(self.engine).add_value_node())
+                        let a = circ!(self.physical).wires.add_port(new_port, k, i, &mut circ!(self.engine))
                             .expect("addition to work");
                         circ!(self.state).add_transient(a, true);
                     }
@@ -352,17 +367,7 @@ impl MiddleCircuit<'_> {
 
         true
     }
-
-    /// Updates engine & middle end to corresponding AddWireResult.
-    fn handle_add(&mut self, result: wire::AddWireResult) {
-        match result {
-            wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
-                circ!(self.engine).join(&keys);
-                circ!(self.physical).wires.flood_fill(c, k1);
-            },
-        }
-    }
+    
     /// Updates engine & middle end to corresponding `RemoveWireResult`.
     fn handle_remove(&mut self, result: wire::RemoveWireResult) {
         let wire::RemoveWireResult { deleted_keys, split_groups } = result;
@@ -388,7 +393,7 @@ impl MiddleCircuit<'_> {
                     .collect();
 
                 // Split and update physical:
-                let flood_key = circ!(self.engine).split(k, &ports);
+                let flood_key = circ!(self.engine).split(k, ports);
                 circ!(self.physical).wires.flood_fill(coord, flood_key);
             }
         }

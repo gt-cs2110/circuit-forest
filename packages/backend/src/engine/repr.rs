@@ -234,22 +234,20 @@ impl Circuit<'_> {
     }
 
     /// Joins a set of value nodes into one.
-    pub fn join(&mut self, keys: &[ValueKey]) {
-        if let Some((&main, to_merge)) = keys.split_first() {
-            circ!(self.graphs).join(main, to_merge);
-            // Remove all invalidated nodes
-            for &k in to_merge {
-                circ!(self.states).remove_node_value(k);
-            }
-
-            std::mem::take(&mut circ!(self.states)[main].value);
-            circ!(self.states).add_transient(main, true);
+    pub fn join(&mut self, main: ValueKey, to_merge: &[ValueKey]) {
+        circ!(self.graphs).join(main, to_merge.iter().copied());
+        // Remove all invalidated nodes
+        for &k in to_merge {
+            circ!(self.states).remove_node_value(k);
         }
+
+        std::mem::take(&mut circ!(self.states)[main].value);
+        circ!(self.states).add_transient(main, true);
     }
     /// Splits a value node into two.
     /// This separates all the `off_ports` into a new value node
     /// and returns a key to the newly created node.
-    pub fn split(&mut self, key: ValueKey, off_ports: &[FunctionPort]) -> ValueKey {
+    pub fn split(&mut self, key: ValueKey, off_ports: impl IntoIterator<Item=FunctionPort>) -> ValueKey {
         let new_value = circ!(self.graphs).split_off(key, off_ports);
 
         circ!(self.states).init_value(new_value);
@@ -316,7 +314,7 @@ mod tests {
         circuit.connect_one(value2, FunctionPort { gate: func2, index: 0 });
 
         // Join value2 into value1
-        circuit.join(&[value1, value2]);
+        circuit.join(value1, &[value2]);
 
         assert_eq!(circuit.forest.graphs[circuit.key].values[value1].links.len(), 2);
         assert!(!circuit.state().values.contains_key(value2));
@@ -342,7 +340,7 @@ mod tests {
         circuit.connect_one(value1, FunctionPort { gate: func2, index: 0 });
 
         // Split off func2 from value1
-        let value2 = circuit.split(value1, &[FunctionPort { gate: func2, index: 0 }]);
+        let value2 = circuit.split(value1, [FunctionPort { gate: func2, index: 0 }]);
 
         // Verify graphs and state
         assert_eq!(circuit.forest.graphs[circuit.key].values[value1].links.len(), 1);

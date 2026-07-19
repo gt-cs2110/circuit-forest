@@ -178,9 +178,9 @@ impl CircuitGraph {
     }
 
     /// Joins a set of keys, merging all the ports into the specified `main` node.
-    pub fn join(&mut self, main: ValueKey, to_merge: &[ValueKey]) {
+    pub fn join(&mut self, main: ValueKey, to_merge: impl IntoIterator<Item=ValueKey>) {
         // Connect all to one value key:
-        for &k in to_merge {
+        for k in to_merge {
             // Take out the links from this node:
             let links = std::mem::take(&mut self.values[k].links);
 
@@ -198,9 +198,9 @@ impl CircuitGraph {
     }
 
     /// Removes all ports in `off_ports` from `main`, attaching it into a new node.
-    pub fn split_off(&mut self, main: ValueKey, off_ports: &[FunctionPort]) -> ValueKey {
+    pub fn split_off(&mut self, main: ValueKey, off_ports: impl IntoIterator<Item=FunctionPort>) -> ValueKey {
         let new_value = self.add_value();
-        for &port in off_ports {
+        for port in off_ports {
             if self.values[main].links.contains(&port) {
                 self.connect(new_value, port);
             }
@@ -271,7 +271,7 @@ mod tests {
         graph.connect(value2, FunctionPort { gate: func2, index: 0 });
 
         // Join value2 to value1
-        graph.join(value1, &[value2]);
+        graph.join(value1, [value2]);
 
         // Verify value1
         assert_eq!(graph.values[value1].links.len(), 2);
@@ -306,7 +306,7 @@ mod tests {
         graph.connect(value1, FunctionPort { gate: func2, index: 0 });
 
         // Split off func2 port
-        let value2 = graph.split_off(value1, &[FunctionPort { gate: func2, index: 0 }]);
+        let value2 = graph.split_off(value1, [FunctionPort { gate: func2, index: 0 }]);
 
         // Verify value1 links
         assert_eq!(graph.values[value1].links.len(), 1);
