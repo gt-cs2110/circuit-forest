@@ -98,7 +98,7 @@ impl CircuitState {
     }
     /// Removes a value node from CircuitState.
     /// 
-    /// If this function is called, then `CircuitState::get_node_value`
+    /// If this function is called, then [`CircuitState::get_node_value`]
     /// should NOT be called on this ValueKey.
     pub fn remove_node_value(&mut self, k: ValueKey) {
         self.values.remove(k);
@@ -106,8 +106,8 @@ impl CircuitState {
     }
     /// Removes a value node from CircuitState.
     /// 
-    /// If this function is called, then `CircuitState::get_node_value`
-    /// should NOT be called on this ValueKey.
+    /// If this function is called, then any queries requiring
+    /// this [`FunctionKey`] should NOT be called.
     pub fn remove_function_value(&mut self, k: FunctionKey) {
         self.functions.remove(k);
         self.transient.functions.remove(&k);

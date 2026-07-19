@@ -200,6 +200,11 @@ impl Circuit<'_> {
         circ!(self.states).propagate(&self.forest.graphs, self.key)
     }
 
+    /// Gets the current circuit graph.
+    pub fn graph(&self) -> &CircuitGraph {
+        &circ!(self.graphs)
+    }
+
     /// Gets current circuit state.
     pub fn state(&self) -> &CircuitState {
         &circ!(self.states)

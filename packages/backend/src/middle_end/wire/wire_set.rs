@@ -85,9 +85,16 @@ impl WireSet {
     /// 
     /// This is `None` if the coordinate is not connected to a wire.
     pub fn find_key<K: Into<MeshKey>>(&self, key: K) -> Option<ValueKey> {
-        self.graph.edges(key.into())
-            .next()
-            .map(|(_, _, &k)| k)
+        let mut edges = self.graph.edges(key.into())
+            .map(|(_, _, &k)| k);
+        let next = edges.next();
+
+        debug_assert!(
+            next.is_none_or(|next| edges.all(|k| next == k)),
+            "Mesh should only have one key"
+        );
+
+        next
     }
 
     /// Finds the [`ValueKey`] corresponding to a given wire.
