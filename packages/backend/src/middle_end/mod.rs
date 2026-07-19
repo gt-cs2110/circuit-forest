@@ -395,6 +395,8 @@ impl MiddleCircuit<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitarr;
+    use crate::middle_end::func::Constant;
     use crate::middle_end::func::Pin;
 
     use super::*;
@@ -461,5 +463,125 @@ mod tests {
         });
 
         assert_eq!(lk, rk);
+    }
+
+    #[test]
+    fn middle_repr_move_component() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        // Add setup:
+        let [t0, t1, u0, u1] = [(4, 3), (4, 10), (7, 3), (7, 10)];
+        let component = circuit
+            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, t0)
+            .unwrap();
+
+        assert!(circuit.add_wire(Wire::from_endpoints(t0, t1).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(u0, u1).unwrap()));
+        
+        {
+            let wire_set = circuit.get_wire_set();
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kc, kt0, "port should have the same value as the first wire");
+            assert_eq!(kt0, kt1, "first wire should have the same value throughout");
+    
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(ku0, ku1);
+
+            println!("{:?}", circuit.get_circuit_state().transient);
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![1]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![]);
+        }
+
+
+        // Test move:
+        circuit.move_selection(&[component], &[], (3, 0));
+
+        {
+            let wire_set = circuit.get_wire_set();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kt0, kt1);
+
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(kc, ku0, "port should have the same value as the second wire");
+            assert_eq!(ku0, ku1, "second wire should have the same value throughout");
+
+            println!("{:?} ({kt0:?}-{ku0:?})", circuit.get_circuit_state().transient);
+            println!("L({kt0:?}): {}", circuit.get_circuit_state().get_node_value(kt0));
+            println!("R({ku0:?}): {}", circuit.get_circuit_state().get_node_value(ku0));
+            circuit.propagate();
+            println!("L({kt0:?}): {}", circuit.get_circuit_state().get_node_value(kt0));
+            println!("R({ku0:?}): {}", circuit.get_circuit_state().get_node_value(ku0));
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![1]);
+        }
+    }
+
+    #[test]
+    fn middle_repr_move_component_wire() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        // Add setup:
+        let [sa, t0, t1, sb, u0, u1] = [(3, 3), (4, 3), (4, 10), (6, 3), (7, 3), (7, 10)];
+        let component = circuit
+            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, sa)
+            .unwrap();
+
+        let wst = Wire::from_endpoints(sa, t0).unwrap();
+        assert!(circuit.add_wire(wst));
+        assert!(circuit.add_wire(Wire::from_endpoints(t0, t1).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(u0, u1).unwrap()));
+        
+        {
+            let wire_set = circuit.get_wire_set();
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let kst0 = wire_set.find_key(sa).unwrap();
+            let kst1 = wire_set.find_key(t0).unwrap();
+            let kst2 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kc, kst0, "port should have the same value as the first wire");
+            assert_eq!(kst0, kst1, "first wire should have the same value throughout");
+            assert_eq!(kst1, kst2, "first wire should have the same value throughout");
+    
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(ku0, ku1);
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kst0), bitarr![1]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![]);
+        }
+
+
+        // Test move:
+        circuit.move_selection(&[component], &[wst], (3, 0));
+
+        {
+            let wire_set = circuit.get_wire_set();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kt0, kt1);
+
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let ksu0 = wire_set.find_key(sb).unwrap();
+            let ksu1 = wire_set.find_key(u0).unwrap();
+            let ksu2 = wire_set.find_key(u1).unwrap();
+            assert_eq!(kc, ksu0, "port should have the same value as the second wire");
+            assert_eq!(ksu0, ksu1, "second wire should have the same value throughout");
+            assert_eq!(ksu1, ksu2, "second wire should have the same value throughout");
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ksu0), bitarr![1]);
+        }
     }
 }
