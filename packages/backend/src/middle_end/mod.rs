@@ -313,7 +313,35 @@ impl MiddleCircuit<'_> {
             let component = &mut circ!(self.physical).components[k];
             component.origin = origin;
             component.bounds = bounds;
-            component.ports = ports;
+            let old_ports = std::mem::take(&mut component.ports);
+            
+            for (i, (old_port, &new_port)) in std::iter::zip(old_ports, &ports).enumerate() {
+                let component = &circ!(self.physical).components[k];
+                match component.inner {
+                    PhysicalComponentEnum::Tunnel(_) => {
+                        let sym = circ!(self.physical).tunnel_interner.get(&component.label)
+                            .expect("Tunnel should have an assigned symbol");
+                        let r = circ!(self.physical).wires.remove_tunnel(old_port, sym)
+                            .expect("removal to work");
+                        self.handle_remove(r);
+                        
+                        let a = circ!(self.physical).wires.add_tunnel(new_port, sym, || circ!(self.engine).add_value_node())
+                            .expect("addition to work");
+                        self.handle_add(a);
+                    },
+                    _ => {
+                        let r = circ!(self.physical).wires.remove_port(k, i)
+                            .expect("removal to work");
+                        self.handle_remove(r);
+
+                        let a = circ!(self.physical).wires.add_port(new_port, k, i, || circ!(self.engine).add_value_node())
+                            .expect("addition to work");
+                        circ!(self.state).add_transient(a, true);
+                    }
+                }
+            }
+
+            circ!(self.physical).components[k].ports = ports;
         }
         for &w in wires {
             self.remove_wire(w);

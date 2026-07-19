@@ -47,6 +47,7 @@ impl From<TunnelSymbol> for MeshKey {
 /// 
 /// This enum indicates whether two [`ValueKey`]s need to be joined.
 #[derive(PartialEq, Eq, Clone, Debug)]
+#[must_use]
 pub enum AddWireResult {
     /// No joining is necessary.
     /// The [`ValueKey`] provided is the key of the added wire.
@@ -66,6 +67,7 @@ type SplitGroupMap = HashMap<ValueKey, Vec<HashSet<MeshKey>>>;
 /// The struct holds the keys that no longer have an edge associated
 /// and keys that need to split.
 #[derive(PartialEq, Eq, Clone, Debug)]
+#[must_use]
 pub struct RemoveWireResult {
     /// Keys that need to be deleted (no edges are associated with it anymore).
     pub deleted_keys: HashSet<ValueKey>,
@@ -302,6 +304,7 @@ impl WireSet {
     /// 
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists or if port already exists as a node).
+    #[must_use]
     pub fn add_port(&mut self, c: Coord, key: ComponentKey, index: usize, new_vk: impl FnOnce() -> ValueKey) -> Option<ValueKey> {
         let port = (key, index).into();
 
@@ -325,6 +328,7 @@ impl WireSet {
     /// 
     /// This returns `Some(())` if addition was possible, or `None` if not
     /// (e.g., if edge already exists).
+    #[must_use]
     pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, new_vk: impl FnOnce() -> ValueKey) -> Option<AddWireResult> {
         if self.graph.contains_edge(c.into(), tunnel.into()) {
             return None;
