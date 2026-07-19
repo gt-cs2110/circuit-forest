@@ -287,9 +287,10 @@ macro_rules! bitstate {
 /// ```
 #[macro_export]
 macro_rules! bitarr {
+    [] => { $crate::bitarray::BitArray::new() };
     [$b:tt; $e:expr] => { $crate::bitarray::BitArray::repeat($crate::bitarray::bitstate!($b), $e) };
-    [$($b:tt),*$(,)?] => { $crate::bitarray::BitArray::from_iter(const {
-        let mut a = [$($crate::bitarray::bitstate!($b)),*];
+    [$($b:tt),+$(,)?] => { $crate::bitarray::BitArray::from_iter(const {
+        let mut a = [$($crate::bitarray::bitstate!($b)),+];
         a.reverse();
         a
     }) };
