@@ -293,7 +293,7 @@ pub fn add_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow::R
         && let Ok(end) = end.try_into()
         && let Some(w) = Wire::from_endpoints(start, end)
     {
-        circuit.add_wire(w).is_ok()
+        circuit.add_wire(w)
     } else {
         false
     };
@@ -311,7 +311,7 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
         && let Ok(end) = end.try_into()
         && let Some(w) = Wire::from_endpoints(start, end)
     {
-        circuit.remove_wire(w).is_ok()
+        circuit.remove_wire(w)
     } else {
         false
     };

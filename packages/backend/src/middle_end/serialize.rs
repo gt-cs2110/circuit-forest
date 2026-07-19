@@ -218,8 +218,9 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
                 circuit.add_component(inner, &label, label_location, (x, y))?;
             }
 
-            wires.into_iter()
-                .try_for_each(|w| circuit.add_wire(w))?;
+            wires.into_iter().for_each(|w| {
+                circuit.add_wire(w);
+            });
         }
         Ok(repr)
     }

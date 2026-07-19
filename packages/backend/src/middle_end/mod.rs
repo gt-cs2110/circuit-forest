@@ -90,13 +90,6 @@ pub enum ReprEditErr {
     /// Adding a tunnel at a spot where the same tunnel already exists.
     #[error("cannot place two identical tunnels with the same port")]
     RedundantTunnel,
-
-    /// Adding a wire fails.
-    #[error("cannot add wire")]
-    CannotAddWire,
-    /// Removing a wire fails.
-    #[error("cannot remove wire")]
-    CannotRemoveWire,
 }
 
 /// A mutable view of a middle-end circuit,
@@ -254,26 +247,28 @@ impl MiddleCircuit<'_> {
     /// - If the new wire overlaps multiple wires, then only wires for the gaps will be created.
     /// 
     /// This raises an error if no wire is added.
-    pub fn add_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
-        let result = circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node())
-            .ok_or(ReprEditErr::CannotAddWire)?;
-
-        self.handle_add(result);
-
-        Ok(())
+    pub fn add_wire(&mut self, w: Wire) -> bool {
+        match circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node()) {
+            Some(result) => {
+                self.handle_add(result);
+                true
+            },
+            None => false,
+        }
     }
 
     /// Removes a wire to the circuit and updates the circuit
     /// to properly accommodate the removed wire.
     /// 
     /// This function removes any wires that overlap the wire range defined by the argument.
-    pub fn remove_wire(&mut self, w: Wire) -> Result<(), ReprEditErr> {
-        let result = circ!(self.physical).wires.remove_wire(w)
-            .ok_or(ReprEditErr::CannotRemoveWire)?;
-
-        self.handle_remove(result);
-
-        Ok(())
+    pub fn remove_wire(&mut self, w: Wire) -> bool {
+        match circ!(self.physical).wires.remove_wire(w) {
+            Some(result) => {
+                self.handle_remove(result);
+                true
+            },
+            None => false,
+        }
     }
 
     /// Updates engine & middle end to corresponding AddWireResult.
@@ -367,7 +362,7 @@ mod tests {
             .unwrap();
 
         let w = Wire::from_endpoints(p, q).unwrap();
-        circuit.add_wire(w).unwrap();
+        assert!(circuit.add_wire(w));
 
         let [lk, rk] = [left, right].map(|key| {
             let ComponentKey::Function(gate) = key else {
@@ -396,9 +391,10 @@ mod tests {
             .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
             .unwrap();
 
-        circuit.add_wire(Wire::from_endpoints(p, m1).unwrap()).unwrap();
-        circuit.add_wire(Wire::from_endpoints(m2, q).unwrap()).unwrap();
-        circuit.add_wire(Wire::from_endpoints(m1, m2).unwrap()).unwrap();
+        
+        assert!(circuit.add_wire(Wire::from_endpoints(p, m1).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(m2, q).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(m1, m2).unwrap()));
 
         let [lk, rk] = [left, right].map(|key| {
             let ComponentKey::Function(gate) = key else {
