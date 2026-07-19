@@ -46,6 +46,8 @@ export interface Location {
   y: number
 }
 
+export declare function moveSelection(circuitKey: Key, components: Array<Key>, wires: Array<[Location, Location]>, delta: Location): boolean
+
 export type Orientation =  'North'|
 'South'|
 'East'|
@@ -69,6 +71,7 @@ export declare function removeWire(circuitKey: Key, start: Location, end: Locati
 
 export interface TransientComponentState {
   backendKey: Key
+  pos: Location
   ports: Array<PortTransientState>
   bounds: [Location, Location]
 }

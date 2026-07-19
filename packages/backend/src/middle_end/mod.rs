@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{Wire, WireSet};
 
@@ -269,6 +269,60 @@ impl MiddleCircuit<'_> {
             },
             None => false,
         }
+    }
+
+    /// Moves all items by the specified delta.
+    pub fn move_selection(&mut self, components: &[ComponentKey], wires: &[Wire], delta: CoordDelta) -> bool {
+        // No movement:
+        if delta == (0, 0) {
+            return true;
+        }
+
+        // Check component bounds are ok:
+        let m_new_bounds = components.iter()
+            .map(|&k| {
+                let component = &circ!(self.physical).components[k];
+                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
+                let new_origin = coord_add(component.origin, delta)?;
+                
+                let bounds = component.inner.init_bounds(ctx)
+                    .into_absolute(new_origin)?;
+                Some((new_origin, bounds))
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_bounds) = m_new_bounds else {
+            return false;
+        };
+
+        // Check wire bounds are ok:
+        let m_new_wires = wires.iter()
+            .map(|w| {
+                let [p, q] = w.endpoints();
+                let np = coord_add(p, delta)?;
+                let nq = coord_add(q, delta)?;
+
+                Wire::from_endpoints(np, nq)
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_wires) = m_new_wires else {
+            return false;
+        };
+
+        // Update all items:
+        for (&k, (origin, ComponentBounds { bounds, ports })) in std::iter::zip(components, new_bounds) {
+            let component = &mut circ!(self.physical).components[k];
+            component.origin = origin;
+            component.bounds = bounds;
+            component.ports = ports;
+        }
+        for &w in wires {
+            self.remove_wire(w);
+        }
+        for w in new_wires {
+            self.add_wire(w);
+        }
+
+        true
     }
 
     /// Updates engine & middle end to corresponding AddWireResult.

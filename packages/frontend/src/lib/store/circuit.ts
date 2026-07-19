@@ -75,6 +75,30 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
     updateState();
 }
 
+export function moveSelection(componentFrontendIds: number[], wires: [Location, Location][], delta: Location) {
+    const components = componentFrontendIds
+        .map(c => currentSubcircuit.value.components.get(c)!.backendKey);
+    const move = window.api.core.moveSelection(
+        currentSubcircuit.value.backendKey,
+        toRaw(components),
+        Array.from(wires, ([l, r]) => [toRaw(l), toRaw(r)] as const),
+        toRaw(delta),
+    );
+    if (!move) {
+        toast.error("Update Unsucessful", {
+            description: "Make sure not to place component out of bounds.",
+            style: {
+                background: "#ef4444",
+                color: "#ffffff",
+                borderColor: "#dc2626",
+            },
+            duration: 4000,
+        });
+    }
+
+    updateState();
+}
+
 export function deleteComponent(frontendId: number) {
     const component = currentSubcircuit.value.components.get(frontendId);
     if (component) {

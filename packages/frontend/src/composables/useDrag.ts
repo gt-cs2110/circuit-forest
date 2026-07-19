@@ -1,4 +1,4 @@
-import { addWires, deleteWires, updateComponent } from "@/lib/store/circuit";
+import { moveSelection } from "@/lib/store/circuit";
 import type { Subcircuit } from "@/lib/types";
 import { Location } from "circuitsim-glue";
 import { Ref, ref } from "vue";
@@ -38,27 +38,7 @@ export function useDrag(
         if (delta.x != 0 || delta.y != 0) {
             // Update wires:
             const wires = Array.from(wireSelection.value, (id) => subcircuit.wires[id].endpoints);
-            const newWires = wires.map<[Location, Location]>(([p, q]) => [
-                { x: p.x + delta.x, y: p.y + delta.y },
-                { x: q.x + delta.x, y: q.y + delta.y },
-            ]);
-
-            // TODO: Cancellation safety
-            deleteWires(wires);
-            addWires(newWires);
-
-            // Update components:
-            for (const id of componentSelection.value) {
-                const component = subcircuit.components.get(id);
-                if (component) {
-                    updateComponent(component.frontendId, {
-                        pos: {
-                            x: component.pos.x + delta.x,
-                            y: component.pos.y + delta.y,
-                        },
-                    });
-                }
-            }
+            moveSelection(Array.from(componentSelection.value), wires, delta);
         }
 
         drag.value.active = false;

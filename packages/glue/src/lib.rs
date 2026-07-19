@@ -319,6 +319,33 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     Ok(result)
 }
 
+#[napi]
+pub fn move_selection(
+    circuit_key: JsKey,
+    components: Vec<JsKey>,
+    wires: Vec<(Location, Location)>,
+    delta: Location,
+) -> anyhow::Result<bool> {
+    let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
+
+    let components: Vec<_> = components.into_iter()
+        .map(|k| k.into_key())
+        .collect::<Result<_, _>>()?;
+    let wires: Vec<_> = wires.into_iter()
+        .map(|(p, q)| {
+            let p = p.try_into()?;
+            let q = q.try_into()?;
+            Wire::from_endpoints(p, q)
+                .ok_or_else(|| anyhow!("{p:?}, {q:?} does not form wire"))
+        })
+        .collect::<Result<_, _>>()?;
+
+    let Location { x, y } = delta;
+    let result = circuit.move_selection(&components, &wires, (x, y));
+    Ok(result)
+}
+
 #[derive(Debug)]
 struct DValueState {
     key: ValueKey,
@@ -338,6 +365,7 @@ impl DValueState {
 #[derive(Debug)]
 struct DComponentState {
     key: ComponentKey,
+    origin: (u32, u32),
     ports: Vec<((u32, u32), Option<DValueState>)>,
     bounds: [(u32, u32); 2],
 }
@@ -358,6 +386,7 @@ fn get_component_states(circuit: &MiddleCircuit<'_>) -> impl Iterator<Item = DCo
 
         DComponentState {
             key: ck,
+            origin: props.origin,
             ports,
             bounds: props.bounds,
         }
@@ -383,9 +412,11 @@ pub fn get_transient_state(
         .map(|state| {
             let DComponentState {
                 key: ckey,
+                origin,
                 ports,
                 bounds,
             } = state;
+
             let ports = ports
                 .into_iter()
                 .map(|(pos, d_value)| {
@@ -408,6 +439,7 @@ pub fn get_transient_state(
             let bounds = bounds.map(Into::into).into();
             TransientComponentState {
                 backend_key: ckey.into_js(),
+                pos: origin.into(),
                 ports,
                 bounds,
             }
@@ -474,6 +506,7 @@ pub struct UpdateComponentArgs {
 #[napi(object)]
 pub struct TransientComponentState {
     pub backend_key: JsKey,
+    pub pos: Location,
     pub ports: Vec<PortTransientState>,
     pub bounds: (Location, Location),
 }
