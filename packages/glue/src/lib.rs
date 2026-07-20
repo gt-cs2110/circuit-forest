@@ -197,7 +197,6 @@ pub fn parse_component(args: &CreateComponentArgs) -> anyhow::Result<PhysicalCom
         None => bitarr![0],
     }
     .resize(bitsize, bitstate![0]);
-    let circuit_key = args.circuit_key.into_key()?;
     let inputs = args.inputs.unwrap_or(2);
 
     let component = match args.component_type.as_str() {
@@ -212,7 +211,7 @@ pub fn parse_component(args: &CreateComponentArgs) -> anyhow::Result<PhysicalCom
         "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
         "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
         "TEXT" => func::Text.into(),
-        "SUBCIRCUIT" => func::Subcircuit::new(circuit_key).into(), // TODO: I don't believe this is correct
+        "SUBCIRCUIT" => todo!(), //func::Subcircuit::new(circuit_key).into(), // TODO: I don't believe this is correct
         "NOT" => func::Not::new(bitsize, orient).into(),
         "BUFFER" => func::TriState::new(bitsize, orient, handedness).into(),
         "AND" => func::Gate::new(GateKind::And, bitsize, inputs, orient).into(),
@@ -227,48 +226,28 @@ pub fn parse_component(args: &CreateComponentArgs) -> anyhow::Result<PhysicalCom
 }
 
 #[napi]
-pub fn add_component(args: CreateComponentArgs) -> anyhow::Result<JsKey> {
+pub fn add_component(circuit_key: JsKey, args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
     let component = parse_component(&args).unwrap();
-
     let label_orient = args
         .label_orientation
         .map_or_else(Default::default, From::from);
-    let circuit_key = args.circuit_key.into_key()?;
+    let origin = args
+        .pos
+        .try_into()
+        .map_err(|_| anyhow!("Component addition failed"))?;
 
-    let mut circuit = repr.circuit(circuit_key);
     let comp_key = circuit
         .add_component(
             component,
             &args.label.unwrap_or_default(),
             label_orient,
-            args.pos
-                .try_into()
-                .map_err(|_| anyhow!("Component addition failed"))?,
+            origin,
         )
         .context("Component addition failed")?;
     Ok(comp_key.into_js())
-}
-
-#[napi]
-pub fn validate_placement(args: CreateComponentArgs) -> anyhow::Result<bool> {
-    let mut repr = REPR.lock().unwrap();
-
-    let component = parse_component(&args).unwrap();
-
-    let circuit_key = args.circuit_key.into_key()?;
-    let circuit = repr.circuit(circuit_key);
-    let validated = circuit
-        .validate_bounds(
-            component,
-            &args.label.unwrap_or_default(),
-            args.pos
-                .try_into()
-                .map_err(|_| anyhow!("Component addition failed"))?,
-        )
-        .is_ok();
-    Ok(validated)
 }
 
 #[napi]
@@ -320,6 +299,43 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
 }
 
 #[napi]
+pub fn replace_components(
+    circuit_key: JsKey,
+    args: Vec<(JsKey, CreateComponentArgs)>,
+) -> anyhow::Result<Option<Vec<JsKey>>> {
+    let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
+
+    let args: Vec<_> = args
+        .into_iter()
+        .map(|(k, args)| Ok((k.into_key()?, parse_component(&args)?)))
+        .collect::<anyhow::Result<_>>()?;
+
+    let result = circuit.check_component_update_ok(&args).then(|| {
+        args.into_iter()
+            .map(|(k, inner)| {
+                let props = circuit.get_component(k)?;
+                let ck = match props.inner == inner {
+                    true => k,
+                    false => {
+                        let label = props.label.clone();
+                        let label_location = props.label_location;
+                        let origin = props.origin;
+
+                        circuit.remove_component(k)?;
+                        circuit.add_component(inner, &label, label_location, origin)?
+                    }
+                };
+
+                Ok(ck.into_js())
+            })
+            .collect()
+    });
+
+    result.transpose()
+}
+
+#[napi]
 pub fn move_selection(
     circuit_key: JsKey,
     components: Vec<JsKey>,
@@ -329,15 +345,16 @@ pub fn move_selection(
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let components: Vec<_> = components.into_iter()
+    let components: Vec<_> = components
+        .into_iter()
         .map(|k| k.into_key())
         .collect::<Result<_, _>>()?;
-    let wires: Vec<_> = wires.into_iter()
+    let wires: Vec<_> = wires
+        .into_iter()
         .map(|(p, q)| {
             let p = p.try_into()?;
             let q = q.try_into()?;
-            Wire::from_endpoints(p, q)
-                .ok_or_else(|| anyhow!("{p:?}, {q:?} does not form wire"))
+            Wire::from_endpoints(p, q).ok_or_else(|| anyhow!("{p:?}, {q:?} does not form wire"))
         })
         .collect::<Result<_, _>>()?;
 
@@ -480,7 +497,6 @@ pub fn print_circuit(circuit_key: JsKey) -> anyhow::Result<String> {
 
 #[napi(object)]
 pub struct CreateComponentArgs {
-    pub circuit_key: JsKey,
     pub component_type: String, // FIXME: Should be an enum?
     pub label: Option<String>,
     pub label_orientation: Option<js_enum::Orientation>,

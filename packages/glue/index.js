@@ -599,4 +599,4 @@ module.exports.printCircuit = nativeBinding.printCircuit
 module.exports.propagate = nativeBinding.propagate
 module.exports.removeComponent = nativeBinding.removeComponent
 module.exports.removeWire = nativeBinding.removeWire
-module.exports.validatePlacement = nativeBinding.validatePlacement
+module.exports.replaceComponents = nativeBinding.replaceComponents

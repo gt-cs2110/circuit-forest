@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::{Circuit, CircuitForest, CircuitKey, CircuitState, FunctionPort, ValueKey};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{ValueFinalizer, Wire, WireSet};
 
@@ -185,7 +185,11 @@ impl MiddleCircuit<'_> {
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
         let physical = physical.into();
-        let ComponentBounds { bounds, ports } = self.validate_bounds(physical, label, pos)?;
+        let ctx = PhysicalInitContext { circuit: self, label };
+        let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
+            .into_absolute(pos)
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
+
         let props = ComponentProps {
             label: label.to_string(),
             label_location,
@@ -258,14 +262,6 @@ impl MiddleCircuit<'_> {
         Ok(())
     }
 
-    /// Validates whether a certain placement configuration is in bounds.
-    pub fn validate_bounds(&self, physical: PhysicalComponentEnum, label: &str, pos: Coord) -> Result<AbsoluteComponentBounds, ReprEditErr> {
-        let ctx = PhysicalInitContext { circuit: self, label };
-        physical.init_bounds(ctx)
-            .into_absolute(pos)
-            .ok_or(ReprEditErr::ComponentOutOfBounds)
-    }
-    
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
     /// 
     /// This function handles multiple cases:
@@ -283,6 +279,18 @@ impl MiddleCircuit<'_> {
     /// This function removes any wires that overlap the wire range defined by the argument.
     pub fn remove_wire(&mut self, w: Wire) -> bool {
         circ!(self.physical).wires.remove_wire(w, &mut circ!(self.engine))
+    }
+
+    /// Checks the component update is valid.
+    pub fn check_component_update_ok(&mut self, components: &[(ComponentKey, PhysicalComponentEnum)]) -> bool {
+        components.iter()
+            .try_for_each(|&(k, inner)| {
+                let component = &circ!(self.physical).components[k];
+                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
+                inner.init_bounds(ctx).into_absolute(component.origin)?;
+                Some(())
+            })
+            .is_some()
     }
 
     /// Moves all items by the specified delta.
