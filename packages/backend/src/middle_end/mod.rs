@@ -165,16 +165,9 @@ impl MiddleCircuit<'_> {
             inner: physical,
         };
 
-        let key: ComponentKey = if let Some(component) = physical.init_engine() {
-            // ~~~ Engine component ~~~
-            let gate = circ!(self.engine).add_function_node(component);
-            circ!(self.physical).components.func.insert(gate, props);
-            gate.into()
-        } else {
-            // ~~~ UI component ~~~
-            let ui_key = circ!(self.physical).components.ui.insert(props);
-            ui_key.into()
-        };
+        let gate = physical.init_engine()
+            .map(|func| circ!(self.engine).add_function_node(func));
+        let key = circ!(self.physical).components.insert(gate, props);
 
         // Update the wire set to include all the component's ports.
         //    For tunnels, all tunnels are treated as one unified port.

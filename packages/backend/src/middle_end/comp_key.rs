@@ -27,8 +27,8 @@ impl From<UIKey> for ComponentKey {
 }
 
 pub struct ComponentMap<V> {
-    pub(crate) func: SecondaryMap<FunctionKey, V>,
-    pub(crate) ui: SlotMap<UIKey, V>
+    func: SecondaryMap<FunctionKey, V>,
+    ui: SlotMap<UIKey, V>
 }
 impl<V> ComponentMap<V> {
     pub fn contains_key(&self, k: ComponentKey) -> bool {
@@ -41,6 +41,15 @@ impl<V> ComponentMap<V> {
         match k {
             ComponentKey::Function(gate) => self.func.get(gate),
             ComponentKey::UI(ui_key) => self.ui.get(ui_key),
+        }
+    }
+    pub fn insert(&mut self, gate: Option<FunctionKey>, v: V) -> ComponentKey {
+        match gate {
+            Some(gate) => {
+                self.func.insert(gate, v);
+                gate.into()
+            },
+            None => self.ui.insert(v).into()
         }
     }
     pub fn remove(&mut self, k: ComponentKey) -> Option<V> {
