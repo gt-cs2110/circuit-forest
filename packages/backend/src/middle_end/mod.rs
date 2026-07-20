@@ -141,7 +141,6 @@ impl ValueFinalizer for Circuit<'_> {
     }
 
     fn delete_key(&mut self, k: ValueKey) {
-        // TODO: Add bool?
         self.remove_value_node(k);
     }
 
@@ -237,17 +236,15 @@ impl MiddleCircuit<'_> {
                 let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                     .expect("Tunnel should have an assigned symbol");
     
-                let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym)
-                    .expect("Tunnel removal should succeed");
-                self.handle_remove(result);
+                let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym, &mut circ!(self.engine));
+                assert!(result, "Tunnel removal should succeed");
             }
             
         } else {
             // Remove all ports from wire set:
             for index in 0..props.ports.len() {
-                let result = circ!(self.physical).wires.remove_port(key, index)
-                    .expect("Port removal should succeed");
-                self.handle_remove(result);
+                let result = circ!(self.physical).wires.remove_port(key, index, &mut circ!(self.engine));
+                assert!(result, "Port removal should succeed");
             }
         }
 
@@ -278,13 +275,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This function removes any wires that overlap the wire range defined by the argument.
     pub fn remove_wire(&mut self, w: Wire) -> bool {
-        match circ!(self.physical).wires.remove_wire(w) {
-            Some(result) => {
-                self.handle_remove(result);
-                true
-            },
-            None => false,
-        }
+        circ!(self.physical).wires.remove_wire(w, &mut circ!(self.engine))
     }
 
     /// Moves all items by the specified delta.
@@ -337,17 +328,15 @@ impl MiddleCircuit<'_> {
                     PhysicalComponentEnum::Tunnel(_) => {
                         let sym = circ!(self.physical).tunnel_interner.get(&component.label)
                             .expect("Tunnel should have an assigned symbol");
-                        let r = circ!(self.physical).wires.remove_tunnel(old_port, sym)
-                            .expect("removal to work");
-                        self.handle_remove(r);
+                        let r = circ!(self.physical).wires.remove_tunnel(old_port, sym, &mut circ!(self.engine));
+                        assert!(r, "expected removal to work");
                         
-                        let a = circ!(self.physical).wires.add_tunnel(new_port, sym, &mut circ!(self.engine))
+                        circ!(self.physical).wires.add_tunnel(new_port, sym, &mut circ!(self.engine))
                             .expect("addition to work");
                     },
                     _ => {
-                        let r = circ!(self.physical).wires.remove_port(k, i)
-                            .expect("removal to work");
-                        self.handle_remove(r);
+                        let r = circ!(self.physical).wires.remove_port(k, i, &mut circ!(self.engine));
+                        assert!(r, "expected removal to work");
 
                         let a = circ!(self.physical).wires.add_port(new_port, k, i, &mut circ!(self.engine))
                             .expect("addition to work");
@@ -368,37 +357,6 @@ impl MiddleCircuit<'_> {
         true
     }
     
-    /// Updates engine & middle end to corresponding `RemoveWireResult`.
-    fn handle_remove(&mut self, result: wire::RemoveWireResult) {
-        let wire::RemoveWireResult { deleted_keys, split_groups } = result;
-
-        for k in deleted_keys {
-            circ!(self.engine).remove_value_node(k);
-        }
-        for (k, groups) in split_groups {
-            for group in &groups[1..] {
-                let coord = group.iter()
-                    .find_map(|&k| match k {
-                        wire::MeshKey::WireJoint(c) => Some(c),
-                        _ => None
-                    })
-                    .unwrap_or_else(|| unreachable!("Expected coordinate in split group"));
-                
-                // Get all ports associated with coordinates:
-                let ports: Vec<_> = group.iter()
-                    .filter_map(|&k| match k {
-                        wire::MeshKey::Port(ComponentKey::Function(gate), index) => Some(FunctionPort { gate, index }),
-                        _ => None
-                    })
-                    .collect();
-
-                // Split and update physical:
-                let flood_key = circ!(self.engine).split(k, ports);
-                circ!(self.physical).wires.flood_fill(coord, flood_key);
-            }
-        }
-    }
-
     /// Updates the engine.
     pub fn propagate(&mut self) {
         circ!(self.engine).propagate();

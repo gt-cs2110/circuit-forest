@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use petgraph::prelude::UnGraphMap;
 use petgraph::visit::{Bfs, Walker};
@@ -41,20 +41,6 @@ impl From<TunnelSymbol> for MeshKey {
     fn from(value: TunnelSymbol) -> Self {
         Self::Tunnel(value)
     }
-}
-
-type SplitGroupMap = HashMap<ValueKey, Vec<HashSet<MeshKey>>>;
-/// The result type for [`WireSet::remove_wire`].
-/// 
-/// The struct holds the keys that no longer have an edge associated
-/// and keys that need to split.
-#[derive(PartialEq, Eq, Clone, Debug)]
-#[must_use]
-pub struct RemoveWireResult {
-    /// Keys that need to be deleted (no edges are associated with it anymore).
-    pub deleted_keys: HashSet<ValueKey>,
-    /// A map of all keys and sets that need to be split.
-    pub split_groups: SplitGroupMap
 }
 
 type WireGraph = UnGraphMap<MeshKey, ValueKey>;
@@ -183,31 +169,6 @@ impl WireSet {
         self.graph_remove_edge(p.into(), q.into())
     }
 
-    /// Takes a group of keys and tries to separate each coordinate into ValueKey groups.
-    ///
-    /// This ignores any coords which no longer have an associated ValueKey.
-    fn compute_meshes<K: Into<MeshKey>>(&mut self, coords: impl IntoIterator<Item=K>) -> SplitGroupMap {
-        let mut split_groups = HashMap::new();
-        
-        let mut coords: Vec<_> = coords.into_iter()
-            .map(|c| c.into())
-            .filter_map(|c| Some((c, self.find_key(c)?)))
-            .collect();
-
-        // Find all groups of joints following split:
-        while let Some((c, k)) = coords.pop() {
-            let group: HashSet<_> = Bfs::new(&self.graph, c)
-                .iter(&self.graph)
-                .collect();
-
-            coords.retain(|&(c, _)| !group.contains(&c));
-            split_groups.entry(k)
-                .or_insert_with(Vec::new)
-                .push(group);
-        }
-        
-        split_groups
-    }
     /// Add a wire to the graph.
     /// 
     /// This function may create or join value keys,
@@ -277,7 +238,7 @@ impl WireSet {
             Some((&m, rest)) => (m, rest),
             None => (vf.gen_key(), &[][..])
         };
-        self.flood_fill_batch(&intersections, fill_key);
+        self.flood_fill(&intersections, fill_key);
         vf.join(fill_key, rest_keys);
 
         // Add the wire, split it, and check if the edges need to be joined.
@@ -345,7 +306,7 @@ impl WireSet {
                 // If coordinate key doesn't match the tunnel key,
                 // convert it to the tunnel key.
                 if added != tunnel {
-                    self.flood_fill_batch(&[c], tunnel);
+                    self.flood_fill(&[c], tunnel);
                     vf.join(tunnel, &[added]);
                 }
 
@@ -365,7 +326,7 @@ impl WireSet {
     /// If this function returns None, the wire does not exist & could not be removed.
     /// Otherwise, this function returns data needed to split a [`ValueKey`] (if applicable).
     #[must_use]
-    pub fn remove_wire(&mut self, w: Wire) -> Option<RemoveWireResult> {
+    pub fn remove_wire(&mut self, w: Wire, vf: &mut impl ValueFinalizer) -> bool {
         let [p, q] = w.endpoints();
         
         self.split_wire_on_joint(p, w.horizontal);
@@ -376,7 +337,7 @@ impl WireSet {
             .collect();
         // Nothing to remove, so no need to continue:
         if removed.is_empty() {
-            return None;
+            return false;
         }
 
         let mut deleted_keys = HashSet::new();
@@ -404,15 +365,38 @@ impl WireSet {
             self.join_at_coord(l);
             self.join_at_coord(r);
         }
+        coords.retain(|&c| self.graph.contains_node(c.into()));
+        
+        // Split the value keys for wire meshes that have been split:
+        let mut traversed_keys = HashSet::new();
+        while let Some(c) = coords.pop() {
+            let group_set: HashSet<_> = Bfs::new(&self.graph, c.into())
+                .iter(&self.graph)
+                .collect();
+            coords.retain(|&c| !group_set.contains(&c.into()));
 
-        // Get the group of attached points.
-        let mut split_groups = self.compute_meshes(coords);
-        split_groups.retain(|k, groups| {
-            deleted_keys.remove(k);
-            groups.len() > 1 // if <= 1, then this key doesn't need to be split
-        });
+            let k = self.find_key(c)
+                .expect("coordinate should have an assigned key");
+            
+            deleted_keys.remove(&k);
+            // Split key if duplicate:
+            if !traversed_keys.insert(k) {
+                let group: Vec<_> = group_set.iter()
+                    .filter_map(|&mk| match mk {
+                        MeshKey::Port(k, i) => Some((k, i)),
+                        _ => None
+                    })
+                    .collect();
+                
+                let split_key = vf.split(k, &group);
+                self.flood_fill(&[c], split_key);
+            }
+        }
+        for k in deleted_keys {
+            vf.delete_key(k);
+        }
 
-        Some(RemoveWireResult { deleted_keys, split_groups })
+        true
     }
 
     /// Removes a port from the graph.
@@ -421,27 +405,28 @@ impl WireSet {
     /// If this function returns `Some(_)`, it returns a `RemoveWireResult`,
     ///     which may include a key to delete.
     #[must_use]
-    pub fn remove_port(&mut self, key: ComponentKey, index: usize) -> Option<RemoveWireResult> {
+    pub fn remove_port(&mut self, key: ComponentKey, index: usize, vf: &mut impl ValueFinalizer) -> bool {
         let port = (key, index).into();
         let mut it = self.graph.neighbors(port);
         
-        let MeshKey::WireJoint(c) = it.next()? else {
-            return None;
+        let Some(MeshKey::WireJoint(c)) = it.next() else {
+            return false;
         };
         debug_assert!(it.next().is_none(), "Function port should only have 1 neighbor");
 
-        let k = self.graph_remove_edge(port, c.into())?;
+        let Some(k) = self.graph_remove_edge(port, c.into()) else {
+            return false;
+        };
         debug_assert!(!self.graph.contains_node(port), "Function port should no longer exist");
 
         // If coord node no longer exists, 
         // then no wires are connected (and therefore this key cannot exist).
-        let deleted_keys = match self.graph.contains_node(c.into()) {
-            true  => HashSet::new(),
-            false => HashSet::from([k]),
-        };
-        self.join_at_coord(c);
+        if !self.graph.contains_node(c.into()) {
+            vf.delete_key(k);
+        }
 
-        Some(RemoveWireResult { deleted_keys, split_groups: Default::default() })
+        self.join_at_coord(c);
+        true
     }
 
     /// Removes a tunnel link from the graph.
@@ -450,20 +435,33 @@ impl WireSet {
     /// If the function returns `Some(_)`, it returns a `RemoveWireResult`,
     ///     which may indicate keys to delete & split.
     #[must_use]
-    pub fn remove_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol) -> Option<RemoveWireResult> {
-        let k = self.graph_remove_edge(c.into(), tunnel.into())?;
+    pub fn remove_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, vf: &mut impl ValueFinalizer) -> bool {
+        let Some(k) = self.graph_remove_edge(c.into(), tunnel.into()) else {
+            return false;
+        };
 
         // If neither node exists, then the key of this link can no longer exist.
-        let deleted_keys = match self.graph.contains_node(c.into()) || self.graph.contains_node(tunnel.into()) {
-            true  => HashSet::new(),
-            false => HashSet::from([k]),
-        };
-        // Find groups:
-        let mut split_groups = self.compute_meshes::<MeshKey>([c.into(), tunnel.into()]);
-        split_groups.retain(|_, groups| groups.len() > 1);
+        let port_exists = self.graph.contains_node(c.into());
+        let tun_exists = self.graph.contains_node(tunnel.into());
+        if !port_exists && !tun_exists {
+            vf.delete_key(k);
+        }
+        
+        if port_exists {
+            let ports: Vec<_> = Bfs::new(&self.graph, c.into())
+                .iter(&self.graph)
+                .filter_map(|mk| match mk {
+                    MeshKey::Port(key, index) => Some((key, index)),
+                    _ => None
+                })
+                .collect();
+            
+            let split_key = vf.split(k, &ports);
+            self.flood_fill(&[c], split_key);
+        }
+        
         self.join_at_coord(c);
-
-        Some(RemoveWireResult { deleted_keys, split_groups })
+        true
     }
 
     /// Replaces the [`ValueKey`] of all wires connecting to the Coord
@@ -471,22 +469,18 @@ impl WireSet {
     /// 
     /// All wires with a path to the coordinate that are not of the flood key
     /// are replaced with the flood key.
-    #[deprecated]
-    pub(crate) fn flood_fill(&mut self, p: Coord, flood_key: ValueKey) {
-        let m_entry_point = match self.graph.contains_node(p.into()) {
-            true => Some(p),
-            false => self.wires_at_coord(p)
-                .next()
-                .map(|w| w.endpoints()[0])
-        };
-        self.flood_fill_batch(m_entry_point.as_slice(), flood_key);
-    }
-
-    fn flood_fill_batch(&mut self, entry_points: &[Coord], flood_key: ValueKey) {
+    /// 
+    /// This returns the set of keys which were traversed.
+    fn flood_fill(&mut self, entry_points: &[Coord], flood_key: ValueKey) -> Vec<MeshKey> {
         let mut frontier: Vec<MeshKey> = entry_points.iter()
             .map(|&c| c.into())
             .collect();
-        while let Some(k) = frontier.pop() {
+        let mut consumed = 0;
+
+        while consumed < frontier.len() {
+            let k = frontier[consumed];
+            consumed += 1;
+
             let edges_to_flood: Vec<_> = self.graph.edges(k)
                 .filter(|&(_, _, &key)| key != flood_key)
                 .map(|(n1, n2, _)| (n1, n2))
@@ -498,6 +492,8 @@ impl WireSet {
                 frontier.push(n2);
             }
         }
+
+        frontier
     }
 
     /// Gets all wire segments coinciding at the specified coords.
@@ -525,7 +521,7 @@ impl WireSet {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeSet, HashMap};
 
     use slotmap::SlotMap;
 
@@ -590,6 +586,37 @@ mod tests {
             expected_edges.sort();
             assert_eq!(actual_edges, expected_edges, "edges for key {key:?} should match")
         }
+    }
+    fn assert_graph_edges_unkeyed<const N: usize, K>(graph: &WireGraph, all_edges: [Vec<(K, K)>; N])
+        where K: Into<MeshKey> + Copy
+    {
+        use crate::middle_end::wire::minmax;
+        
+        let expected_edgemap: HashSet<_> = all_edges.into_iter()
+            .map(|edgeset| {
+                let mut set: Vec<_> = edgeset.into_iter()
+                    .map(|(l, r)| minmax(l.into(), r.into()))
+                    .collect();
+                set.sort();
+
+                set
+            })
+            .collect();
+        
+        let mut edgelist: Vec<_> = graph.all_edges().collect();
+        edgelist.sort_by_key(|&(_, _, &vk)| vk);
+        let actual_edgemap: HashSet<_> = edgelist.chunk_by(|(_, _, vk0), (_, _, vk1)| vk0 == vk1)
+            .map(|edgeset| {
+                let mut set: Vec<_> = edgeset.iter()
+                    .map(|&(a, b, _)| minmax(a, b))
+                    .collect();
+                set.sort();
+
+                set
+            })
+            .collect();
+
+        assert_eq!(actual_edgemap, expected_edgemap, "edges did not match");
     }
     fn w(p: Coord, q: Coord) -> Wire {
         Wire::from_endpoints(p, q)
@@ -794,45 +821,7 @@ mod tests {
         assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
         assert_range_map(&ws.ranges, edges);
     }
-
-    fn assert_remove(
-        result: Option<RemoveWireResult>,
-        e_deleted_keys: impl IntoIterator<Item=ValueKey>,
-        e_split_groups: impl IntoIterator<Item=(ValueKey, Vec<HashSet<Coord>>)>
-    ) {
-        let Some(RemoveWireResult { deleted_keys, split_groups }) = result else {
-            panic!("Expected removal to succeed");
-        };
-
-        let e_deleted_keys = e_deleted_keys.into_iter().collect();
-        assert_eq!(deleted_keys, e_deleted_keys, "Expected deleted keys to match");
-
-        // Fixed order for groups:
-        let a_groups = split_groups.into_iter()
-            .map(|(key, value)| (key, {
-                let mut g: Vec<_> = value.into_iter()
-                    .map(<BTreeSet<_>>::from_iter)
-                    .collect();
-                g.sort();
-                g
-            }))
-            .collect::<std::collections::BTreeMap<_, _>>();
-
-        let e_groups = e_split_groups.into_iter()
-            .map(|(key, value)| (key, {
-                let mut g: Vec<_> = value.into_iter()
-                    .map(|s| {
-                        s.into_iter()
-                            .map(Into::into)
-                            .collect::<BTreeSet<_>>()
-                    })
-                    .collect();
-                g.sort();
-                g
-            }))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        assert_eq!(a_groups, e_groups, "Expected correct groups of nodes to split");
-    }
+    
     #[test]
     fn wireset_remove_basic() {
         let mut keygen = Keygen::new();
@@ -848,10 +837,10 @@ mod tests {
         assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(key));
 
         // Remove nodes:
-        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
-        assert_remove(ws.remove_wire(w(n11, n12)), [], []);
-        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
-        assert_remove(ws.remove_wire(w(n00, n01)), [key], []);
+        assert!(ws.remove_wire(w(n01, n02), &mut keygen));
+        assert!(ws.remove_wire(w(n11, n12), &mut keygen));
+        assert!(ws.remove_wire(w(n01, n11), &mut keygen));
+        assert!(ws.remove_wire(w(n00, n01), &mut keygen));
 
         // Check correct construction
         assert_graph_nodes(&ws.graph, []);
@@ -866,9 +855,11 @@ mod tests {
 
         let [n0, n1, n2] = [(0, 1), (0, 2), (0, 3)];
         
-        let k = ws.add_wire(w(n0, n1), &mut keygen)
+        ws.add_wire(w(n0, n1), &mut keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        assert_remove(ws.remove_wire(w(n0, n2)), [k], []);
+        
+        assert!(ws.remove_wire(w(n0, n2), &mut keygen));
+        assert_graph_edges_unkeyed::<_, MeshKey>(&ws.graph, []);
     }
 
     #[test]
@@ -879,11 +870,13 @@ mod tests {
         let [n0, n1, n2, n3, n4, n5] = [
             (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)
         ];
-        let k1 = ws.add_wire(w(n1, n2), &mut keygen)
+        ws.add_wire(w(n1, n2), &mut keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        let k2 = ws.add_wire(w(n3, n4), &mut keygen)
+        ws.add_wire(w(n3, n4), &mut keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        assert_remove(ws.remove_wire(w(n0, n5)), [k1, k2], []);
+        
+        assert!(ws.remove_wire(w(n0, n5), &mut keygen));
+        assert_graph_edges_unkeyed::<_, MeshKey>(&ws.graph, []);
     }
 
     #[test]
@@ -891,11 +884,11 @@ mod tests {
         let mut keygen = Keygen::new();
         let mut ws = WireSet::default();
 
-        assert_eq!(ws.remove_wire(w((0, 0), (0, 1))), None); // Empty
+        assert!(!ws.remove_wire(w((0, 0), (0, 1)), &mut keygen)); // Empty
 
         let _ = ws.add_wire(w((0, 1), (0, 2)), &mut keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        assert_eq!(ws.remove_wire(w((0, 5), (0, 9))), None); // Does not exist
+        assert!(!ws.remove_wire(w((0, 5), (0, 9)), &mut keygen)); // Does not exist
     }
 
     #[test]
@@ -917,16 +910,13 @@ mod tests {
         assert_eq!(ws.add_wire(w(n11, n12), &mut keygen), Some(k0));
         
         // Remove nodes
-        assert_remove(
-            ws.remove_wire(w(n01, n11)),
-            [],
-            [(k0, vec![HashSet::from([n00, n01, n02]), HashSet::from([n10, n11, n12])])]
-        );
+        assert!(ws.remove_wire(w(n01, n11), &mut keygen));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
-        assert_graph_edges(&ws.graph, [
-            (k0, vec![(n00, n01), (n01, n02), (n10, n11), (n11, n12)]),
+        assert_graph_edges_unkeyed(&ws.graph, [
+            vec![(n00, n01), (n01, n02)],
+            vec![(n10, n11), (n11, n12)],
         ]);
         assert_range_map(&ws.ranges, [
             (n00, n01), (n01, n02),
@@ -950,7 +940,7 @@ mod tests {
         assert_eq!(ws.add_wire(w(n01, n02), &mut keygen), Some(key));
         
         // Remove nodes
-        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
+        assert!(ws.remove_wire(w(n01, n11), &mut keygen));
 
         // Check wire set constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n02]);
@@ -970,20 +960,17 @@ mod tests {
         ];
 
         // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        let key = ws.add_wire(w(n00, n03), &mut keygen)
+        ws.add_wire(w(n00, n03), &mut keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        assert_remove(
-            ws.remove_wire(w(n01, n02)),
-            [],
-            [(key, vec![HashSet::from([n00, n01]), HashSet::from([n02, n03])])]
-        );
+        assert!(ws.remove_wire(w(n01, n02), &mut keygen));
 
         // Check wire set constructed correctly
         assert_graph_nodes(&ws.graph, nodes);
 
-        let edges = [(n00, n01), (n02, n03)];
-        assert_graph_edges(&ws.graph, [(key, edges.to_vec())]);
-        assert_range_map(&ws.ranges, edges);
+        assert_graph_edges_unkeyed(&ws.graph, [
+            vec![(n00, n01)], vec![(n02, n03)]
+        ]);
+        assert_range_map(&ws.ranges, [(n00, n01), (n02, n03)]);
     }
 
     #[test]
@@ -1007,7 +994,7 @@ mod tests {
         assert_eq!(ws.add_wire(w(n02, n01), &mut keygen), Some(key));
 
         // Remove nodes:
-        assert_remove(ws.remove_wire(w(n01, n11)), [], []);
+        assert!(ws.remove_wire(w(n01, n11), &mut keygen));
     }
 
     #[test]
@@ -1026,7 +1013,7 @@ mod tests {
             .expect("Expected second wire add to be successful and require no joins");
         assert_ne!(k1, k2);
         
-        assert_remove(ws.remove_wire(w(n01, n04)), [], []);
+        assert!(ws.remove_wire(w(n01, n04), &mut keygen));
 
         // Check wire set constructed correctly
         assert_graph_nodes(&ws.graph, [n00, n01, n04, n05]);
@@ -1058,16 +1045,12 @@ mod tests {
         assert_eq!(ws.add_wire(w(n12, n13), &mut keygen), Some(k0));
         
         // Remove nodes
-        assert_remove(
-            ws.remove_wire(w(n10, n13)),
-            [],
-            [(k0, vec![HashSet::from([n01, n21]), HashSet::from([n02, n22])])]
-        );
+        assert!(ws.remove_wire(w(n10, n13), &mut keygen));
 
         // Check wire set was constructed correctly
         assert_graph_nodes(&ws.graph, [n01, n21, n02, n22]);
-        assert_graph_edges(&ws.graph, [
-            (k0, vec![(n01, n21), (n02, n22)]),
+        assert_graph_edges_unkeyed(&ws.graph, [
+            vec![(n01, n21)], vec![(n02, n22)],
         ]);
         assert_range_map(&ws.ranges, [
             (n01, n21),
@@ -1100,7 +1083,7 @@ mod tests {
         assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
 
         // Remove one of the split wires and readd it.
-        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        assert!(ws.remove_wire(w(n01, n02), &mut value_keygen));
         let k3 = ws.add_wire(w(n01, n02), &mut value_keygen)
             .expect("Expected second wire add to be successful and require no joins");
         assert_eq!(k1, k3);
@@ -1112,13 +1095,12 @@ mod tests {
 
 
         // Remove the port.
-        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert!(ws.remove_port(port.gate.into(), port.index, &mut value_keygen));
         assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
     }
     #[test]
     fn wireset_mid_port_2() {
-        
         let mut value_keygen = Keygen::new();
         let mut func_keygen = Keygen::new();
         let mut ws = WireSet::default();
@@ -1143,7 +1125,7 @@ mod tests {
         assert_range_map(&ws.ranges, [(n00, n01), (n01, n02)]);
 
         // Remove one of the split wires and readd it.
-        assert_remove(ws.remove_wire(w(n01, n02)), [], []);
+        assert!(ws.remove_wire(w(n01, n02), &mut value_keygen));
         let k3 = ws.add_wire(w(n01, n02), &mut value_keygen)
             .expect("Expected second wire add to be successful and require no joins");
         assert_eq!(k1, k3);
@@ -1155,7 +1137,7 @@ mod tests {
 
 
         // Remove the port.
-        assert_remove(ws.remove_port(port.gate.into(), port.index), [], []);
+        assert!(ws.remove_port(port.gate.into(), port.index, &mut value_keygen));
         assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
     }
