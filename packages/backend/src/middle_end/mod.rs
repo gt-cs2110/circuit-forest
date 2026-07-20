@@ -60,15 +60,19 @@ struct CircuitArea {
 /// Properties of a middle-end component.
 #[derive(Debug)]
 pub struct ComponentProps {
+    /// The label for the component.
     pub label: String,
+    /// The location of the label for the component.
     pub label_location: Orientation,
 
-    // Position
+    /// The component's origin, which holds its fixed point.
     pub origin: Coord,
+    /// The bounds of the component.
     pub bounds: [Coord; 2],
+    /// The location of all ports for the component.
     pub ports: Vec<Coord>,
 
-    // Component-specific props
+    /// Component-specific props.
     pub inner: PhysicalComponentEnum
 }
 
