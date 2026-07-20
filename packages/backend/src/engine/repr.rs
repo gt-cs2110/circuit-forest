@@ -5,7 +5,7 @@ use slotmap::{SecondaryMap, SlotMap, new_key_type};
 
 use crate::bitarray::BitArray;
 use crate::engine::graph::{CircuitGraph, FunctionKey, FunctionNode, FunctionPort, ValueKey};
-use crate::engine::state::{CircuitState, PropagationState};
+use crate::engine::state::CircuitState;
 use crate::engine::func::{self, ComponentFn};
 
 new_key_type! {
@@ -146,7 +146,7 @@ impl Circuit<'_> {
             // Update transient state:
             for &ml in &fnode.links {
                 if let Some(l) = ml {
-                    circ!(self.states).add_transient(l, true);
+                    circ!(self.states).transient.mark_update(l, true);
                 }
             }
             
@@ -161,7 +161,7 @@ impl Circuit<'_> {
     /// Connect a wire to a port in the Circuit's graph.
     pub fn connect_one(&mut self, wire: ValueKey, port: FunctionPort) {
         circ!(self.graphs).connect(wire, port);
-        circ!(self.states).add_transient(wire, true);
+        circ!(self.states).transient.mark_update(wire, true);
     }
 
     /// Clear the function node of connections and connect all of the passed ports to it.
@@ -171,7 +171,7 @@ impl Circuit<'_> {
             .enumerate()
             .for_each(|(index, wire)| {
                 circ!(self.graphs).connect(wire, FunctionPort { gate, index });
-                circ!(self.states).add_transient(wire, true);
+                circ!(self.states).transient.mark_update(wire, true);
             });
     }
 
@@ -185,9 +185,9 @@ impl Circuit<'_> {
         // Propagate once to resolve any unresolved transient state.
         // If successful, then repropagate updates from the specified inputs.
         self.propagate() && {
-            circ!(self.states).transient.values = inputs.iter().copied()
-                .map(|k| (k, PropagationState { recalculate: false }))
-                .collect();
+            for &inp in inputs.iter() {
+                circ!(self.states).transient.mark_update(inp, false);
+            }
             self.propagate()
         }
     }
@@ -218,7 +218,7 @@ impl Circuit<'_> {
     pub fn replace_value(&mut self, key: ValueKey, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         circ!(self.states)[key].replace_value(val)?;
 
-        circ!(self.states).add_transient(key, false);
+        circ!(self.states).transient.mark_update(key, false);
         Ok(())
     }
     /// Updates the port of a [`FunctionNode`] with the specified value, raising `Err` if bitsizes do not match.
@@ -227,8 +227,8 @@ impl Circuit<'_> {
     pub fn replace_port(&mut self, port: FunctionPort, val: BitArray) -> Result<(), crate::bitarray::MismatchedBitsizes> {
         circ!(self.states)[port.gate].replace_port(port.index, val)?;
 
-        if let Some(wire) = circ!(self.graphs)[port.gate].links[0] {
-            circ!(self.states).add_transient(wire, true);
+        if let Some(wire) = circ!(self.graphs)[port.gate].links[port.index] {
+            circ!(self.states).transient.mark_update(wire, true);
         }
         Ok(())
     }
@@ -241,8 +241,7 @@ impl Circuit<'_> {
             circ!(self.states).remove_node_value(k);
         }
 
-        std::mem::take(&mut circ!(self.states)[main].value);
-        circ!(self.states).add_transient(main, true);
+        circ!(self.states).transient.mark_update(main, true);
     }
     /// Splits a value node into two.
     /// This separates all the `off_ports` into a new value node
@@ -251,10 +250,15 @@ impl Circuit<'_> {
         let new_value = circ!(self.graphs).split_off(key, off_ports);
 
         circ!(self.states).init_value(new_value);
-        circ!(self.states).add_transient(key, true);
-        circ!(self.states).add_transient(new_value, true);
+        circ!(self.states).transient.mark_update(key, true);
+        circ!(self.states).transient.mark_update(new_value, true);
 
         new_value
+    }
+
+    /// This is just used to implement [`ValueFinalizer`].
+    pub(crate) fn update_key(&mut self, key: ValueKey) {
+        circ!(self.states).transient.mark_update(key, true);
     }
 
     /// Sets the input state for the input.

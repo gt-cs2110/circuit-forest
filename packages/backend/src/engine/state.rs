@@ -68,10 +68,10 @@ impl CircuitState {
             state.init_func(k, &f.func, graphs);
         }
 
-        // All values tentatively need to be recomputed
+        // All values need to be recomputed.
         state.transient.values.extend({
             graph.values.keys()
-                .map(|k| (k, PropagationState { recalculate: true }))
+                .map(|k| (k, PropagationState { recalculate: RecalcState::RecalcPass }))
         });
         state.propagate(graphs, key);
 
@@ -112,14 +112,6 @@ impl CircuitState {
         self.functions.remove(k);
         self.transient.functions.remove(&k);
     }
-    /// Signals that an update should be propagated from a value node.
-    /// 
-    /// If `recalculate` is true, this also recomputes the node's bit value
-    /// before propagating.
-    /// 
-    pub(crate) fn add_transient(&mut self, k: ValueKey, recalculate: bool) {
-        self.transient.values.insert(k, PropagationState { recalculate });
-    }
 
     /// Pushes transient state, propagating any updates through
     /// (until the circuit stabilizes or an oscillation occurs).
@@ -150,7 +142,7 @@ impl CircuitState {
                 // then we know we should propagate the update to the function.
 
                 let mut propagate_update = true;
-                if recalculate {
+                if matches!(recalculate, RecalcState::Recalc | RecalcState::RecalcPass) {
                     let result = match graph[node].bitsize {
                         Some(s) => {
                             // Get all port values feeding into value
@@ -177,7 +169,8 @@ impl CircuitState {
                         }
                     };
 
-                    propagate_update = self.get_node_value(node) != result;
+                    propagate_update = matches!(recalculate, RecalcState::RecalcPass)
+                        || self.get_node_value(node) != result;
                     self[node].value = result;
                 }
 
@@ -223,7 +216,7 @@ impl CircuitState {
                         self[gate_idx].ports[index] = value;
                         
                         if let Some(sink_idx) = graph[gate_idx].links[index] {
-                            self.add_transient(sink_idx, true);
+                            self.transient.insert(sink_idx, RecalcState::Recalc);
                         }
                     }
                 }
@@ -378,9 +371,18 @@ impl FunctionState {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub(crate) enum RecalcState {
+    /// Don't recalculate this value and only propagate values over.
+    Pass,
+    /// Recalculate this value and only propagate if the value changes.
+    Recalc,
+    /// Recalculate this value and always propagate the value over.
+    RecalcPass
+}
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct PropagationState {
-    /// If true, then this value should be recalculated before being propagated.
-    pub(crate) recalculate: bool
+    /// Determines how values should be updated and propagated.
+    pub(crate) recalculate: RecalcState,
 }
 
 /// Temporary propagation state.
@@ -394,6 +396,16 @@ pub(crate) struct TransientState {
 impl TransientState {
     pub fn resolved(&self) -> bool {
         self.values.is_empty() && self.functions.is_empty()
+    }
+
+    fn insert(&mut self, k: ValueKey, recalculate: RecalcState) {
+        self.values.insert(k, PropagationState { recalculate });
+    }
+    pub fn mark_update(&mut self, k: ValueKey, recalculate: bool) {
+        self.insert(k, match recalculate {
+            true => RecalcState::RecalcPass,
+            false => RecalcState::Pass,
+        });
     }
 }
 impl std::fmt::Debug for TransientState {

@@ -58,10 +58,14 @@ pub trait ValueFinalizer {
     fn gen_key(&mut self) -> ValueKey;
     /// Delete the current value key.
     fn delete_key(&mut self, k: ValueKey);
+    /// Recomputes and updates the value for the given value key.
+    fn update_key(&mut self, k: ValueKey);
     /// Joins the objects linked to the specified keys into the [`into`] key.
     fn join(&mut self, into: ValueKey, keys: &[ValueKey]);
     /// Splits the objects linked into a new value key.
     fn split(&mut self, key: ValueKey, split_off: &[(ComponentKey, usize)]) -> ValueKey;
+    /// Connects a port to a given value key.
+    fn connect_port(&mut self, gate: ComponentKey, index: usize, key: ValueKey);
 }
 
 impl WireSet {
@@ -273,9 +277,12 @@ impl WireSet {
         }
 
         self.split_at_coord(c); // If point is in middle of wire, split it
-        let key = self.find_key(c).unwrap_or_else(|| vf.gen_key());
-        self.graph.add_edge(c.into(), port, key);
-        Some(key)
+        
+        let vk = self.find_key(c).unwrap_or_else(|| vf.gen_key());
+        self.graph.add_edge(c.into(), port, vk);
+        vf.connect_port(key, index, vk);
+
+        Some(vk)
     }
 
     /// Adds a tunnel link to the graph, connecting some coordinate to the tunnel.
@@ -419,10 +426,11 @@ impl WireSet {
         };
         debug_assert!(!self.graph.contains_node(port), "Function port should no longer exist");
 
-        // If coord node no longer exists, 
-        // then no wires are connected (and therefore this key cannot exist).
-        if !self.graph.contains_node(c.into()) {
-            vf.delete_key(k);
+        match self.graph.contains_node(c.into()) {
+            // Disconnect means key needs to be updated.
+            true => vf.update_key(k),
+            // If coord no longer exists, key cannot exist.
+            false => vf.delete_key(k),
         }
 
         self.join_at_coord(c);
@@ -447,6 +455,9 @@ impl WireSet {
             vf.delete_key(k);
         }
         
+        // If the port still exists, then we need to split the key between the tunnel and port meshes.
+        // If the port no longer exists, then there was nothing on the other side.
+        // Tunnel doesn't have any update logic, so nothing needs to be updated.
         if port_exists {
             let ports: Vec<_> = Bfs::new(&self.graph, c.into())
                 .iter(&self.graph)
@@ -545,6 +556,7 @@ mod tests {
         fn delete_key(&mut self, k: ValueKey) {
             self.0.remove(k);
         }
+        fn update_key(&mut self, _: ValueKey) {}
         fn join(&mut self, _: ValueKey, keys: &[ValueKey]) {
             for &k in keys {
                 self.0.remove(k);
@@ -553,6 +565,8 @@ mod tests {
         fn split(&mut self, _: ValueKey, _: &[(ComponentKey, usize)]) -> ValueKey {
             self.gen_key()
         }
+        
+        fn connect_port(&mut self, _: ComponentKey, _: usize, _: ValueKey) {}
     }
 
     /// Asserts nodes of the graph are exactly the specified node list.

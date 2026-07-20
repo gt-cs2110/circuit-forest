@@ -135,6 +135,17 @@ impl MiddleRepr {
     }
 }
 
+/// Basic macro to pretend Circuit has the "graph" and "state" fields.
+/// 
+/// This cannot be done with a function
+/// because this is returning a place rather than a value.
+macro_rules! circ {
+    ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
+    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
+    ($self:ident.state)    => { $self.repr.engine.states[$self.key] };
+    ($self:ident.physical) => { $self.repr.physical[$self.key] };
+}
+
 impl ValueFinalizer for Circuit<'_> {
     fn gen_key(&mut self) -> ValueKey {
         self.add_value_node()
@@ -142,6 +153,10 @@ impl ValueFinalizer for Circuit<'_> {
 
     fn delete_key(&mut self, k: ValueKey) {
         self.remove_value_node(k);
+    }
+
+    fn update_key(&mut self, k: ValueKey) {
+        self.update_key(k);
     }
 
     fn join(&mut self, into: ValueKey, keys: &[ValueKey]) {
@@ -156,16 +171,12 @@ impl ValueFinalizer for Circuit<'_> {
             });
         self.split(key, split_off)
     }
-}
-/// Basic macro to pretend Circuit has the "graph" and "state" fields.
-/// 
-/// This cannot be done with a function
-/// because this is returning a place rather than a value.
-macro_rules! circ {
-    ($self:ident.engine)   => { $self.repr.engine.circuit($self.key) };
-    ($self:ident.graph)    => { $self.repr.engine.graphs[$self.key] };
-    ($self:ident.state)    => { $self.repr.engine.states[$self.key] };
-    ($self:ident.physical) => { $self.repr.physical[$self.key] };
+    
+    fn connect_port(&mut self, gate: ComponentKey, index: usize, key: ValueKey) {
+        if let ComponentKey::Function(gate) = gate {
+            self.connect_one(key, FunctionPort { gate, index });
+        }
+    }
 }
 impl MiddleCircuit<'_> {
     /// Adds a component to the circuit.
@@ -204,12 +215,8 @@ impl MiddleCircuit<'_> {
         } else {
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
-                let value = wires.add_port(c, key, index, &mut circ!(self.engine))
+                wires.add_port(c, key, index, &mut circ!(self.engine))
                     .expect("Expected port addition to be successful");
-                
-                if let ComponentKey::Function(gate) = key {
-                    circ!(self.engine).connect_one(value, FunctionPort { gate, index });
-                }
             }
         }
         
@@ -338,9 +345,8 @@ impl MiddleCircuit<'_> {
                         let r = circ!(self.physical).wires.remove_port(k, i, &mut circ!(self.engine));
                         assert!(r, "expected removal to work");
 
-                        let a = circ!(self.physical).wires.add_port(new_port, k, i, &mut circ!(self.engine))
+                        circ!(self.physical).wires.add_port(new_port, k, i, &mut circ!(self.engine))
                             .expect("addition to work");
-                        circ!(self.state).add_transient(a, true);
                     }
                 }
             }
@@ -483,7 +489,6 @@ mod tests {
             let ku1 = wire_set.find_key(u1).unwrap();
             assert_eq!(ku0, ku1);
 
-            println!("{:?}", circuit.get_circuit_state().transient);
             circuit.propagate();
             assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![1]);
             assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![]);
@@ -505,12 +510,7 @@ mod tests {
             assert_eq!(kc, ku0, "port should have the same value as the second wire");
             assert_eq!(ku0, ku1, "second wire should have the same value throughout");
 
-            println!("{:?} ({kt0:?}-{ku0:?})", circuit.get_circuit_state().transient);
-            println!("L({kt0:?}): {}", circuit.get_circuit_state().get_node_value(kt0));
-            println!("R({ku0:?}): {}", circuit.get_circuit_state().get_node_value(ku0));
             circuit.propagate();
-            println!("L({kt0:?}): {}", circuit.get_circuit_state().get_node_value(kt0));
-            println!("R({ku0:?}): {}", circuit.get_circuit_state().get_node_value(ku0));
             assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
             assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![1]);
         }
