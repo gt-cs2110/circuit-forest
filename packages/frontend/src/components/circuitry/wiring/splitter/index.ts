@@ -10,7 +10,5 @@ export const splitter: ComponentMetadata = {
         { x: 2, y: 4 },
         { x: 0, y: 0 },
     ],
-    getOriginToFixedPortOffset: () => {
-        return { x: 0, y: 0 };
-    },
+  
 };

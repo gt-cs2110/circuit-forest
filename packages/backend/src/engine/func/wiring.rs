@@ -128,7 +128,7 @@ impl SplitterConfig{
                 return Err(AssignmentOutOfBitsize((bit), (bitsize)))
             }
 
-            if leg > num_legs {
+            if leg >= num_legs {
                 return Err(SplitterConfigError::LegOutOfRange(leg, num_legs));
             }
         }
@@ -207,10 +207,12 @@ impl Component for Splitter {
             }
             //Drive the joined value 
             let mut updates = vec![PortUpdate { index: 0, value }];
-            //set the legs to unknow so that they dont drive backwards and cause a short circuit
-            updates.extend((0..self.config.get_num_legs()).map(|leg| {
-            PortUpdate { index: leg as usize + 1, value: bitarr![Z; self.config.leg_width(leg) as u8] }
-        }));
+             //set the legs to unknow so that they dont drive backwards and cause a short circuit
+
+            updates.extend(active_legs.iter().map(|&(leg,index)|{
+                PortUpdate{index:index, value:bitarr![Z; self.config.leg_width(leg) as u8]}
+           }));
+            
         updates
 
 

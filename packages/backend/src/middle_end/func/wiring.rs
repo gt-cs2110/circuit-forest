@@ -3,7 +3,7 @@ use std::io::Split;
 use crate::bitarray::BitArray;
 use crate::engine::func::{self, BitSize, SplitterConfig};
 use crate::bitarr;
-use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -141,13 +141,15 @@ impl PhysicalComponent for Splitter {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-         let num_legs = i32::from(self.config.get_num_legs());
+        let height = std::cmp::max(self.config.get_num_active_legs() as u32 * 2,2);
 
-        let mut ports = vec![(0, 0)];
-        ports.extend((1..=self.config.get_num_active_legs()).map(|i| (2,(2 * i) as i32,)));
+        let mut ports: Vec<(u32, u32)> = vec![(0, height)];
+        
+        ports.extend((0..self.config.get_num_active_legs()).map(|i| (2 ,(2 * i) as u32,)));
 
-        RelativeComponentBounds::new((2,self.config.get_num_active_legs()as i32 * 2,), ports)
-            .orient(self.orientation, self.handedness)
+       AbsoluteComponentBounds::new((2, height as u32), ports)
+        .into_relative((0,height as u32))
+        .orient(self.orientation, self.handedness)
     }
 }
 

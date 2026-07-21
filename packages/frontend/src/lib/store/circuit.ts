@@ -39,7 +39,20 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
         if (!component) return;
         components.push(toRaw(component));
     }
-    const newComponents = components.map((c) => ({ ...c, ...updates }));
+    const newComponents = components.map((c) => {
+        const next = { ...c, ...updates };
+        //Splitter safety checks; not sure if tehre is a neater place to put this like in preoperties
+        if (next.type === "splitter") {
+            if (updates.bitsize !== undefined) {
+            next.portAssignments = next.portAssignments.slice(0, next.bitsize);
+            }
+            if (updates.numLegs !== undefined) {
+                next.portAssignments = next.portAssignments.map((leg) =>
+                leg !== undefined && leg < next.numLegs ? leg : undefined,
+            );
+        }
+        
+}
 
     const success = window.api.core.updateComponents(
         currentSubcircuit.value.backendKey,
@@ -145,7 +158,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         placingComponent.value = null;
         return;
     }
-
+    console.log(type=="splitter")
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
@@ -163,7 +176,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
             { x: 0, y: 0 },
         ],
         orientation: "East",
-        handedness: "DownRight",
+        handedness: type == "splitter" ? "TopLeft" : "DownRight",
         labelOrientation: "East",
         pos: { x, y },
         selsize: 1,

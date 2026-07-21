@@ -118,7 +118,7 @@ const propertyGroups = [
     },
     {
         types:["splitter"],
-        properties:["port_assignments",'num_legs',"bitsize","orientation","label_orientation"]
+        properties:["port_assignments",'num_legs',"bitsize","orientation","label_orientation","handedness"]
     }
 ];
 
