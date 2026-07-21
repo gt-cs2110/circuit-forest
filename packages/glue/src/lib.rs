@@ -8,7 +8,9 @@ use circuitsim_engine::engine::state::ValueIssue;
 use circuitsim_engine::engine::{CircuitKey, FunctionKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
-use circuitsim_engine::middle_end::{ComponentKey, MiddleCircuit, MiddleRepr, UIKey};
+use circuitsim_engine::middle_end::{
+    AddComponentArgs, ComponentKey, MiddleCircuit, MiddleRepr, UIKey,
+};
 use circuitsim_engine::{bitarr, bitstate};
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -152,6 +154,7 @@ impl CastKey for ComponentKey {
 
 type Coord = (u32, u32);
 #[napi(object)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Location {
     pub x: i32,
     pub y: i32,
@@ -187,65 +190,14 @@ pub fn create_circuit(name: String) -> JsKey {
     repr.add_circuit(&name).into_js()
 }
 
-pub fn parse_component(args: &CreateComponentArgs) -> anyhow::Result<PhysicalComponentEnum> {
-    let bitsize = args.bitsize.unwrap_or(1);
-    let selsize = args.selsize.unwrap_or(1);
-    let handedness = args.handedness.map_or_else(Default::default, From::from);
-    let orient = args.orientation.map_or_else(Default::default, From::from);
-    let bit_array = match &args.constant_value {
-        Some(s) => s.parse().context("Could not parse constant value")?,
-        None => bitarr![0],
-    }
-    .resize(bitsize, bitstate![0]);
-    let inputs = args.inputs.unwrap_or(2);
-
-    let component = match args.component_type.as_str() {
-        "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
-        "CONSTANT" => func::Constant::new(bit_array, orient).into(),
-        "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
-        "POWER" => func::Power.into(),
-        "GROUND" => func::Ground.into(),
-        "TUNNEL" => func::Tunnel::new(orient).into(),
-        "PROBE" => func::Probe::new(orient, bitsize).into(),
-        "MUX" => func::Mux::new(bitsize, selsize, orient, handedness).into(),
-        "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
-        "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
-        "TEXT" => func::Text.into(),
-        "SUBCIRCUIT" => todo!(), //func::Subcircuit::new(circuit_key).into(), // TODO: I don't believe this is correct
-        "NOT" => func::Not::new(bitsize, orient).into(),
-        "BUFFER" => func::TriState::new(bitsize, orient, handedness).into(),
-        "AND" => func::Gate::new(GateKind::And, bitsize, inputs, orient).into(),
-        "OR" => func::Gate::new(GateKind::Or, bitsize, inputs, orient).into(),
-        "NAND" => func::Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
-        "NOR" => func::Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
-        "XOR" => func::Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
-        "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
-        _ => bail!("Unknown gate type"),
-    };
-    Ok(component)
-}
-
 #[napi]
 pub fn add_component(circuit_key: JsKey, args: CreateComponentArgs) -> anyhow::Result<JsKey> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let component = parse_component(&args).unwrap();
-    let label_orient = args
-        .label_orientation
-        .map_or_else(Default::default, From::from);
-    let origin = args
-        .pos
-        .try_into()
-        .map_err(|_| anyhow!("Component addition failed"))?;
-
+    let args = AddComponentArgs::try_from(&args)?;
     let comp_key = circuit
-        .add_component(
-            component,
-            &args.label.unwrap_or_default(),
-            label_orient,
-            origin,
-        )
+        .add_component(args)
         .context("Component addition failed")?;
     Ok(comp_key.into_js())
 }
@@ -298,6 +250,11 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     Ok(result)
 }
 
+/// Tries to replace all of the components specified in arguments.
+///
+/// This may raise an error (if something bad happened),
+/// return None (if the replacing isn't possible),
+/// or the new set of keys (if replacing completed successfully).
 #[napi]
 pub fn replace_components(
     circuit_key: JsKey,
@@ -306,24 +263,25 @@ pub fn replace_components(
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let args: Vec<_> = args
-        .into_iter()
-        .map(|(k, args)| Ok((k.into_key()?, parse_component(&args)?)))
+    let (keys, args): (Vec<_>, Vec<_>) = args
+        .iter()
+        .map(|(k, args)| {
+            Ok((
+                k.into_key::<ComponentKey>()?,
+                AddComponentArgs::try_from(args)?,
+            ))
+        })
         .collect::<anyhow::Result<_>>()?;
 
     let result = circuit.check_component_update_ok(&args).then(|| {
-        args.into_iter()
-            .map(|(k, inner)| {
+        std::iter::zip(keys, args)
+            .map(|(k, args)| {
                 let props = circuit.get_component(k)?;
-                let ck = match props.inner == inner {
+                let ck = match props.as_args() == args {
                     true => k,
                     false => {
-                        let label = props.label.clone();
-                        let label_location = props.label_location;
-                        let origin = props.origin;
-
                         circuit.remove_component(k)?;
-                        circuit.add_component(inner, &label, label_location, origin)?
+                        circuit.add_component(args)?
                     }
                 };
 
@@ -511,14 +469,57 @@ pub struct CreateComponentArgs {
     pub text_content: Option<String>,
     pub handedness: Option<js_enum::Handedness>,
 }
-#[napi(object)]
-pub struct UpdateComponentArgs {
-    pub circuit_key: JsKey,
-    pub label: Option<String>,
-    pub label_orientation: Option<js_enum::Orientation>,
-    pub orientation: Option<js_enum::Orientation>,
-    pub text_content: Option<String>,
+impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
+    type Error = anyhow::Error;
+
+    fn try_from(args: &'a CreateComponentArgs) -> Result<Self, Self::Error> {
+        let bitsize = args.bitsize.unwrap_or(1);
+        let selsize = args.selsize.unwrap_or(1);
+        let handedness = args.handedness.map_or_else(Default::default, From::from);
+        let orient = args.orientation.map_or_else(Default::default, From::from);
+        let bit_array = match &args.constant_value {
+            Some(s) => s.parse().context("Could not parse constant value")?,
+            None => bitarr![0],
+        }
+        .resize(bitsize, bitstate![0]);
+        let inputs = args.inputs.unwrap_or(2);
+
+        let inner: PhysicalComponentEnum = match args.component_type.as_str() {
+            "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
+            "CONSTANT" => func::Constant::new(bit_array, orient).into(),
+            "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
+            "POWER" => func::Power.into(),
+            "GROUND" => func::Ground.into(),
+            "TUNNEL" => func::Tunnel::new(orient).into(),
+            "PROBE" => func::Probe::new(orient, bitsize).into(),
+            "MUX" => func::Mux::new(bitsize, selsize, orient, handedness).into(),
+            "DEMUX" => func::Demux::new(bitsize, selsize, orient, handedness).into(),
+            "DECODER" => func::Decoder::new(selsize, orient, handedness).into(),
+            "TEXT" => func::Text.into(),
+            "SUBCIRCUIT" => todo!(), //func::Subcircuit::new(circuit_key).into(), // TODO: I don't believe this is correct
+            "NOT" => func::Not::new(bitsize, orient).into(),
+            "BUFFER" => func::TriState::new(bitsize, orient, handedness).into(),
+            "AND" => func::Gate::new(GateKind::And, bitsize, inputs, orient).into(),
+            "OR" => func::Gate::new(GateKind::Or, bitsize, inputs, orient).into(),
+            "NAND" => func::Gate::new(GateKind::Nand, bitsize, inputs, orient).into(),
+            "NOR" => func::Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
+            "XOR" => func::Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
+            "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
+            _ => bail!("Unknown gate type"),
+        };
+
+        let label = args.label.as_deref().unwrap_or_default();
+        let label_location = args.label_orientation.map(From::from).unwrap_or_default();
+        let origin = args.pos.try_into().context("location was out of bounds")?;
+        Ok(AddComponentArgs {
+            inner,
+            label,
+            label_location,
+            origin,
+        })
+    }
 }
+
 #[napi(object)]
 pub struct TransientComponentState {
     pub backend_key: JsKey,

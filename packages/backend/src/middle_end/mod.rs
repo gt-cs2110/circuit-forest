@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::{Circuit, CircuitForest, CircuitKey, CircuitState, FunctionPort, ValueKey};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
+use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{ValueFinalizer, Wire, WireSet};
 
@@ -75,7 +75,41 @@ pub struct ComponentProps {
     /// Component-specific props.
     pub inner: PhysicalComponentEnum
 }
+impl ComponentProps {
+    /// Constructs the args needed to create these props.
+    pub fn as_args(&self) -> AddComponentArgs<'_> {
+        AddComponentArgs {
+            inner: self.inner,
+            label: &self.label,
+            label_location: self.label_location,
+            origin: self.origin,
+        }
+    }
+}
 
+/// Arguments used to invoke [`add_component`] and related additive methods.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct AddComponentArgs<'label> {
+    /// The inner component properties.
+    pub inner: PhysicalComponentEnum,
+    /// The component's label (or "" if no label exists)
+    pub label: &'label str,
+    /// The location of the component label.
+    pub label_location: Orientation,
+    /// The component's origin.
+    pub origin: Coord
+}
+impl AddComponentArgs<'static> {
+    /// Constructs an argument set assuming the component has no label.
+    pub fn unlabeled<C: Into<PhysicalComponentEnum>>(inner: C, origin: Coord) -> Self {
+        Self {
+            inner: inner.into(),
+            label: "",
+            label_location: Orientation::North,
+            origin
+        }
+    }
+}
 #[derive(Debug, Error)]
 /// Errors which can occur when editing a middle-end circuit.
 pub enum ReprEditErr {
@@ -179,27 +213,33 @@ impl ValueFinalizer for Circuit<'_> {
     }
 }
 impl MiddleCircuit<'_> {
+    /// Gets the bounds of the component to be added by the specified arguments.
+    fn get_component_bounds(&self, args: AddComponentArgs<'_>) -> Option<AbsoluteComponentBounds> {
+        let AddComponentArgs { inner, label, origin, .. } = args;
+        let ctx = PhysicalInitContext { circuit: self, label };
+        inner.init_bounds(ctx)
+            .into_absolute(origin)
+    }
+
     /// Adds a component to the circuit.
     /// 
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
-    pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
-        let physical = physical.into();
-        let ctx = PhysicalInitContext { circuit: self, label };
-        let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
-            .into_absolute(pos)
+    pub fn add_component(&mut self, args: AddComponentArgs<'_>) -> Result<ComponentKey, ReprEditErr> {
+        let ComponentBounds { bounds, ports } = self.get_component_bounds(args)
             .ok_or(ReprEditErr::ComponentOutOfBounds)?;
-
+        
+        let AddComponentArgs { inner, label, label_location, origin } = args;
         let props = ComponentProps {
             label: label.to_string(),
             label_location,
-            origin: pos,
+            origin,
             bounds,
             ports,
-            inner: physical,
+            inner,
         };
 
-        let gate = physical.init_engine()
+        let gate = inner.init_engine()
             .map(|func| circ!(self.engine).add_function_node(func));
         let key = circ!(self.physical).components.insert(gate, props);
 
@@ -282,15 +322,8 @@ impl MiddleCircuit<'_> {
     }
 
     /// Checks the component update is valid.
-    pub fn check_component_update_ok(&mut self, components: &[(ComponentKey, PhysicalComponentEnum)]) -> bool {
-        components.iter()
-            .try_for_each(|&(k, inner)| {
-                let component = &circ!(self.physical).components[k];
-                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
-                inner.init_bounds(ctx).into_absolute(component.origin)?;
-                Some(())
-            })
-            .is_some()
+    pub fn check_component_update_ok(&self, components: &[AddComponentArgs<'_>]) -> bool {
+        components.iter().all(|&c| self.get_component_bounds(c).is_some())
     }
 
     /// Moves all items by the specified delta.
@@ -304,11 +337,11 @@ impl MiddleCircuit<'_> {
         let m_new_bounds = components.iter()
             .map(|&k| {
                 let component = &circ!(self.physical).components[k];
-                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
                 let new_origin = coord_add(component.origin, delta)?;
-                
-                let bounds = component.inner.init_bounds(ctx)
-                    .into_absolute(new_origin)?;
+                let bounds = self.get_component_bounds(AddComponentArgs {
+                    origin: new_origin,
+                    ..component.as_args()
+                })?;
                 Some((new_origin, bounds))
             })
             .collect::<Option<Vec<_>>>();
@@ -415,11 +448,11 @@ mod tests {
         let [p, q] = [(10, 10), (20, 10)];
 
         let left = circuit
-            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
+            .add_component(AddComponentArgs::unlabeled(Pin::new(1, true, Orientation::East), p))
             .unwrap();
 
         let right = circuit
-            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
+            .add_component(AddComponentArgs::unlabeled(Pin::new(1, false, Orientation::East), q))
             .unwrap();
 
         let w = Wire::from_endpoints(p, q).unwrap();
@@ -445,11 +478,11 @@ mod tests {
 
         let [p, m1, m2, q] = [(10, 10), (15, 10), (25, 10), (30, 10)];
         let left = circuit
-            .add_component(Pin::new(1, true, Orientation::East), "", Orientation::East, p)
+            .add_component(AddComponentArgs::unlabeled(Pin::new(1, true, Orientation::East), p))
             .unwrap();
 
         let right = circuit
-            .add_component(Pin::new(1, false, Orientation::East), "", Orientation::East, q)
+            .add_component(AddComponentArgs::unlabeled(Pin::new(1, false, Orientation::East), q))
             .unwrap();
 
         
@@ -479,7 +512,7 @@ mod tests {
         // Add setup:
         let [t0, t1, u0, u1] = [(4, 3), (4, 10), (7, 3), (7, 10)];
         let component = circuit
-            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, t0)
+            .add_component(AddComponentArgs::unlabeled(Constant::new(bitarr![1], Orientation::East), t0))
             .unwrap();
 
         assert!(circuit.add_wire(Wire::from_endpoints(t0, t1).unwrap()));
@@ -533,7 +566,7 @@ mod tests {
         // Add setup:
         let [sa, t0, t1, sb, u0, u1] = [(3, 3), (4, 3), (4, 10), (6, 3), (7, 3), (7, 10)];
         let component = circuit
-            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, sa)
+            .add_component(AddComponentArgs::unlabeled(Constant::new(bitarr![1], Orientation::East), sa))
             .unwrap();
 
         let wst = Wire::from_endpoints(sa, t0).unwrap();
