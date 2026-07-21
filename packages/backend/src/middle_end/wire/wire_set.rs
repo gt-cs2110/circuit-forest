@@ -455,20 +455,23 @@ impl WireSet {
             vf.delete_key(k);
         }
         
-        // If the port still exists, then we need to split the key between the tunnel and port meshes.
-        // If the port no longer exists, then there was nothing on the other side.
-        // Tunnel doesn't have any update logic, so nothing needs to be updated.
-        if port_exists {
-            let ports: Vec<_> = Bfs::new(&self.graph, c.into())
+        // If both the port and tunnel exist, then the tunnel and port meshes both still exist
+        // and might be disconnected.
+        // Check they are connected (e.g., traversal hits the tunnel) and split if not.
+        if port_exists && tun_exists {
+            let m_ports: Option<Vec<_>> = Bfs::new(&self.graph, c.into())
                 .iter(&self.graph)
                 .filter_map(|mk| match mk {
-                    MeshKey::Port(key, index) => Some((key, index)),
+                    MeshKey::Tunnel(t) if t == tunnel => Some(None),
+                    MeshKey::Port(key, index) => Some(Some((key, index))),
                     _ => None
                 })
                 .collect();
             
-            let split_key = vf.split(k, &ports);
-            self.flood_fill(&[c], split_key);
+            if let Some(ports) = m_ports {
+                let split_key = vf.split(k, &ports);
+                self.flood_fill(&[c], split_key);
+            }
         }
         
         self.join_at_coord(c);
