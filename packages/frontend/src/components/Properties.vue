@@ -3,7 +3,7 @@ import { Handedness, Orientation } from "circuitsim-glue";
 import { computed, ref, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
-import { circuits, currentSubcircuit, updateComponent } from "@/lib/store/circuit";
+import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { settings } from "@/lib/store/settings";
 import { componentSelection } from "@/lib/store/view";
@@ -64,9 +64,7 @@ function getFromSelected<T>(query: (c: CircuitComponent) => T, fallback: T) {
 }
 /** Updates all selected components with the specified updates. */
 function updateAllSelected(updates: Partial<CircuitComponent>) {
-    for (let component of selectedComponents.value) {
-        updateComponent(component.frontendId, updates);
-    }
+    updateComponents(selectedComponents.value.map(c => c.frontendId), updates);
 }
 /** Gets all defined properties for a given component. */
 function getComponentProps(component: CircuitComponent) {

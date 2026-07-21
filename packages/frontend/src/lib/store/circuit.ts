@@ -29,36 +29,72 @@ export function keyEquals(k: Key, j: Key): boolean {
     return k.kind == j.kind && k.id[0] == j.id[0] && k.id[1] == j.id[1];
 }
 
-//// Updates component representation in backend and frontend, only succeeds in frontend if succeeds in backend
-export function updateComponent(frontendId: number, updates: Partial<CircuitComponent>) {
-    //Retreive component from store of current circuit
-    const component = currentSubcircuit.value.components.get(frontendId);
-    if (!component) return;
-    console.log("Update request:", updates);
-
+/// Updates all components with the specified frontend IDs with the specified `updates`.
+export function updateComponents(frontendIds: number[], updates: Partial<CircuitComponent>) {
     // FIXME: If updates wouldn't change the component, don't invoke backend
-    // Create object with new changes:
-    console.log(`Updating component with frontend id ${frontendId}`);
-    const newComponent = Object.assign({}, toRaw(component), updates);
+    // Get all of the updated components.
+    const components: CircuitComponent[] = [];
+    for (const id of frontendIds) {
+        const component = currentSubcircuit.value.components.get(id);
+        if (!component) return;
+        components.push(toRaw(component));
+    }
+    const newComponents = components.map((c) => ({ ...c, ...updates }));
 
-    const args = {
-        ...newComponent,
-        circuitKey: currentSubcircuit.value.backendKey,
-        componentType: String(component.type).toUpperCase(),
-    };
-    if (window.api.core.validatePlacement(args)) {
-        // Remove the original version of this component:
-        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
-        // Add new component with changes applied & update backend key.
-        currentSubcircuit.value.components.set(frontendId, {
-            ...newComponent,
-            backendKey: window.api.core.addComponent({
-                ...newComponent,
-                circuitKey: currentSubcircuit.value.backendKey,
-                componentType: String(component.type).toUpperCase(),
-            }),
-        });
+    const updatedKeys = window.api.core.replaceComponents(
+        currentSubcircuit.value.backendKey,
+        newComponents.map((c) => {
+            const args = {
+                ...c,
+                componentType: String(c.type).toUpperCase(),
+            };
+
+            return [c.backendKey, args] as const;
+        }),
+    );
+
+    if (updatedKeys != null) {
+        for (let i = 0; i < frontendIds.length; i++) {
+            currentSubcircuit.value.components.set(frontendIds[i], {
+                ...newComponents[i],
+                backendKey: updatedKeys[i],
+            });
+        }
     } else {
+        toast.error("Update Unsucessful", {
+            description: "Make sure updates do not move components out of bounds.",
+            style: {
+                background: "#ef4444",
+                color: "#ffffff",
+                borderColor: "#dc2626",
+            },
+            duration: 4000,
+        });
+
+        // Force refresh properties:
+        for (let i = 0; i < frontendIds.length; i++) {
+            currentSubcircuit.value.components.set(frontendIds[i], toRaw(components[i]));
+        }
+    }
+
+    updateState();
+}
+
+export function moveSelection(
+    componentFrontendIds: number[],
+    wires: [Location, Location][],
+    delta: Location,
+) {
+    const components = componentFrontendIds.map(
+        (c) => currentSubcircuit.value.components.get(c)!.backendKey,
+    );
+    const move = window.api.core.moveSelection(
+        currentSubcircuit.value.backendKey,
+        toRaw(components),
+        Array.from(wires, ([l, r]) => [toRaw(l), toRaw(r)] as const),
+        toRaw(delta),
+    );
+    if (!move) {
         toast.error("Update Unsucessful", {
             description: "Make sure not to place component out of bounds.",
             style: {
@@ -68,8 +104,6 @@ export function updateComponent(frontendId: number, updates: Partial<CircuitComp
             },
             duration: 4000,
         });
-        //force referseh properties
-        currentSubcircuit.value.components.set(frontendId, { ...component });
     }
 
     updateState();
@@ -117,8 +151,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
 
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
-        backendKey: window.api.core.addComponent({
-            circuitKey: currentSubcircuit.value.backendKey,
+        backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
             componentType: String(type).toUpperCase(),
             pos: { x, y },
         }),

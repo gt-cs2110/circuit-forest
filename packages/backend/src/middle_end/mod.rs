@@ -8,11 +8,11 @@
 use slotmap::{SecondaryMap};
 use thiserror::Error;
 
-use crate::engine::{CircuitForest, CircuitKey, CircuitState, FunctionPort};
+use crate::engine::{Circuit, CircuitForest, CircuitKey, CircuitState, FunctionPort, ValueKey};
 use crate::middle_end::comp_key::ComponentMap;
-use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
-use crate::middle_end::wire::{Wire, WireSet};
+use crate::middle_end::wire::{ValueFinalizer, Wire, WireSet};
 
 mod comp_key;
 mod string_interner;
@@ -145,6 +145,39 @@ macro_rules! circ {
     ($self:ident.state)    => { $self.repr.engine.states[$self.key] };
     ($self:ident.physical) => { $self.repr.physical[$self.key] };
 }
+
+impl ValueFinalizer for Circuit<'_> {
+    fn gen_key(&mut self) -> ValueKey {
+        self.add_value_node()
+    }
+
+    fn delete_key(&mut self, k: ValueKey) {
+        self.remove_value_node(k);
+    }
+
+    fn update_key(&mut self, k: ValueKey) {
+        self.update_key(k);
+    }
+
+    fn join(&mut self, into: ValueKey, keys: &[ValueKey]) {
+        self.join(into, keys);
+    }
+
+    fn split(&mut self, key: ValueKey, split_off: &[(ComponentKey, usize)]) -> ValueKey {
+        let split_off = split_off.iter()
+            .filter_map(|&(c, index)| match c {
+                ComponentKey::Function(gate) => Some(FunctionPort { gate, index }),
+                ComponentKey::UI(_) => None,
+            });
+        self.split(key, split_off)
+    }
+    
+    fn connect_port(&mut self, gate: ComponentKey, index: usize, key: ValueKey) {
+        if let ComponentKey::Function(gate) = gate {
+            self.connect_one(key, FunctionPort { gate, index });
+        }
+    }
+}
 impl MiddleCircuit<'_> {
     /// Adds a component to the circuit.
     /// 
@@ -152,7 +185,11 @@ impl MiddleCircuit<'_> {
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
     pub fn add_component<C: Into<PhysicalComponentEnum>>(&mut self, physical: C, label: &str, label_location: Orientation, pos: Coord) -> Result<ComponentKey, ReprEditErr> {
         let physical = physical.into();
-        let ComponentBounds { bounds, ports } = self.validate_bounds(physical, label, pos)?;
+        let ctx = PhysicalInitContext { circuit: self, label };
+        let ComponentBounds { bounds, ports } = physical.init_bounds(ctx)
+            .into_absolute(pos)
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
+
         let props = ComponentProps {
             label: label.to_string(),
             label_location,
@@ -176,19 +213,14 @@ impl MiddleCircuit<'_> {
             // Add tunnel to wire set:
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = tunnel_interner.add_ref(&props.label);
-                let result = wires.add_tunnel(coord, sym, || circ!(self.engine).add_value_node())
+                wires.add_tunnel(coord, sym, &mut circ!(self.engine))
                     .ok_or(ReprEditErr::RedundantTunnel)?;
-                self.handle_add(result);
             }
         } else {
             // Add port to wire set:
             for (index, &c) in props.ports.iter().enumerate() {
-                let value = wires.add_port(c, key, index, || circ!(self.engine).add_value_node())
+                wires.add_port(c, key, index, &mut circ!(self.engine))
                     .expect("Expected port addition to be successful");
-                
-                if let ComponentKey::Function(gate) = key {
-                    circ!(self.engine).connect_one(value, FunctionPort { gate, index });
-                }
             }
         }
         
@@ -215,31 +247,21 @@ impl MiddleCircuit<'_> {
                 let sym = circ!(self.physical).tunnel_interner.del_ref(&props.label)
                     .expect("Tunnel should have an assigned symbol");
     
-                let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym)
-                    .expect("Tunnel removal should succeed");
-                self.handle_remove(result);
+                let result = circ!(self.physical).wires.remove_tunnel(props.origin, sym, &mut circ!(self.engine));
+                assert!(result, "Tunnel removal should succeed");
             }
             
         } else {
             // Remove all ports from wire set:
             for index in 0..props.ports.len() {
-                let result = circ!(self.physical).wires.remove_port(key, index)
-                    .expect("Port removal should succeed");
-                self.handle_remove(result);
+                let result = circ!(self.physical).wires.remove_port(key, index, &mut circ!(self.engine));
+                assert!(result, "Port removal should succeed");
             }
         }
 
         Ok(())
     }
 
-    /// Validates whether a certain placement configuration is in bounds.
-    pub fn validate_bounds(&self, physical: PhysicalComponentEnum, label: &str, pos: Coord) -> Result<AbsoluteComponentBounds, ReprEditErr> {
-        let ctx = PhysicalInitContext { circuit: self, label };
-        physical.init_bounds(ctx)
-            .into_absolute(pos)
-            .ok_or(ReprEditErr::ComponentOutOfBounds)
-    }
-    
     /// Adds a wire to the circuit and updates the circuit to properly accommodate the wire.
     /// 
     /// This function handles multiple cases:
@@ -248,13 +270,7 @@ impl MiddleCircuit<'_> {
     /// 
     /// This raises an error if no wire is added.
     pub fn add_wire(&mut self, w: Wire) -> bool {
-        match circ!(self.physical).wires.add_wire(w, || circ!(self.engine).add_value_node()) {
-            Some(result) => {
-                self.handle_add(result);
-                true
-            },
-            None => false,
-        }
+        circ!(self.physical).wires.add_wire(w, &mut circ!(self.engine)).is_some()
     }
 
     /// Removes a wire to the circuit and updates the circuit
@@ -262,56 +278,99 @@ impl MiddleCircuit<'_> {
     /// 
     /// This function removes any wires that overlap the wire range defined by the argument.
     pub fn remove_wire(&mut self, w: Wire) -> bool {
-        match circ!(self.physical).wires.remove_wire(w) {
-            Some(result) => {
-                self.handle_remove(result);
-                true
-            },
-            None => false,
-        }
+        circ!(self.physical).wires.remove_wire(w, &mut circ!(self.engine))
     }
 
-    /// Updates engine & middle end to corresponding AddWireResult.
-    fn handle_add(&mut self, result: wire::AddWireResult) {
-        match result {
-            wire::AddWireResult::NoJoin(_) => {},
-            wire::AddWireResult::Join(c, keys) => if let &[k1, _, ..] = keys.as_slice() {
-                circ!(self.engine).join(&keys);
-                circ!(self.physical).wires.flood_fill(c, k1);
-            },
-        }
+    /// Checks the component update is valid.
+    pub fn check_component_update_ok(&mut self, components: &[(ComponentKey, PhysicalComponentEnum)]) -> bool {
+        components.iter()
+            .try_for_each(|&(k, inner)| {
+                let component = &circ!(self.physical).components[k];
+                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
+                inner.init_bounds(ctx).into_absolute(component.origin)?;
+                Some(())
+            })
+            .is_some()
     }
-    /// Updates engine & middle end to corresponding `RemoveWireResult`.
-    fn handle_remove(&mut self, result: wire::RemoveWireResult) {
-        let wire::RemoveWireResult { deleted_keys, split_groups } = result;
 
-        for k in deleted_keys {
-            circ!(self.engine).remove_value_node(k);
+    /// Moves all items by the specified delta.
+    pub fn move_selection(&mut self, components: &[ComponentKey], wires: &[Wire], delta: CoordDelta) -> bool {
+        // No movement:
+        if delta == (0, 0) {
+            return true;
         }
-        for (k, groups) in split_groups {
-            for group in &groups[1..] {
-                let coord = group.iter()
-                    .find_map(|&k| match k {
-                        wire::MeshKey::WireJoint(c) => Some(c),
-                        _ => None
-                    })
-                    .unwrap_or_else(|| unreachable!("Expected coordinate in split group"));
+
+        // Check component bounds are ok:
+        let m_new_bounds = components.iter()
+            .map(|&k| {
+                let component = &circ!(self.physical).components[k];
+                let ctx = PhysicalInitContext { circuit: self, label: &component.label };
+                let new_origin = coord_add(component.origin, delta)?;
                 
-                // Get all ports associated with coordinates:
-                let ports: Vec<_> = group.iter()
-                    .filter_map(|&k| match k {
-                        wire::MeshKey::Port(ComponentKey::Function(gate), index) => Some(FunctionPort { gate, index }),
-                        _ => None
-                    })
-                    .collect();
+                let bounds = component.inner.init_bounds(ctx)
+                    .into_absolute(new_origin)?;
+                Some((new_origin, bounds))
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_bounds) = m_new_bounds else {
+            return false;
+        };
 
-                // Split and update physical:
-                let flood_key = circ!(self.engine).split(k, &ports);
-                circ!(self.physical).wires.flood_fill(coord, flood_key);
+        // Check wire bounds are ok:
+        let m_new_wires = wires.iter()
+            .map(|w| {
+                let [p, q] = w.endpoints();
+                let np = coord_add(p, delta)?;
+                let nq = coord_add(q, delta)?;
+
+                Wire::from_endpoints(np, nq)
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_wires) = m_new_wires else {
+            return false;
+        };
+
+        // Update all items:
+        for (&k, (origin, ComponentBounds { bounds, ports })) in std::iter::zip(components, new_bounds) {
+            let component = &mut circ!(self.physical).components[k];
+            component.origin = origin;
+            component.bounds = bounds;
+            let old_ports = std::mem::take(&mut component.ports);
+            
+            for (i, (old_port, &new_port)) in std::iter::zip(old_ports, &ports).enumerate() {
+                let component = &circ!(self.physical).components[k];
+                match component.inner {
+                    PhysicalComponentEnum::Tunnel(_) => {
+                        let sym = circ!(self.physical).tunnel_interner.get(&component.label)
+                            .expect("Tunnel should have an assigned symbol");
+                        let r = circ!(self.physical).wires.remove_tunnel(old_port, sym, &mut circ!(self.engine));
+                        assert!(r, "expected removal to work");
+                        
+                        circ!(self.physical).wires.add_tunnel(new_port, sym, &mut circ!(self.engine))
+                            .expect("addition to work");
+                    },
+                    _ => {
+                        let r = circ!(self.physical).wires.remove_port(k, i, &mut circ!(self.engine));
+                        assert!(r, "expected removal to work");
+
+                        circ!(self.physical).wires.add_port(new_port, k, i, &mut circ!(self.engine))
+                            .expect("addition to work");
+                    }
+                }
             }
-        }
-    }
 
+            circ!(self.physical).components[k].ports = ports;
+        }
+        for &w in wires {
+            self.remove_wire(w);
+        }
+        for w in new_wires {
+            self.add_wire(w);
+        }
+
+        true
+    }
+    
     /// Updates the engine.
     pub fn propagate(&mut self) {
         circ!(self.engine).propagate();
@@ -341,6 +400,8 @@ impl MiddleCircuit<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::bitarr;
+    use crate::middle_end::func::Constant;
     use crate::middle_end::func::Pin;
 
     use super::*;
@@ -407,5 +468,119 @@ mod tests {
         });
 
         assert_eq!(lk, rk);
+    }
+
+    #[test]
+    fn middle_repr_move_component() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        // Add setup:
+        let [t0, t1, u0, u1] = [(4, 3), (4, 10), (7, 3), (7, 10)];
+        let component = circuit
+            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, t0)
+            .unwrap();
+
+        assert!(circuit.add_wire(Wire::from_endpoints(t0, t1).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(u0, u1).unwrap()));
+        
+        {
+            let wire_set = circuit.get_wire_set();
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kc, kt0, "port should have the same value as the first wire");
+            assert_eq!(kt0, kt1, "first wire should have the same value throughout");
+    
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(ku0, ku1);
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![1]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![]);
+        }
+
+
+        // Test move:
+        circuit.move_selection(&[component], &[], (3, 0));
+
+        {
+            let wire_set = circuit.get_wire_set();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kt0, kt1);
+
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(kc, ku0, "port should have the same value as the second wire");
+            assert_eq!(ku0, ku1, "second wire should have the same value throughout");
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![1]);
+        }
+    }
+
+    #[test]
+    fn middle_repr_move_component_wire() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        // Add setup:
+        let [sa, t0, t1, sb, u0, u1] = [(3, 3), (4, 3), (4, 10), (6, 3), (7, 3), (7, 10)];
+        let component = circuit
+            .add_component(Constant::new(bitarr![1], Orientation::East), "", Orientation::East, sa)
+            .unwrap();
+
+        let wst = Wire::from_endpoints(sa, t0).unwrap();
+        assert!(circuit.add_wire(wst));
+        assert!(circuit.add_wire(Wire::from_endpoints(t0, t1).unwrap()));
+        assert!(circuit.add_wire(Wire::from_endpoints(u0, u1).unwrap()));
+        
+        {
+            let wire_set = circuit.get_wire_set();
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let kst0 = wire_set.find_key(sa).unwrap();
+            let kst1 = wire_set.find_key(t0).unwrap();
+            let kst2 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kc, kst0, "port should have the same value as the first wire");
+            assert_eq!(kst0, kst1, "first wire should have the same value throughout");
+            assert_eq!(kst1, kst2, "first wire should have the same value throughout");
+    
+            let ku0 = wire_set.find_key(u0).unwrap();
+            let ku1 = wire_set.find_key(u1).unwrap();
+            assert_eq!(ku0, ku1);
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kst0), bitarr![1]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ku0), bitarr![]);
+        }
+
+
+        // Test move:
+        circuit.move_selection(&[component], &[wst], (3, 0));
+
+        {
+            let wire_set = circuit.get_wire_set();
+            let kt0 = wire_set.find_key(t0).unwrap();
+            let kt1 = wire_set.find_key(t1).unwrap();
+            assert_eq!(kt0, kt1);
+
+            let kc = wire_set.find_key((component, 0)).unwrap();
+            let ksu0 = wire_set.find_key(sb).unwrap();
+            let ksu1 = wire_set.find_key(u0).unwrap();
+            let ksu2 = wire_set.find_key(u1).unwrap();
+            assert_eq!(kc, ksu0, "port should have the same value as the second wire");
+            assert_eq!(ksu0, ksu1, "second wire should have the same value throughout");
+            assert_eq!(ksu1, ksu2, "second wire should have the same value throughout");
+
+            circuit.propagate();
+            assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
+            assert_eq!(circuit.get_circuit_state().get_node_value(ksu0), bitarr![1]);
+        }
     }
 }

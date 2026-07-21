@@ -12,7 +12,7 @@ use std::num::NonZero;
 use crate::middle_end::{Axis, Coord};
 
 use range_map::WireRangeMap;
-pub use wire_set::{WireSet, AddWireResult, RemoveWireResult, MeshKey};
+pub use wire_set::{WireSet, MeshKey, ValueFinalizer};
 
 fn minmax<T: Ord>(p: T, q: T) -> [T; 2] {
     if q < p { [q, p] } else { [p, q] }
