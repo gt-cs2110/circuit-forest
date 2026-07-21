@@ -536,6 +536,7 @@ mod tests {
 
     use slotmap::SlotMap;
 
+    use crate::middle_end::string_interner::StringInterner;
     use crate::middle_end::wire::range_map::assert_range_map;
 
     use super::*;
@@ -547,6 +548,12 @@ mod tests {
         }
         fn gen_key(&mut self) -> K {
             self.0.insert(())
+        }
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+        fn is_empty(&self) -> bool {
+            self.0.is_empty()
         }
     }
     impl ValueFinalizer for Keygen<ValueKey> {
@@ -860,6 +867,7 @@ mod tests {
         assert_graph_nodes(&ws.graph, []);
         assert_graph_edges::<_, MeshKey>(&ws.graph, []);
         assert_range_map(&ws.ranges, []);
+        assert!(keygen.is_empty());
     }
 
     #[test]
@@ -873,7 +881,10 @@ mod tests {
             .expect("Expected first wire add to be successful and require no joins");
         
         assert!(ws.remove_wire(w(n0, n2), &mut keygen));
+        assert_graph_nodes(&ws.graph, []);
         assert_graph_edges_unkeyed::<_, MeshKey>(&ws.graph, []);
+        assert_range_map(&ws.ranges, []);
+        assert!(keygen.is_empty());
     }
 
     #[test]
@@ -890,7 +901,10 @@ mod tests {
             .expect("Expected first wire add to be successful and require no joins");
         
         assert!(ws.remove_wire(w(n0, n5), &mut keygen));
+        assert_graph_nodes(&ws.graph, []);
         assert_graph_edges_unkeyed::<_, MeshKey>(&ws.graph, []);
+        assert_range_map(&ws.ranges, []);
+        assert!(keygen.is_empty());
     }
 
     #[test]
@@ -936,6 +950,7 @@ mod tests {
             (n00, n01), (n01, n02),
             (n10, n11), (n11, n12),
         ]);
+        assert_eq!(keygen.len(), 2);
     }
 
     #[test]
@@ -962,6 +977,7 @@ mod tests {
             (key, vec![(n00, n02)])
         ]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
+        assert_eq!(keygen.len(), 1);
     }
 
     #[test]
@@ -985,6 +1001,7 @@ mod tests {
             vec![(n00, n01)], vec![(n02, n03)]
         ]);
         assert_range_map(&ws.ranges, [(n00, n01), (n02, n03)]);
+        assert_eq!(keygen.len(), 2);
     }
 
     #[test]
@@ -1009,6 +1026,7 @@ mod tests {
 
         // Remove nodes:
         assert!(ws.remove_wire(w(n01, n11), &mut keygen));
+        assert_eq!(keygen.len(), 1);
     }
 
     #[test]
@@ -1035,6 +1053,7 @@ mod tests {
         let edges = [(n00, n01), (n04, n05)];
         assert_graph_edges(&ws.graph, [(k1, edges[..1].to_vec()), (k2, edges[1..].to_vec())]);
         assert_range_map(&ws.ranges, edges);
+        assert_eq!(keygen.len(), 2);
     }
 
     #[test]
@@ -1070,6 +1089,7 @@ mod tests {
             (n01, n21),
             (n02, n22),
         ]);
+        assert_eq!(keygen.len(), 2);
     }
 
     #[test]
@@ -1154,5 +1174,38 @@ mod tests {
         assert!(ws.remove_port(port.gate.into(), port.index, &mut value_keygen));
         assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
+    }
+
+    #[test]
+    fn wireset_useless_tunnel() {
+        let mut value_keygen = Keygen::new();
+        let mut tunnel_gen = StringInterner::default();
+        let mut ws = WireSet::default();
+
+        let [n00, n01, n10, n11] = [(1, 1), (1, 2), (3, 2), (3, 3)];
+        
+        // Setup:
+        let tun = tunnel_gen.add_ref("tunnel!!!");
+        let k1 = ws.add_tunnel(n00, tun, &mut value_keygen)
+            .expect("tunnel creation to succeed");
+        let k2 = ws.add_tunnel(n11, tun, &mut value_keygen)
+            .expect("tunnel creation to succeed");
+        assert_eq!(k1, k2);
+
+        let k3 = ws.add_wire(Wire::from_endpoints(n00, n01).unwrap(), &mut value_keygen)
+            .expect("wire creation to succeed");
+        let k4 = ws.add_wire(Wire::from_endpoints(n10, n11).unwrap(), &mut value_keygen)
+            .expect("wire creation to succeed");
+        assert_eq!(k1, k3);
+        assert_eq!(k3, k4);
+
+        // Connect meshes:
+        let k5 = ws.add_wire(Wire::from_endpoints(n01, n10).unwrap(), &mut value_keygen)
+            .expect("wire creation to succeed");
+        assert_eq!(k1, k5);
+
+        // Delete tunnel:
+        assert!(ws.remove_tunnel(n00, tun, &mut value_keygen));
+        assert_eq!(value_keygen.len(), 1);
     }
 }
