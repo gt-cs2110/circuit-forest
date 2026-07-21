@@ -5,12 +5,10 @@ use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::state::ValueIssue;
-use circuitsim_engine::engine::{CircuitKey, FunctionKey, ValueKey};
+use circuitsim_engine::engine::{CircuitKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
-use circuitsim_engine::middle_end::{
-    AddComponentArgs, ComponentKey, MiddleCircuit, MiddleRepr, UIKey,
-};
+use circuitsim_engine::middle_end::{AddComponentArgs, ComponentKey, MiddleCircuit, MiddleRepr};
 use circuitsim_engine::{bitarr, bitstate};
 use napi_derive::napi;
 use slotmap::KeyData;
@@ -70,8 +68,7 @@ mod js_enum {
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum KeyKind {
     Circuit,
-    Function,
-    UI,
+    Component,
     Value,
 }
 #[napi(object, js_name = "Key")]
@@ -127,29 +124,11 @@ trait CastKey: Sized {
 impl CastKeyByKind for CircuitKey {
     const KIND: KeyKind = KeyKind::Circuit;
 }
-impl CastKeyByKind for FunctionKey {
-    const KIND: KeyKind = KeyKind::Function;
-}
-impl CastKeyByKind for UIKey {
-    const KIND: KeyKind = KeyKind::UI;
-}
 impl CastKeyByKind for ValueKey {
     const KIND: KeyKind = KeyKind::Value;
 }
-impl CastKey for ComponentKey {
-    fn try_from_js(k: JsKey) -> anyhow::Result<Self> {
-        Ok(match k.kind == KeyKind::UI {
-            true => UIKey::try_from_js(k)?.into(),
-            false => FunctionKey::try_from_js(k)?.into(),
-        })
-    }
-
-    fn into_js(self) -> JsKey {
-        match self {
-            ComponentKey::Function(k) => k.into_js(),
-            ComponentKey::UI(k) => k.into_js(),
-        }
-    }
+impl CastKeyByKind for ComponentKey {
+    const KIND: KeyKind = KeyKind::Component;
 }
 
 type Coord = (u32, u32);

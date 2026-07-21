@@ -36,8 +36,7 @@ export interface Key {
 }
 
 export type KeyKind =  'Circuit'|
-'Function'|
-'UI'|
+'Component'|
 'Value';
 
 export interface Location {
