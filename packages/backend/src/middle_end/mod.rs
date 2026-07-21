@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::engine::debug::DebugMap;
 use crate::engine::{Circuit, CircuitForest, CircuitKey, CircuitState, FunctionKey, FunctionPort, ValueKey};
-use crate::middle_end::func::{AbsoluteComponentBounds, ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
+use crate::middle_end::func::{ComponentBounds, Orientation, PhysicalComponent, PhysicalComponentEnum, PhysicalInitContext, coord_add};
 use crate::middle_end::string_interner::StringInterner;
 use crate::middle_end::wire::{ValueFinalizer, Wire, WireSet};
 
@@ -102,7 +102,6 @@ impl ComponentProps {
         }
     }
 }
-
 /// Arguments used to invoke [`add_component`] and related additive methods.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct AddComponentArgs<'label> {
@@ -234,14 +233,25 @@ impl ValueFinalizer for CircuitFinalizer<'_> {
     }
 }
 impl MiddleCircuit<'_> {
-    /// Gets the bounds of the component to be added by the specified arguments.
-    fn get_component_bounds(&self, args: AddComponentArgs<'_>) -> Option<AbsoluteComponentBounds> {
+    fn construct_component(&self, args: AddComponentArgs<'_>) -> Result<ComponentProps, ReprEditErr> {
         let AddComponentArgs { inner, label, origin, .. } = args;
         let ctx = PhysicalInitContext { circuit: self, label };
-        inner.init_bounds(ctx)
+        let ComponentBounds { bounds, ports } = inner.init_bounds(ctx)
             .into_absolute(origin)
+            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
+        
+        let AddComponentArgs { inner, label, label_location, origin } = args;
+        let props = ComponentProps {
+            label: label.to_string(),
+            label_location,
+            origin,
+            bounds,
+            ports,
+            gate: None, // Added in port initialization
+            inner,
+        };
+        Ok(props)
     }
-
     fn add_component_ports(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
         let CircuitArea { name: _, components, wires, tunnel_interner } = &mut circ!(self.physical);
 
@@ -278,20 +288,7 @@ impl MiddleCircuit<'_> {
     /// This takes the component, label, and location for the component.
     /// This returns [`ReprEditErr::ComponentOutOfBounds`] if it fails, which can occur if the component would be out of bounds. Otherwise, return the component key associated with added component.
     pub fn add_component(&mut self, args: AddComponentArgs<'_>) -> Result<ComponentKey, ReprEditErr> {
-        let ComponentBounds { bounds, ports } = self.get_component_bounds(args)
-            .ok_or(ReprEditErr::ComponentOutOfBounds)?;
-        
-        let AddComponentArgs { inner, label, label_location, origin } = args;
-        let props = ComponentProps {
-            label: label.to_string(),
-            label_location,
-            origin,
-            bounds,
-            ports,
-            gate: None, // Added in port initialization
-            inner,
-        };
-
+        let props = self.construct_component(args)?;
         let key = circ!(self.physical).components.insert(props);
         self.add_component_ports(key)?;
         Ok(key)
@@ -377,53 +374,26 @@ impl MiddleCircuit<'_> {
         wires.remove_wire(w, &mut finalizer)
     }
 
-    /// Checks the component update is valid.
-    pub fn check_component_update_ok(&self, components: &[AddComponentArgs<'_>]) -> bool {
-        components.iter().all(|&c| self.get_component_bounds(c).is_some())
-    }
-
-    /// Moves all items by the specified delta.
-    pub fn move_selection(&mut self, moving_components: &[ComponentKey], moving_wires: &[Wire], delta: CoordDelta) -> bool {
-        // No movement:
-        if delta == (0, 0) {
-            return true;
-        }
-
-        // Check component bounds are ok:
-        let m_new_bounds = moving_components.iter()
-            .map(|&k| {
-                let component = circ!(self.physical).components.get(k)?;
-                let new_origin = coord_add(component.origin, delta)?;
-                let bounds = self.get_component_bounds(AddComponentArgs {
-                    origin: new_origin,
-                    ..component.as_args()
-                })?;
-                Some((new_origin, bounds))
-            })
-            .collect::<Option<Vec<_>>>();
-        let Some(new_bounds) = m_new_bounds else {
-            return false;
-        };
-
-        // Check wire bounds are ok:
-        let m_new_wires = moving_wires.iter()
-            .map(|w| {
-                let [p, q] = w.endpoints();
-                let np = coord_add(p, delta)?;
-                let nq = coord_add(q, delta)?;
-
-                Wire::from_endpoints(np, nq)
-            })
-            .collect::<Option<Vec<_>>>();
-        let Some(new_wires) = m_new_wires else {
-            return false;
-        };
+    /// Updates all the component and wires at once.
+    /// 
+    /// In particular, this updates the keys to the specified [`ComponentProps`]
+    ///     and each wire to the new [`Wire`].
+    /// 
+    /// The creation of the `ComponentProps` and `Wire` asserts no out-of-bounds occurs,
+    /// allowing for this to unconditionally update the specified items.
+    fn batch_overwrite(
+        &mut self,
+        batch_components: impl IntoIterator<Item = (ComponentKey, ComponentProps)>,
+        batch_wires: impl IntoIterator<Item = (Wire, Wire)>,
+    ) {
+        let (keys, new_components): (Vec<_>, Vec<_>) = batch_components.into_iter().unzip();
+        let (old_wires, new_wires): (Vec<_>, Vec<_>) = batch_wires.into_iter().unzip();
 
         // Remove everything:
-        for &w in moving_wires {
+        for w in old_wires {
             self.remove_wire(w);
         }
-        for &k in moving_components {
+        for &k in &keys {
             self.remove_component_ports(k)
                 .expect("component removal to be validated");
         }
@@ -432,17 +402,75 @@ impl MiddleCircuit<'_> {
         for w in new_wires {
             self.add_wire(w);
         }
-        for (&k, (origin, ComponentBounds { bounds, ports })) in std::iter::zip(moving_components, new_bounds) {
-            let component = &mut circ!(self.physical).components[k];
-            component.origin = origin;
-            component.bounds = bounds;
-            component.ports = ports;
+        for (&k, props) in std::iter::zip(&keys, new_components) {
+            circ!(self.physical).components[k] = props;
         }
-        for &k in moving_components {
+        for k in keys {
             self.add_component_ports(k)
                 .expect("component addition to be validated");
         }
+    }
 
+    /// Updates all the components and wires at once, canceling if any update would fail.
+    /// 
+    /// This tries to initialize each component specified by [`AddComponentArgs`]
+    /// and only overwrites if all are possible.
+    pub fn batch_construct_and_overwrite<'a>(
+        &mut self,
+        batch_components: impl IntoIterator<Item = (ComponentKey, AddComponentArgs<'a>)>,
+        batch_wires: impl IntoIterator<Item = (Wire, Wire)>,
+    ) -> bool {
+        // Check component bounds are ok:
+        let m_new_components: Result<Vec<_>, ReprEditErr> = batch_components.into_iter()
+            .map(|(k, args)| Ok((k, self.construct_component(args)?)))
+            .collect();
+        let Ok(new_components) = m_new_components else {
+            return false;
+        };
+
+        self.batch_overwrite(new_components, batch_wires);
+        true
+    }
+
+    /// Moves all items by the specified delta, if it wouldn't cause an out of bounds issue.
+    pub fn batch_move(&mut self, components: &[ComponentKey], wires: &[Wire], delta: CoordDelta) -> bool {
+        // No movement:
+        if delta == (0, 0) {
+            return true;
+        }
+
+        // Check wire bounds are ok:
+        let m_new_wires = wires.iter()
+            .map(|&w| {
+                let [p, q] = w.endpoints();
+                let np = coord_add(p, delta)?;
+                let nq = coord_add(q, delta)?;
+
+                Some((w, Wire::from_endpoints(np, nq)?))
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_wires) = m_new_wires else {
+            return false;
+        };
+
+        let m_new_components = components.iter()
+            .map(|&k| {
+                let component = circ!(self.physical).components.get(k)?;
+                let new_origin = coord_add(component.origin, delta)?;
+                
+                let component = self.construct_component(AddComponentArgs {
+                    origin: new_origin,
+                    ..component.as_args()
+                }).ok()?;
+
+                Some((k, component))
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(new_components) = m_new_components else {
+            return false;
+        };
+
+        self.batch_overwrite(new_components, new_wires);
         true
     }
     
@@ -571,7 +599,7 @@ mod tests {
 
 
         // Test move:
-        circuit.move_selection(&[component], &[], (3, 0));
+        circuit.batch_move(&[component], &[], (3, 0));
 
         {
             let wire_set = circuit.get_wire_set();
@@ -629,7 +657,7 @@ mod tests {
 
 
         // Test move:
-        circuit.move_selection(&[component], &[wst], (3, 0));
+        circuit.batch_move(&[component], &[wst], (3, 0));
 
         {
             let wire_set = circuit.get_wire_set();

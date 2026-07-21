@@ -67,15 +67,6 @@ export declare function removeComponent(circuitKey: Key, componentKey: Key): voi
 /** Tries to remove the wire from the circuit, returning whether it was successful. */
 export declare function removeWire(circuitKey: Key, start: Location, end: Location): boolean
 
-/**
- * Tries to replace all of the components specified in arguments.
- *
- * This may raise an error (if something bad happened),
- * return None (if the replacing isn't possible),
- * or the new set of keys (if replacing completed successfully).
- */
-export declare function replaceComponents(circuitKey: Key, args: Array<[Key, CreateComponentArgs]>): Array<Key> | null
-
 export interface TransientComponentState {
   backendKey: Key
   pos: Location
@@ -89,3 +80,10 @@ export interface TransientWireState {
   value: string
   issues: Array<string>
 }
+
+/**
+ * Tries to update all of the components specified in arguments.
+ *
+ * This returns whether the update succeeded.
+ */
+export declare function updateComponents(circuitKey: Key, args: Array<[Key, CreateComponentArgs]>): boolean

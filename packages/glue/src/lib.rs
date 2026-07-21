@@ -229,20 +229,18 @@ pub fn remove_wire(circuit_key: JsKey, start: Location, end: Location) -> anyhow
     Ok(result)
 }
 
-/// Tries to replace all of the components specified in arguments.
+/// Tries to update all of the components specified in arguments.
 ///
-/// This may raise an error (if something bad happened),
-/// return None (if the replacing isn't possible),
-/// or the new set of keys (if replacing completed successfully).
+/// This returns whether the update succeeded.
 #[napi]
-pub fn replace_components(
+pub fn update_components(
     circuit_key: JsKey,
     args: Vec<(JsKey, CreateComponentArgs)>,
-) -> anyhow::Result<Option<Vec<JsKey>>> {
+) -> anyhow::Result<bool> {
     let mut repr = REPR.lock().unwrap();
     let mut circuit = get_circuit(&mut repr, circuit_key)?;
 
-    let (keys, args): (Vec<_>, Vec<_>) = args
+    let items: Vec<_> = args
         .iter()
         .map(|(k, args)| {
             Ok((
@@ -252,24 +250,8 @@ pub fn replace_components(
         })
         .collect::<anyhow::Result<_>>()?;
 
-    let result = circuit.check_component_update_ok(&args).then(|| {
-        std::iter::zip(keys, args)
-            .map(|(k, args)| {
-                let props = circuit.get_component(k)?;
-                let ck = match props.as_args() == args {
-                    true => k,
-                    false => {
-                        circuit.remove_component(k)?;
-                        circuit.add_component(args)?
-                    }
-                };
-
-                Ok(ck.into_js())
-            })
-            .collect()
-    });
-
-    result.transpose()
+    let result = circuit.batch_construct_and_overwrite(items, []);
+    Ok(result)
 }
 
 #[napi]
@@ -286,6 +268,7 @@ pub fn move_selection(
         .into_iter()
         .map(|k| k.into_key())
         .collect::<Result<_, _>>()?;
+    
     let wires: Vec<_> = wires
         .into_iter()
         .map(|(p, q)| {
@@ -296,7 +279,7 @@ pub fn move_selection(
         .collect::<Result<_, _>>()?;
 
     let Location { x, y } = delta;
-    let result = circuit.move_selection(&components, &wires, (x, y));
+    let result = circuit.batch_move(&components, &wires, (x, y));
     Ok(result)
 }
 
