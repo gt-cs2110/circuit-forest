@@ -263,7 +263,7 @@ mod tests {
         arr
     }
 
-    fn alternating(bitsize: u8) -> Vec<BitState> {
+    fn alternating(bitsize: u8) -> BitArray {
         (0..bitsize)
             .map(|i| {
                 if i % 2 == 0 {
@@ -274,16 +274,12 @@ mod tests {
             })
             .collect()
     }
-    /// Builds an all-Z BitArray of the given width, for asserting a passive
-    /// port was reset after the splitter stopped driving it.
-    fn imped(width: u8) -> BitArray {
-        crate::bitarr![Z; width]
-    }
 
-    /// Sorts a Vec<PortUpdate> by index, for order-independent comparison.
-    fn sorted(mut v: Vec<PortUpdate>) -> Vec<PortUpdate> {
-        v.sort_by_key(|u| u.index);
-        v
+    fn assert_port_updates_eq(mut actual: Vec<PortUpdate>, mut expected: Vec<PortUpdate>, msg: &str) {
+        actual.sort_by_key(|u| u.index);
+        expected.sort_by_key(|u| u.index);
+
+        assert_eq!(actual, expected, "{msg}");
     }
 
     // ---------- SplitterConfig::new validation ----------
@@ -341,8 +337,7 @@ mod tests {
             let old_ports = floating_ports(&props);
             let mut new_ports = floating_ports(&props);
 
-            let data = alternating(bitsize);
-            let joined = BitArray::from_iter(data.iter().copied());
+            let joined = alternating(bitsize);
             assert!(new_ports[0].replace(joined).is_ok());
 
             let actual = splitter.run(RunContext {
@@ -351,22 +346,22 @@ mod tests {
                 new_ports: &new_ports,
                 inner_state: None,
             });
-            let mut expected: Vec<_> = data
-                .iter()
+            let mut expected: Vec<_> = joined
+                .into_iter()
                 .enumerate()
-                .map(|(i, &st)| PortUpdate {
+                .map(|(i, st)| PortUpdate {
                     index: 1 + i,
                     value: BitArray::from(st),
                 })
                 .collect();
             expected.push(PortUpdate {
                 index: 0,
-                value: imped(bitsize),
+                value: bitarr![Z; bitsize],
             });
 
-            assert_eq!(
-                sorted(actual),
-                sorted(expected),
+            assert_port_updates_eq(
+                actual,
+                expected,
                 "identity splitter should split each bit to its own leg"
             );
         }
@@ -382,9 +377,8 @@ mod tests {
             let old_ports = floating_ports(&props);
             let mut new_ports = floating_ports(&props);
 
-            let data = alternating(bitsize);
-            let joined = BitArray::from_iter(data.iter().copied());
-            let split: Vec<_> = data.into_iter().map(BitArray::from).collect();
+            let joined = alternating(bitsize);
+            let split: Vec<_> = joined.into_iter().map(BitArray::from).collect();
 
             for (p, arr) in std::iter::zip(new_ports[1..].iter_mut(), split) {
                 assert!(p.replace(arr).is_ok());
@@ -402,11 +396,11 @@ mod tests {
             }];
             expected.extend((0..bitsize).map(|i| PortUpdate {
                 index: 1 + i as usize,
-                value: imped(1),
+                value: bitarr![Z; 1],
             }));
-            assert_eq!(
-                sorted(actual),
-                sorted(expected),
+            assert_port_updates_eq(
+                actual,
+                expected,
                 "identity splitter should rejoin legs into the bus"
             );
         }
@@ -449,8 +443,7 @@ mod tests {
         let mut new_ports = floating_ports(&props);
 
         // bits: [High, Low, High, Low, High] (0=H,1=L,2=H,3=L,4=H)
-        let data = alternating(5);
-        let joined = BitArray::from_iter(data.iter().copied());
+        let joined = alternating(5);
         assert!(new_ports[0].replace(joined).is_ok());
 
         let actual = splitter.run(RunContext {
@@ -463,21 +456,21 @@ mod tests {
         let expected = vec![
             PortUpdate {
                 index: 1,
-                value: BitArray::from_iter(data[0..3].iter().copied()),
+                value: joined.subslice(0..3),
             },
             PortUpdate {
                 index: 2,
-                value: BitArray::from_iter(data[3..5].iter().copied()),
+                value: joined.subslice(3..5),
             },
             PortUpdate {
                 index: 0,
-                value: imped(5),
+                value: bitarr![Z; 5],
             },
         ];
 
-        assert_eq!(
-            sorted(actual),
-            sorted(expected),
+        assert_port_updates_eq(
+            actual,
+            expected,
             "uneven-leg join should reassemble the bus correctly"
         );
     }
@@ -492,10 +485,9 @@ mod tests {
         let old_ports = floating_ports(&props);
         let mut new_ports = floating_ports(&props);
 
-        let data = alternating(5);
-        let joined = BitArray::from_iter(data.iter().copied());
-        let leg0 = BitArray::from_iter(data[0..3].iter().copied());
-        let leg1 = BitArray::from_iter(data[3..5].iter().copied());
+        let joined = alternating(5);
+        let leg0 = joined.subslice(0..3);
+        let leg1 = joined.subslice(3..5);
 
         assert!(new_ports[1].replace(leg0).is_ok());
         assert!(new_ports[2].replace(leg1).is_ok());
@@ -513,16 +505,16 @@ mod tests {
             },
             PortUpdate {
                 index: 1,
-                value: imped(3),
+                value: bitarr![Z; 3],
             },
             PortUpdate {
                 index: 2,
-                value: imped(2),
+                value: bitarr![Z; 2],
             },
         ];
-        assert_eq!(
-            sorted(actual),
-            sorted(expected),
+        assert_port_updates_eq(
+            actual,
+            expected,
             "uneven-leg join should reassemble the bus correctly"
         );
     }
@@ -562,12 +554,12 @@ mod tests {
         let mut old_ports = floating_ports(&props);
         // Seed the joined port's bit 1 to High before any leg activity,
         // so we can confirm it survives a leg-driven update untouched.
-        let seeded = BitArray::from_iter([BitState::Low, BitState::High, BitState::Low]);
+        let seeded = bitarr![0, 1, 0];
         assert!(old_ports[0].replace(seeded).is_ok());
 
         let mut new_ports = old_ports.clone();
-        assert!(new_ports[1].replace(BitArray::from(BitState::High)).is_ok());
-        assert!(new_ports[2].replace(BitArray::from(BitState::High)).is_ok());
+        assert!(new_ports[1].replace(bitarr![1]).is_ok());
+        assert!(new_ports[2].replace(bitarr![1]).is_ok());
 
         let actual = splitter.run(RunContext {
             graphs: &Default::default(),
@@ -576,7 +568,7 @@ mod tests {
             inner_state: None,
         });
 
-        let expected_joined = BitArray::from_iter([BitState::High, BitState::High, BitState::High]);
+        let expected_joined = bitarr![1, 1, 1];
         let expected = vec![
             PortUpdate {
                 index: 0,
@@ -584,17 +576,17 @@ mod tests {
             },
             PortUpdate {
                 index: 1,
-                value: imped(1),
+                value: bitarr![Z; 1],
             },
             PortUpdate {
                 index: 2,
-                value: imped(1),
+                value: bitarr![Z; 1],
             },
         ];
 
-        assert_eq!(
-            sorted(actual),
-            sorted(expected),
+        assert_port_updates_eq(
+            actual,
+            expected,
             "floating bit 1 should retain its prior value across a leg-driven join"
         );
     }
