@@ -117,9 +117,16 @@ const propertyGroups = [
         properties: [],
     },
     {
-        types:["splitter"],
-        properties:["port_assignments",'num_legs',"bitsize","orientation","label_orientation","handedness"]
-    }
+        types: ["splitter"],
+        properties: [
+            "port_assignments",
+            "num_legs",
+            "bitsize",
+            "orientation",
+            "label_orientation",
+            "handedness",
+        ],
+    },
 ];
 
 //Build a lookup map

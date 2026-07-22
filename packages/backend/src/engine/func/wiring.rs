@@ -1,7 +1,6 @@
 use crate::bitarr;
 use crate::bitarray::BitArray;
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::SplitterConfigError::AssignmentOutOfBitsize;
 use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
 use thiserror::Error;
 
@@ -98,15 +97,15 @@ impl Component for Constant {
         vec![]
     }
 }
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct SplitterConfig{
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SplitterConfig {
     //mapping of bits to legs
     #[serde(with = "serde_arrays")]
     port_assignments: [Option<u8>; 64],
     num_legs: u8,
-    bitsize: BitSize
-
+    bitsize: BitSize,
 }
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SplitterConfigError {
@@ -114,18 +113,18 @@ pub enum SplitterConfigError {
     AssignmentOutOfBitsize(usize, u8),
     #[error("leg index {0} is out of range (only {1} legs configured)")]
     LegOutOfRange(u8, u8),
-   
 }
 
-
-impl SplitterConfig{
-    pub fn new(port_assignments: [Option<u8>; 64], num_legs: u8, bitsize:u8) -> Result<Self, SplitterConfigError> {
-                   
-
-        for (bit,&leg) in port_assignments.iter().enumerate() {
-            let Some(leg) = leg else {continue};
-            if bit >= bitsize as usize{
-                return Err(AssignmentOutOfBitsize((bit), (bitsize)))
+impl SplitterConfig {
+    pub fn new(
+        port_assignments: [Option<u8>; 64],
+        num_legs: u8,
+        bitsize: u8,
+    ) -> Result<Self, SplitterConfigError> {
+        for (bit, &leg) in port_assignments.iter().enumerate() {
+            let Some(leg) = leg else { continue };
+            if bit >= bitsize as usize {
+                return Err(SplitterConfigError::AssignmentOutOfBitsize(bit, bitsize));
             }
 
             if leg >= num_legs {
@@ -136,93 +135,120 @@ impl SplitterConfig{
         for leg in 0..num_legs {
             if !port_assignments.contains(&Some(leg)) {
                 //TODO Somehow pass up if a leg isnt used so it can auto condense; maybe let frontend do this and only auto condense visually
-
             }
         }
-        Ok(Self { port_assignments, num_legs, bitsize:BitSize::new_clamped(bitsize)})
+        Ok(Self {
+            port_assignments,
+            num_legs,
+            bitsize: BitSize::new_clamped(bitsize),
+        })
     }
 
-    fn bits_for_leg(&self, leg:u8)->impl Iterator<Item=usize>{
-        self.port_assignments.iter().enumerate().filter_map(move |(bit, &f)| {(f==Some(leg)).then_some(bit)})
+    fn bits_for_leg(&self, leg: u8) -> impl Iterator<Item = usize> {
+        self.port_assignments
+            .iter()
+            .enumerate()
+            .filter_map(move |(bit, &f)| (f == Some(leg)).then_some(bit))
     }
-    fn leg_width(&self, leg:u8)->usize{
+    fn leg_width(&self, leg: u8) -> usize {
         self.bits_for_leg(leg).count()
     }
-    pub fn get_bitsize(&self) -> BitSize{
+    pub fn get_bitsize(&self) -> BitSize {
         self.bitsize
     }
-     pub fn get_num_legs(&self)->u8{
+    pub fn get_num_legs(&self) -> u8 {
         self.num_legs
     }
-    pub fn get_num_active_legs(&self)->usize{
-        (0..self.get_num_legs()).filter(|&l| self.leg_width(l)>0).count()
+    pub fn get_num_active_legs(&self) -> usize {
+        (0..self.get_num_legs())
+            .filter(|&l| self.leg_width(l) > 0)
+            .count()
     }
 }
-
 
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Splitter {
-    config: SplitterConfig
+    config: SplitterConfig,
 }
 impl Splitter {
     /// Creates a new instance of the Splitter with specified bitsize.
     pub fn new(config: SplitterConfig) -> Self {
-        Self {
-            config
-        }
+        Self { config }
     }
-
-   
 }
 
 impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
-        let mut ports = vec![PortProperties { ty: PortType::Inout, bitsize: self.config.get_bitsize().get() }];
-        ports.extend((0..self.config.get_num_legs()).into_iter().filter_map(|leg| (self.config.leg_width(leg)>0).then_some(PortProperties { ty: PortType::Inout, bitsize: self.config.leg_width(leg) as u8 })));
+        let mut ports = vec![PortProperties {
+            ty: PortType::Inout,
+            bitsize: self.config.get_bitsize().get(),
+        }];
+        ports.extend(
+            (0..self.config.get_num_legs())
+                .into_iter()
+                .filter_map(|leg| {
+                    (self.config.leg_width(leg) > 0).then_some(PortProperties {
+                        ty: PortType::Inout,
+                        bitsize: self.config.leg_width(leg) as u8,
+                    })
+                }),
+        );
         ports
     }
 
     fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
         //removes inactive legs and shifts from leg index to corresponding port index
 
-        let active_legs:Vec<(u8,usize)> = (0..self.config.get_num_legs()).filter(|&l| self.config.leg_width(l)>0).enumerate().map(|(index, leg)| (leg, index+1)).collect();
-        
+        let active_legs: Vec<(u8, usize)> = (0..self.config.get_num_legs())
+            .filter(|&l| self.config.leg_width(l) > 0)
+            .enumerate()
+            .map(|(index, leg)| (leg, index + 1))
+            .collect();
+
         if Sensitivity::Anyedge.activated(ctx.old_ports[0], ctx.new_ports[0]) {
             //set the leg values
-           let mut updates:Vec<PortUpdate> = active_legs.iter().map(|&(leg,index)|{
-                PortUpdate{index:index, value:self.config.bits_for_leg(leg).map(|bit|ctx.new_ports[0].index(bit as u8)).collect()}
-           }).collect();
-           //set the joined value to unknow
-           updates.push(PortUpdate{index:0, value:bitarr![Z;self.config.get_bitsize().get()]});
-           updates
-
+            let mut updates: Vec<PortUpdate> = active_legs
+                .iter()
+                .map(|&(leg, index)| PortUpdate {
+                    index,
+                    value: self
+                        .config
+                        .bits_for_leg(leg)
+                        .map(|bit| ctx.new_ports[0].index(bit as u8))
+                        .collect(),
+                })
+                .collect();
+            //set the joined value to unknow
+            updates.push(PortUpdate {
+                index: 0,
+                value: bitarr![Z;self.config.get_bitsize().get()],
+            });
+            updates
         } else if Sensitivity::Anyedge.any_activated(&ctx.old_ports[1..], &ctx.new_ports[1..]) {
-           // combine each legs bits back into position
-            let mut value = ctx.new_ports[0].clone();
+            // combine each legs bits back into position
+            let mut value = ctx.new_ports[0];
             for leg in 0..self.config.get_num_legs() {
                 for (i, bit) in self.config.bits_for_leg(leg).enumerate() {
                     value = value.with(bit as u8, ctx.new_ports[(leg as usize) + 1].index(i as u8));
                 }
             }
-            //Drive the joined value 
+            //Drive the joined value
             let mut updates = vec![PortUpdate { index: 0, value }];
-             //set the legs to unknow so that they dont drive backwards and cause a short circuit
+            //set the legs to unknow so that they dont drive backwards and cause a short circuit
 
-            updates.extend(active_legs.iter().map(|&(leg,index)|{
-                PortUpdate{index:index, value:bitarr![Z; self.config.leg_width(leg) as u8]}
-           }));
-            
-        updates
+            updates.extend(active_legs.iter().map(|&(leg, index)| PortUpdate {
+                index,
+                value: bitarr![Z; self.config.leg_width(leg) as u8],
+            }));
 
-
+            updates
         } else {
             vec![]
         }
     }
 }
 
-#[cfg(test)]
 #[cfg(test)]
 mod tests {
     use crate::bitarray::BitState;
@@ -239,7 +265,13 @@ mod tests {
 
     fn alternating(bitsize: u8) -> Vec<BitState> {
         (0..bitsize)
-            .map(|i| if i % 2 == 0 { BitState::High } else { BitState::Low })
+            .map(|i| {
+                if i % 2 == 0 {
+                    BitState::High
+                } else {
+                    BitState::Low
+                }
+            })
             .collect()
     }
     /// Builds an all-Z BitArray of the given width, for asserting a passive
@@ -263,7 +295,6 @@ mod tests {
         assert_eq!(err, SplitterConfigError::LegOutOfRange(5, 2));
     }
 
-    
     #[test]
     fn config_rejects_assignment_beyond_bitsize() {
         let a = assignments(&[Some(0), Some(0), None, Some(1)]);
@@ -278,8 +309,7 @@ mod tests {
         for i in 0..bitsize {
             a[i as usize] = Some(i);
         }
-        SplitterConfig::new(a, bitsize, bitsize)
-            .expect("identity split should always be valid")
+        SplitterConfig::new(a, bitsize, bitsize).expect("identity split should always be valid")
     }
 
     #[test]
@@ -290,10 +320,22 @@ mod tests {
             let props = splitter.ports(&Default::default());
 
             assert_eq!(props.len(), 1 + bitsize as usize);
-            assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize });
+            assert_eq!(
+                props[0],
+                PortProperties {
+                    ty: PortType::Inout,
+                    bitsize
+                }
+            );
             assert_eq!(
                 props[1..],
-                vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize]
+                vec![
+                    PortProperties {
+                        ty: PortType::Inout,
+                        bitsize: 1
+                    };
+                    bitsize as usize
+                ]
             );
 
             let old_ports = floating_ports(&props);
@@ -309,12 +351,24 @@ mod tests {
                 new_ports: &new_ports,
                 inner_state: None,
             });
-            let mut expected: Vec<_> = data.iter().enumerate()
-            .map(|(i, &st)| PortUpdate { index: 1 + i, value: BitArray::from(st) })
-            .collect();
-            expected.push(PortUpdate { index: 0, value: imped(bitsize) });
+            let mut expected: Vec<_> = data
+                .iter()
+                .enumerate()
+                .map(|(i, &st)| PortUpdate {
+                    index: 1 + i,
+                    value: BitArray::from(st),
+                })
+                .collect();
+            expected.push(PortUpdate {
+                index: 0,
+                value: imped(bitsize),
+            });
 
-            assert_eq!(sorted(actual), sorted(expected), "identity splitter should split each bit to its own leg");
+            assert_eq!(
+                sorted(actual),
+                sorted(expected),
+                "identity splitter should split each bit to its own leg"
+            );
         }
     }
 
@@ -342,9 +396,19 @@ mod tests {
                 new_ports: &new_ports,
                 inner_state: None,
             });
-            let mut expected = vec![PortUpdate { index: 0, value: joined }];
-            expected.extend((0..bitsize).map(|i| PortUpdate { index: 1 + i as usize, value: imped(1) }));
-            assert_eq!(sorted(actual), sorted(expected), "identity splitter should rejoin legs into the bus");
+            let mut expected = vec![PortUpdate {
+                index: 0,
+                value: joined,
+            }];
+            expected.extend((0..bitsize).map(|i| PortUpdate {
+                index: 1 + i as usize,
+                value: imped(1),
+            }));
+            assert_eq!(
+                sorted(actual),
+                sorted(expected),
+                "identity splitter should rejoin legs into the bus"
+            );
         }
     }
 
@@ -359,9 +423,27 @@ mod tests {
         let props = splitter.ports(&Default::default());
 
         assert_eq!(props.len(), 3);
-        assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize: 5 });
-        assert_eq!(props[1], PortProperties { ty: PortType::Inout, bitsize: 3 });
-        assert_eq!(props[2], PortProperties { ty: PortType::Inout, bitsize: 2 });
+        assert_eq!(
+            props[0],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 5
+            }
+        );
+        assert_eq!(
+            props[1],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 3
+            }
+        );
+        assert_eq!(
+            props[2],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 2
+            }
+        );
 
         let old_ports = floating_ports(&props);
         let mut new_ports = floating_ports(&props);
@@ -378,13 +460,26 @@ mod tests {
             inner_state: None,
         });
 
-       let expected = vec![
-        PortUpdate { index: 1, value: BitArray::from_iter(data[0..3].iter().copied()) },
-        PortUpdate { index: 2, value: BitArray::from_iter(data[3..5].iter().copied()) },
-        PortUpdate { index: 0, value: imped(5) },
+        let expected = vec![
+            PortUpdate {
+                index: 1,
+                value: BitArray::from_iter(data[0..3].iter().copied()),
+            },
+            PortUpdate {
+                index: 2,
+                value: BitArray::from_iter(data[3..5].iter().copied()),
+            },
+            PortUpdate {
+                index: 0,
+                value: imped(5),
+            },
         ];
 
-        assert_eq!(sorted(actual), sorted(expected),"uneven-leg join should reassemble the bus correctly");
+        assert_eq!(
+            sorted(actual),
+            sorted(expected),
+            "uneven-leg join should reassemble the bus correctly"
+        );
     }
 
     #[test]
@@ -412,11 +507,24 @@ mod tests {
             inner_state: None,
         });
         let expected = vec![
-            PortUpdate { index: 0, value: joined },
-            PortUpdate { index: 1, value: imped(3) },
-            PortUpdate { index: 2, value: imped(2) },
+            PortUpdate {
+                index: 0,
+                value: joined,
+            },
+            PortUpdate {
+                index: 1,
+                value: imped(3),
+            },
+            PortUpdate {
+                index: 2,
+                value: imped(2),
+            },
         ];
-        assert_eq!(sorted(actual), sorted(expected), "uneven-leg join should reassemble the bus correctly");
+        assert_eq!(
+            sorted(actual),
+            sorted(expected),
+            "uneven-leg join should reassemble the bus correctly"
+        );
     }
 
     // ---------- floating bits ----------
@@ -429,15 +537,33 @@ mod tests {
         let splitter = Splitter::new(config);
         let props = splitter.ports(&Default::default());
 
-        assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize: 3 });
-        assert_eq!(props[1], PortProperties { ty: PortType::Inout, bitsize: 1 });
-        assert_eq!(props[2], PortProperties { ty: PortType::Inout, bitsize: 1 });
+        assert_eq!(
+            props[0],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 3
+            }
+        );
+        assert_eq!(
+            props[1],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 1
+            }
+        );
+        assert_eq!(
+            props[2],
+            PortProperties {
+                ty: PortType::Inout,
+                bitsize: 1
+            }
+        );
 
         let mut old_ports = floating_ports(&props);
         // Seed the joined port's bit 1 to High before any leg activity,
         // so we can confirm it survives a leg-driven update untouched.
         let seeded = BitArray::from_iter([BitState::Low, BitState::High, BitState::Low]);
-        assert!(old_ports[0].replace(seeded.clone()).is_ok());
+        assert!(old_ports[0].replace(seeded).is_ok());
 
         let mut new_ports = old_ports.clone();
         assert!(new_ports[1].replace(BitArray::from(BitState::High)).is_ok());
@@ -452,11 +578,24 @@ mod tests {
 
         let expected_joined = BitArray::from_iter([BitState::High, BitState::High, BitState::High]);
         let expected = vec![
-            PortUpdate { index: 0, value: expected_joined },
-            PortUpdate { index: 1, value: imped(1) },
-            PortUpdate { index: 2, value: imped(1) },
+            PortUpdate {
+                index: 0,
+                value: expected_joined,
+            },
+            PortUpdate {
+                index: 1,
+                value: imped(1),
+            },
+            PortUpdate {
+                index: 2,
+                value: imped(1),
+            },
         ];
 
-        assert_eq!(sorted(actual), sorted(expected), "floating bit 1 should retain its prior value across a leg-driven join");
+        assert_eq!(
+            sorted(actual),
+            sorted(expected),
+            "floating bit 1 should retain its prior value across a leg-driven join"
+        );
     }
 }

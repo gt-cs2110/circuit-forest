@@ -44,14 +44,14 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
         //Splitter safety checks; not sure if tehre is a neater place to put this like in preoperties
         if (next.type === "splitter") {
             if (updates.bitsize !== undefined) {
-            next.portAssignments = next.portAssignments.slice(0, next.bitsize);
+                next.portAssignments = next.portAssignments.slice(0, next.bitsize);
             }
             if (updates.numLegs !== undefined) {
                 next.portAssignments = next.portAssignments.map((leg) =>
-                leg !== undefined && leg < next.numLegs ? leg : undefined,
-            );
+                    leg !== undefined && leg < next.numLegs ? leg : undefined,
+                );
             }
-         }
+        }
         return next;
     });
 
@@ -159,7 +159,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         placingComponent.value = null;
         return;
     }
-    console.log(type=="splitter")
+    console.log(type == "splitter");
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {

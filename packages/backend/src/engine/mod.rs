@@ -23,8 +23,7 @@ pub use state::CircuitState;
 #[cfg(test)]
 mod tests {
     use crate::bitarray::{bitarr, BitArray, BitState};
-    use crate::engine::func::SplitterConfig;
-use crate::engine::state::ValueIssue;
+    use crate::engine::state::ValueIssue;
     use super::*;
 
     #[test]
@@ -506,7 +505,7 @@ use crate::engine::state::ValueIssue;
         for leg in 0..8 {
             port_assignments[leg] = Some(leg as u8);
         }
-        let splitter = circuit.add_function_node(func::Splitter::new(SplitterConfig::new(port_assignments, 8, 8).unwrap()));
+        let splitter = circuit.add_function_node(func::Splitter::new(func::SplitterConfig::new(port_assignments, 8, 8).unwrap()));
         circuit.connect_all(splitter, &nodes);
 
         // joined -> split
