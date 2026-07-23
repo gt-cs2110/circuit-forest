@@ -3,7 +3,7 @@ use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
-use circuitsim_engine::engine::func::GateKind;
+use circuitsim_engine::engine::func::{GateKind, splitter_ports_range, splitter_ports_slice};
 use circuitsim_engine::engine::state::ValueIssue;
 use circuitsim_engine::engine::{CircuitKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
@@ -456,14 +456,10 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         .resize(bitsize, bitstate![0]);
         let inputs = args.inputs.unwrap_or(2);
         //Theres gotta be a cleaner way to do this
-        let mut port_asgms = [None; 64];
-        if let Some(ref assignments) = args.port_assignments {
-            let limit = assignments.len().min(64);
-            port_asgms[..limit].copy_from_slice(&assignments[..limit]);
-        } else {
-            port_asgms[0] = Some(0);
-            port_asgms[1] = Some(1);
-        }
+        let port_asgms = match &args.port_assignments {
+            Some(a) => splitter_ports_slice(a),
+            None => splitter_ports_range(2),
+        };
         let num_legs = args.num_legs.unwrap_or(2);
 
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
