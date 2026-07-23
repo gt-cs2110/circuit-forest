@@ -437,24 +437,17 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
     type Error = anyhow::Error;
 
     fn try_from(args: &'a CreateComponentArgs) -> Result<Self, Self::Error> {
-        let bitsize = args
-            .bitsize
-            .unwrap_or(if args.component_type == "SPLITTER" {
-                2
-            } else {
-                1
-            });
+        let bitsize = match args.bitsize {
+            Some(b) => b,
+            None if args.component_type == "SPLITTER" => 2,
+            None => 1
+        };
         let selsize = args.selsize.unwrap_or(1);
-        let handedness = args.handedness.map_or_else(
-            || {
-                if args.component_type == "SPLITTER" {
-                    Handedness::TopLeft
-                } else {
-                    Default::default()
-                }
-            },
-            From::from,
-        );
+        let handedness = match args.handedness {
+            Some(b) => b.into(),
+            None if args.component_type == "SPLITTER" => Handedness::TopLeft,
+            None => Default::default()
+        };
         let orient = args.orientation.map_or_else(Default::default, From::from);
         let bit_array = match &args.constant_value {
             Some(s) => s.parse().context("Could not parse constant value")?,
@@ -464,7 +457,6 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         let inputs = args.inputs.unwrap_or(2);
         //Theres gotta be a cleaner way to do this
         let mut port_asgms = [None; 64];
-        let num_legs = args.num_legs.unwrap_or(2);
         if let Some(ref assignments) = args.port_assignments {
             let limit = assignments.len().min(64);
             port_asgms[..limit].copy_from_slice(&assignments[..limit]);
@@ -472,6 +464,7 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
             port_asgms[0] = Some(0);
             port_asgms[1] = Some(1);
         }
+        let num_legs = args.num_legs.unwrap_or(2);
 
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
             "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
