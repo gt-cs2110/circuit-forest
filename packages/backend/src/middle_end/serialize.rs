@@ -215,7 +215,12 @@ impl TryFrom<CircuitFile> for super::MiddleRepr {
                     inner.into_deserializer()
                 ).map_err(SerdeError::Deserialize)?;
                 
-                circuit.add_component(inner, &label, label_location, (x, y))?;
+                circuit.add_component(super::AddComponentArgs {
+                    inner,
+                    label: &label,
+                    label_location,
+                    origin: (x, y)
+                })?;
             }
 
             wires.into_iter().for_each(|w| {

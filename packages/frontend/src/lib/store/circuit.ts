@@ -41,7 +41,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
     }
     const newComponents = components.map((c) => ({ ...c, ...updates }));
 
-    const updatedKeys = window.api.core.replaceComponents(
+    const success = window.api.core.updateComponents(
         currentSubcircuit.value.backendKey,
         newComponents.map((c) => {
             const args = {
@@ -53,12 +53,9 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
         }),
     );
 
-    if (updatedKeys != null) {
+    if (success) {
         for (let i = 0; i < frontendIds.length; i++) {
-            currentSubcircuit.value.components.set(frontendIds[i], {
-                ...newComponents[i],
-                backendKey: updatedKeys[i],
-            });
+            currentSubcircuit.value.components.set(frontendIds[i], newComponents[i]);
         }
     } else {
         toast.error("Update Unsucessful", {

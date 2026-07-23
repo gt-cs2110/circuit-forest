@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use petgraph::prelude::UnGraphMap;
 use petgraph::visit::{Bfs, Walker};
 
-use crate::engine::{FunctionPort, ValueKey};
+use crate::engine::ValueKey;
 use crate::middle_end::string_interner::TunnelSymbol;
 use crate::middle_end::wire::{Wire, WireRangeMap};
 use crate::middle_end::{ComponentKey, Coord};
@@ -23,12 +23,6 @@ pub enum MeshKey {
 impl From<Coord> for MeshKey {
     fn from(value: Coord) -> Self {
         Self::WireJoint(value)
-    }
-}
-impl From<FunctionPort> for MeshKey {
-    fn from(value: FunctionPort) -> Self {
-        let FunctionPort { gate, index } = value;
-        Self::Port(gate.into(), index)
     }
 }
 impl From<(ComponentKey, usize)> for MeshKey {
@@ -1098,19 +1092,18 @@ mod tests {
     #[test]
     fn wireset_mid_port() {
         let mut value_keygen = Keygen::new();
-        let mut func_keygen = Keygen::new();
+        let mut comp_keygen = Keygen::new();
         let mut ws = WireSet::default();
 
         let [n00, n01, n02] = [
             (0, 0), (0, 1), (0, 2)
         ];
-        let gate = func_keygen.gen_key();
-        let port = FunctionPort { gate, index: 0 };
+        let port = (comp_keygen.gen_key(), 0);
         // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Add a wire and put a port in the middle of it.
         let k1 = ws.add_wire(w(n00, n02), &mut value_keygen)
             .expect("Expected first wire add to be successful and require no joins");
-        let k2 = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen)
+        let k2 = ws.add_port(n01, port.0, port.1, &mut value_keygen)
             .expect("Expected port creation to succeed");
 
         assert_eq!(k1, k2);
@@ -1132,25 +1125,24 @@ mod tests {
 
 
         // Remove the port.
-        assert!(ws.remove_port(port.gate.into(), port.index, &mut value_keygen));
+        assert!(ws.remove_port(port.0, port.1, &mut value_keygen));
         assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
     }
     #[test]
     fn wireset_mid_port_2() {
         let mut value_keygen = Keygen::new();
-        let mut func_keygen = Keygen::new();
+        let mut comp_keygen = Keygen::new();
         let mut ws = WireSet::default();
 
         let [n00, n01, n02] = [
             (0, 0), (0, 1), (0, 2)
         ];
-        let gate = func_keygen.gen_key();
-        let port = FunctionPort { gate, index: 0 };
+        let port = (comp_keygen.gen_key(), 0);
         // Test ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Add a port and put a wire in the middle of it
         
-        let k2 = ws.add_port(n01, port.gate.into(), port.index, &mut value_keygen)
+        let k2 = ws.add_port(n01, port.0, port.1, &mut value_keygen)
             .expect("Expected port creation to succeed");
         let k1 = ws.add_wire(w(n00, n02), &mut value_keygen)
             .expect("Expected first wire add to be successful and require no joins");
@@ -1174,7 +1166,7 @@ mod tests {
 
 
         // Remove the port.
-        assert!(ws.remove_port(port.gate.into(), port.index, &mut value_keygen));
+        assert!(ws.remove_port(port.0, port.1, &mut value_keygen));
         assert_graph_edges(&ws.graph, [(k1, vec![(n00, n02)])]);
         assert_range_map(&ws.ranges, [(n00, n02)]);
     }
