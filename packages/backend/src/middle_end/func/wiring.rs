@@ -122,17 +122,11 @@ pub struct Splitter {
 impl Splitter {
     /// Creates a new instance of the splitter with specified bitsize.
     pub fn new(
-        port_assignments: [Option<u8>; 64],
-        num_legs: u8,
-        bitsize: u8,
+        config: SplitterConfig,
         orientation: Orientation,
         handedness: Handedness,
     ) -> Self {
-        Self {
-            config: SplitterConfig::new(port_assignments, num_legs, bitsize).unwrap(),
-            orientation,
-            handedness,
-        }
+        Self { config, orientation, handedness }
     }
 }
 impl PhysicalComponent for Splitter {

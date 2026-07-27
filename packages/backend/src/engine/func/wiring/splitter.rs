@@ -1,8 +1,7 @@
 //! The splitter component.
 
-use thiserror::Error;
-
 use crate::bitarr;
+use crate::bitarray::RangedByte;
 use crate::engine::{CircuitGraphMap, Component, PortProperties};
 use crate::engine::func::{BitSize, PortType, PortUpdate, RunContext, Sensitivity};
 
@@ -20,71 +19,73 @@ pub fn splitter_ports_range(up_to: u8) -> [Option<u8>; 64] {
     std::array::from_fn(|i| (i < up_to.into()).then_some(i as u8))
 }
 
+/// Though equivalent to `BitSize`, it's semantically different, so we keep them separate.
+const MIN_NUM_LEGS: u8 = 1;
+const MAX_NUM_LEGS: u8 = u64::BITS as u8;
+type NumLegs = RangedByte<MIN_NUM_LEGS, MAX_NUM_LEGS>;
+
+/// Configuration properties for a [`Splitter`].
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SplitterConfig {
-    //mapping of bits to legs
+    /// Mapping of bits to legs.
+    /// 
+    /// This field has the following invariants:
+    /// - For all bit indices >= `bitsize`, it should be assigned to leg `None`.
+    /// - All assigned legs should be less than `num_legs`.
     #[serde(with = "serde_arrays")]
     port_assignments: [Option<u8>; 64],
-    num_legs: u8,
+    num_legs: NumLegs,
     bitsize: BitSize,
-}
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum SplitterConfigError {
-    #[error("bit {0} is assigned but out of range (bitsize is {1})")]
-    AssignmentOutOfBitsize(usize, u8),
-    #[error("leg index {0} is out of range (only {1} legs configured)")]
-    LegOutOfRange(u8, u8),
 }
 
 impl SplitterConfig {
+    /// Constructs a new splitter config.
     pub fn new(
-        port_assignments: [Option<u8>; 64],
+        mut port_assignments: [Option<u8>; 64],
         num_legs: u8,
         bitsize: u8,
-    ) -> Result<Self, SplitterConfigError> {
-        for (bit, &leg) in port_assignments.iter().enumerate() {
-            let Some(leg) = leg else { continue };
-            if bit >= bitsize as usize {
-                return Err(SplitterConfigError::AssignmentOutOfBitsize(bit, bitsize));
-            }
+    ) -> Self {
+        let num_legs = NumLegs::new_clamped(num_legs);
+        let bitsize = BitSize::new_clamped(bitsize);
 
-            if leg >= num_legs {
-                return Err(SplitterConfigError::LegOutOfRange(leg, num_legs));
-            }
+        let (used, blank) = port_assignments.split_at_mut(bitsize.get().into());
+        // Invariant 1
+        blank.fill(None);
+        // Invariant 2
+        for leg in used {
+            leg.take_if(|l| *l >= num_legs.get());
         }
-        // catch legs with zero width
-        for leg in 0..num_legs {
-            if !port_assignments.contains(&Some(leg)) {
-                //TODO Somehow pass up if a leg isnt used so it can auto condense; maybe let frontend do this and only auto condense visually
-            }
-        }
-        Ok(Self {
-            port_assignments,
-            num_legs,
-            bitsize: BitSize::new_clamped(bitsize),
-        })
+        
+        Self { port_assignments, num_legs, bitsize }
+    }
+
+    /// Gets bitsize for splitter config.
+    pub fn get_bitsize(&self) -> u8 {
+        self.bitsize.get()
+    }
+    /// Gets number of legs for splitter config.
+    pub fn get_num_legs(&self) -> u8 {
+        self.num_legs.get()
     }
 
     fn bits_for_leg(&self, leg: u8) -> impl Iterator<Item = usize> {
         self.port_assignments
             .iter()
             .enumerate()
-            .filter_map(move |(bit, &f)| (f == Some(leg)).then_some(bit))
+            .filter(move |&(_, &f)| f == Some(leg))
+            .map(|(bit, _)| bit)
     }
     fn leg_width(&self, leg: u8) -> usize {
         self.bits_for_leg(leg).count()
     }
-    pub fn get_bitsize(&self) -> BitSize {
-        self.bitsize
-    }
-    pub fn get_num_legs(&self) -> u8 {
-        self.num_legs
-    }
+    /// Gets number of active legs.
     pub fn get_num_active_legs(&self) -> usize {
-        (0..self.get_num_legs())
-            .filter(|&l| self.leg_width(l) > 0)
-            .count()
+        let active_leg_mask: u64 = self.port_assignments.iter()
+            .filter_map(|&m_leg| m_leg)
+            .fold(0, |acc, leg| acc | (1 << leg));
+
+        active_leg_mask.count_ones() as usize
     }
 }
 
@@ -104,7 +105,7 @@ impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         let mut ports = vec![PortProperties {
             ty: PortType::Inout,
-            bitsize: self.config.get_bitsize().get(),
+            bitsize: self.config.get_bitsize(),
         }];
         ports.extend(
             (0..self.config.get_num_legs())
@@ -144,7 +145,7 @@ impl Component for Splitter {
             //set the joined value to unknow
             updates.push(PortUpdate {
                 index: 0,
-                value: bitarr![Z;self.config.get_bitsize().get()],
+                value: bitarr![Z;self.config.get_bitsize()],
             });
             updates
         } else if Sensitivity::Anyedge.any_activated(&ctx.old_ports[1..], &ctx.new_ports[1..]) {
@@ -202,22 +203,29 @@ mod tests {
     #[test]
     fn config_rejects_leg_out_of_range() {
         let a = splitter_ports_slice(&[Some(5)]);
-        let err = SplitterConfig::new(a, 2, 1).unwrap_err();
-        assert_eq!(err, SplitterConfigError::LegOutOfRange(5, 2));
+        let actual_cfg = SplitterConfig::new(a, 2, 1);
+
+        let e = splitter_ports_slice(&[None]);
+        let expected_cfg = SplitterConfig::new(e, 2, 1);
+
+        assert_eq!(actual_cfg, expected_cfg);
     }
 
     #[test]
     fn config_rejects_assignment_beyond_bitsize() {
         let a = splitter_ports_slice(&[Some(0), Some(0), None, Some(1)]);
-        let err = SplitterConfig::new(a, 2, 2).unwrap_err();
-        assert_eq!(err, SplitterConfigError::AssignmentOutOfBitsize(3, 2));
+        let actual_cfg = SplitterConfig::new(a, 2, 2);
+        
+        let e = splitter_ports_slice(&[Some(0), Some(0), None, None]);
+        let expected_cfg = SplitterConfig::new(e, 2, 2);
+
+        assert_eq!(actual_cfg, expected_cfg);
     }
 
     // ---------- identity split (mirrors old Splitter::new(bitsize) behavior) ----------
 
     fn identity_config(bitsize: u8) -> SplitterConfig {
         SplitterConfig::new(splitter_ports_range(bitsize), bitsize, bitsize)
-            .expect("identity split should always be valid")
     }
 
     #[test]
@@ -324,7 +332,7 @@ mod tests {
     fn test_splitter_split_uneven_legs() {
         // 5-bit bus: leg 0 = bits [0,1,2], leg 1 = bits [3,4]
         let a = splitter_ports_slice(&[Some(0), Some(0), Some(0), Some(1), Some(1)]);
-        let config = SplitterConfig::new(a, 2, 5).unwrap();
+        let config = SplitterConfig::new(a, 2, 5);
         let splitter = Splitter::new(config);
         let props = splitter.ports(&Default::default());
 
@@ -390,7 +398,7 @@ mod tests {
     #[test]
     fn test_splitter_join_uneven_legs() {
         let a = splitter_ports_slice(&[Some(0), Some(0), Some(0), Some(1), Some(1)]);
-        let config = SplitterConfig::new(a, 2, 5).unwrap();
+        let config = SplitterConfig::new(a, 2, 5);
         let splitter = Splitter::new(config);
         let props = splitter.ports(&Default::default());
 
@@ -437,7 +445,7 @@ mod tests {
     fn test_splitter_join_preserves_floating_bit() {
         // 3-bit bus, bit 1 unassigned (floating). leg 0 = bit 0, leg 1 = bit 2.
         let a = splitter_ports_slice(&[Some(0), None, Some(1)]);
-        let config = SplitterConfig::new(a, 2, 3).unwrap();
+        let config = SplitterConfig::new(a, 2, 3);
         let splitter = Splitter::new(config);
         let props = splitter.ports(&Default::default());
 

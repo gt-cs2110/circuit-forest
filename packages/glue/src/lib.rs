@@ -3,7 +3,7 @@ use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
-use circuitsim_engine::engine::func::{GateKind, splitter_ports_range, splitter_ports_slice};
+use circuitsim_engine::engine::func::{GateKind, SplitterConfig, splitter_ports_range, splitter_ports_slice};
 use circuitsim_engine::engine::state::ValueIssue;
 use circuitsim_engine::engine::{CircuitKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
@@ -455,7 +455,7 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         }
         .resize(bitsize, bitstate![0]);
         let inputs = args.inputs.unwrap_or(2);
-        //Theres gotta be a cleaner way to do this
+
         let port_asgms = match &args.port_assignments {
             Some(a) => splitter_ports_slice(a),
             None => splitter_ports_range(2),
@@ -465,9 +465,7 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
             "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
             "CONSTANT" => func::Constant::new(bit_array, orient).into(),
-            "SPLITTER" => {
-                func::Splitter::new(port_asgms, num_legs, bitsize, orient, handedness).into()
-            }
+            "SPLITTER" => func::Splitter::new(SplitterConfig::new(port_asgms, num_legs, bitsize), orient, handedness).into(),
             "POWER" => func::Power.into(),
             "GROUND" => func::Ground.into(),
             "TUNNEL" => func::Tunnel::new(orient).into(),
