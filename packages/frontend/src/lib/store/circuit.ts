@@ -50,9 +50,10 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
                 next.portAssignments = next.portAssignments.map((leg) =>
                 leg !== undefined && leg < next.numLegs ? leg : undefined,
             );
-        }
-        
-}
+            }
+         }
+        return next;
+    });
 
     const success = window.api.core.updateComponents(
         currentSubcircuit.value.backendKey,

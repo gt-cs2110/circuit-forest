@@ -437,9 +437,15 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
     type Error = anyhow::Error;
 
     fn try_from(args: &'a CreateComponentArgs) -> Result<Self, Self::Error> {
-        let bitsize = args.bitsize.unwrap_or(1);
+        let bitsize = args.bitsize.unwrap_or(if args.component_type=="SPLITTER" {2}else {1});
         let selsize = args.selsize.unwrap_or(1);
-        let handedness = args.handedness.map_or_else(Default::default, From::from);
+      let handedness = args.handedness.map_or_else(|| {
+        if args.component_type == "SPLITTER" { 
+            Handedness::TopLeft
+        } else {
+            Default::default()
+        }
+    }, From::from);
         let orient = args.orientation.map_or_else(Default::default, From::from);
         let bit_array = match &args.constant_value {
             Some(s) => s.parse().context("Could not parse constant value")?,
@@ -447,11 +453,22 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         }
         .resize(bitsize, bitstate![0]);
         let inputs = args.inputs.unwrap_or(2);
+        //Theres gotta be a cleaner way to do this
+        let mut port_asgms = [None; 64];
+        let num_legs = args.num_legs.unwrap_or(2);
+        if let Some(ref assignments) = args.port_assignments {
+            let limit = assignments.len().min(64); 
+            port_asgms[..limit].copy_from_slice(&assignments[..limit]);
+        }
+        else{
+            port_asgms [0]=Some(0);
+            port_asgms[1]=Some(1);
+        }
 
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
             "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
             "CONSTANT" => func::Constant::new(bit_array, orient).into(),
-            "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
+            "SPLITTER" => func::Splitter::new(port_asgms, num_legs,bitsize, orient, handedness).into(),
             "POWER" => func::Power.into(),
             "GROUND" => func::Ground.into(),
             "TUNNEL" => func::Tunnel::new(orient).into(),
