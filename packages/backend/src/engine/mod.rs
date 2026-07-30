@@ -501,7 +501,9 @@ mod tests {
 
         let nodes: [_; 9] = std::array::from_fn(|_| circuit.add_value_node());
         let [joined_node, split_nodes @ ..] = nodes;
-        let splitter = circuit.add_function_node(func::Splitter::new(8));
+
+        let cfg = func::SplitterConfig::new(func::splitter_ports_range(8), 8, 8);
+        let splitter = circuit.add_function_node(func::Splitter::new(cfg));
         circuit.connect_all(splitter, &nodes);
 
         // joined -> split

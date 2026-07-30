@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Handedness, Orientation } from "circuitsim-glue";
-import { computed, ref, watchEffect } from "vue";
+import { computed, ref, toRaw, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
@@ -79,13 +79,24 @@ const labelInput = computed({
     set: (label) => updateAllSelected({ label }),
 });
 const bitsizeInput = ref(1);
+const legsInput = ref(1);
+
 const selsizeInput = ref(1);
 const nInputsInput = ref(1);
 watchEffect(() => {
     bitsizeInput.value = getFromSelected((c) => c.bitsize, 1);
     selsizeInput.value = getFromSelected((c) => c.selsize, 1);
     nInputsInput.value = getFromSelected((c) => c.inputs, 1);
+    legsInput.value = getFromSelected((c)=> c.numLegs,1);
 });
+function handlePortAssignmentChange(bitIndex: number, legValue: number|undefined) {
+    if (!selectedComponents.value[0]) return;
+
+    const currentAssignments = [...(selectedComponents.value[0].portAssignments || [])];
+    currentAssignments[bitIndex] = legValue;
+
+    updateAllSelected({ portAssignments: toRaw(currentAssignments) });
+}
 
 const constantError = ref("");
 const constantValue = {
@@ -127,7 +138,9 @@ const constantValue = {
         Properties
     </h2>
 
-    <AccordionRoot :default-value="sections.slice()">
+    <AccordionRoot :default-value="sections.slice()"
+        style="max-height: calc(100vh - 45px); overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; "
+        class="pb-10">
         <AccordionItem value="global">
             <AccordionHeader> Global </AccordionHeader>
 
@@ -201,6 +214,19 @@ const constantValue = {
                     <input v-model.number="bitsizeInput" type="range" :min="1" :step="1" :max="64"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                         @change="updateAllSelected({ bitsize: bitsizeInput })" @keydown.stop />
+
+                </label>
+            </AccordionContent>
+            <!-- NUM LEGS -->
+            <AccordionContent v-if="selectedProperties.has('num_legs')" class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="flex justify-between">
+                        <span class="font-medium"># Legs</span>
+                        <span>{{ legsInput }}</span>
+                    </span>
+                    <input v-model.number="legsInput" type="range" :min="1" :step="1" :max="64"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        @change="updateAllSelected({ numLegs: legsInput })" @keydown.stop />
 
                 </label>
             </AccordionContent>
@@ -283,6 +309,61 @@ const constantValue = {
                         constantError
                     }}</span>
                 </label>
+            </AccordionContent>
+
+            <!-- ASSIGNMENTS -->
+            <!-- ORIENTATION -->
+
+            <!-- PORT ASSIGNMENTS MATRIX WITH SLIDING SELECTION -->
+            <AccordionContent v-if="selectedProperties.has('num_legs')" class="px-4 py-3 text-xs">
+                <div class="space-y-2">
+                    <span class="block font-medium">Port Assignments</span>
+
+                    <div class="max-h-64 overflow-y-auto rounded border bg-panel-dark/10 font-mono">
+                        <table class="w-full border-collapse text-left">
+                            <thead>
+                                <tr
+                                    class="sticky top-0 border-b bg-panel-light text-[10px] uppercase tracking-wider text-muted-foreground z-10">
+                                    <th class="px-3 py-2 font-medium">Bit </th>
+                                    <th class="px-3 py-2 font-medium">Leg Assignment</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-border">
+                                <tr v-for="bit in Array(bitsizeInput).keys()" :key="`bit-row-${bit}`"
+                                    class="hover:bg-panel-light/30">
+                                    <td class="px-3 py-2 font-medium text-foreground-highlight align-middle">
+                                        bit {{ bit }}
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <div
+                                            class="inline-flex rounded border p-0.5 bg-panel-light max-w-full overflow-x-auto gap-0.5 subtle-scrollbar">
+
+                                            <button type="button"
+                                                class="px-2 py-1 text-[11px] font-sans font-medium rounded transition-colors duration-150 ease-in-out min-w-[48px]"
+                                                :class="(selectedComponents[0]?.portAssignments?.[bit]) === undefined
+                                                    ? 'bg-blue-500 text-white shadow-sm'
+                                                    : 'text-muted-foreground hover:bg-panel-dark hover:text-foreground'
+                                                    " @click="handlePortAssignmentChange(bit, undefined)">
+                                                None
+                                            </button>
+
+                                            <!-- Target Leg Buttons -->
+                                            <button v-for="leg in Array(legsInput).keys()" :key="leg" type="button"
+                                                class="px-2 py-1 text-[11px] font-sans font-medium rounded transition-colors duration-150 ease-in-out min-w-[48px]"
+                                                :class="selectedComponents[0]?.portAssignments?.[bit] === leg
+                                                    ? 'bg-blue-500 text-white shadow-sm'
+                                                    : 'text-muted-foreground hover:bg-panel-dark hover:text-foreground'
+                                                    " @click="handlePortAssignmentChange(bit, leg)">
+                                                Leg {{ leg }}
+                                            </button>
+
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </AccordionContent>
         </AccordionItem>
     </AccordionRoot>

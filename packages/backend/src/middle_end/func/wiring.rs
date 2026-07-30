@@ -1,7 +1,7 @@
 use crate::bitarray::BitArray;
-use crate::engine::func::{self, BitSize};
+use crate::engine::func::{self, BitSize, SplitterConfig};
 use crate::bitarr;
-use crate::middle_end::func::{Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
+use crate::middle_end::func::{AbsoluteComponentBounds, Handedness, Orientation, PhysicalComponent, PhysicalInitContext, RelativeComponentBounds};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -113,25 +113,25 @@ impl PhysicalComponent for Ground {
 
 /// A splitter component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Splitter {
-    bitsize: BitSize,
+    config: SplitterConfig,
     orientation: Orientation,
-    handedness: Handedness
+    handedness: Handedness,
 }
 impl Splitter {
     /// Creates a new instance of the splitter with specified bitsize.
-    pub fn new(bitsize: u8, orientation: Orientation, handedness: Handedness) -> Self {
-        Self {
-            bitsize: BitSize::new_clamped(bitsize),
-            orientation,
-            handedness
-        }
+    pub fn new(
+        config: SplitterConfig,
+        orientation: Orientation,
+        handedness: Handedness,
+    ) -> Self {
+        Self { config, orientation, handedness }
     }
 }
 impl PhysicalComponent for Splitter {
     fn init_engine(&self) -> Option<func::ComponentFn> {
-        Some(func::Splitter::new(self.bitsize.get()).into())
+        Some(func::Splitter::new(self.config).into())
     }
 
     fn component_name(&self) -> &'static str {
@@ -139,11 +139,14 @@ impl PhysicalComponent for Splitter {
     }
 
     fn init_bounds(&self, _: PhysicalInitContext<'_>) -> RelativeComponentBounds {
-        let bitsize = i32::from(self.bitsize.get());
-        let mut ports = vec![(0, 0)];
-        ports.extend((1..=bitsize).map(|i| (2 * i, 2)));
+        let height = 2 * std::cmp::max(self.config.get_num_active_legs() as u32, 1);
 
-        RelativeComponentBounds::new((bitsize * 2, 2), ports)
+        let mut ports: Vec<(u32, u32)> = vec![(0, height)];
+
+        ports.extend((0..self.config.get_num_active_legs()).map(|i| (2, (2 * i) as u32)));
+
+        AbsoluteComponentBounds::new((2, height as u32), ports)
+            .into_relative((0, height as u32))
             .orient(self.orientation, self.handedness)
     }
 }

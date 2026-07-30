@@ -10,6 +10,7 @@ serde=["dep:serde", "dep:serde_json"]
 [dependencies]
 petgraph = "0.8.3"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_arrays = "0.2.0"
 serde_json = { version = "1.0.145", optional = true }
 slotmap = "1.0.7"
 strum = { version = "0.28.0", features = ["derive"] }

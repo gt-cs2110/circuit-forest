@@ -3,7 +3,7 @@ use std::sync::{LazyLock, Mutex};
 
 use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
-use circuitsim_engine::engine::func::GateKind;
+use circuitsim_engine::engine::func::{GateKind, SplitterConfig, splitter_ports_range, splitter_ports_slice};
 use circuitsim_engine::engine::state::ValueIssue;
 use circuitsim_engine::engine::{CircuitKey, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
@@ -268,7 +268,7 @@ pub fn move_selection(
         .into_iter()
         .map(|k| k.into_key())
         .collect::<Result<_, _>>()?;
-    
+
     let wires: Vec<_> = wires
         .into_iter()
         .map(|(p, q)| {
@@ -430,14 +430,24 @@ pub struct CreateComponentArgs {
     pub selsize: Option<u8>,
     pub text_content: Option<String>,
     pub handedness: Option<js_enum::Handedness>,
+    pub port_assignments: Option<Vec<Option<u8>>>,
+    pub num_legs: Option<u8>,
 }
 impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
     type Error = anyhow::Error;
 
     fn try_from(args: &'a CreateComponentArgs) -> Result<Self, Self::Error> {
-        let bitsize = args.bitsize.unwrap_or(1);
+        let bitsize = match args.bitsize {
+            Some(b) => b,
+            None if args.component_type == "SPLITTER" => 2,
+            None => 1
+        };
         let selsize = args.selsize.unwrap_or(1);
-        let handedness = args.handedness.map_or_else(Default::default, From::from);
+        let handedness = match args.handedness {
+            Some(b) => b.into(),
+            None if args.component_type == "SPLITTER" => Handedness::TopLeft,
+            None => Default::default()
+        };
         let orient = args.orientation.map_or_else(Default::default, From::from);
         let bit_array = match &args.constant_value {
             Some(s) => s.parse().context("Could not parse constant value")?,
@@ -446,10 +456,16 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
         .resize(bitsize, bitstate![0]);
         let inputs = args.inputs.unwrap_or(2);
 
+        let port_asgms = match &args.port_assignments {
+            Some(a) => splitter_ports_slice(a),
+            None => splitter_ports_range(2),
+        };
+        let num_legs = args.num_legs.unwrap_or(2);
+
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
             "PIN" => func::Pin::new(bitsize, args.is_input.unwrap_or(false), orient).into(),
             "CONSTANT" => func::Constant::new(bit_array, orient).into(),
-            "SPLITTER" => func::Splitter::new(bitsize, orient, handedness).into(),
+            "SPLITTER" => func::Splitter::new(SplitterConfig::new(port_asgms, num_legs, bitsize), orient, handedness).into(),
             "POWER" => func::Power.into(),
             "GROUND" => func::Ground.into(),
             "TUNNEL" => func::Tunnel::new(orient).into(),

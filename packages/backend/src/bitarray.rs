@@ -1,6 +1,8 @@
 //! Bit manipulation used for wires and bit values.
 
 mod ranged;
+use std::ops::Range;
+
 pub(crate) use ranged::RangedByte;
 
 type BitSize = RangedByte<0, { u64::BITS as u8 }>;
@@ -415,6 +417,22 @@ impl BitArray {
     /// Gets the BitState at the given index (panicking if `i >= self.len()`).
     pub fn index(self, i: u8) -> BitState {
         self.get(i).expect("index to be in bounds")
+    }
+
+    /// Gets the BitArray which is the specified subslice.
+    /// 
+    /// This panics if range is out of bounds.
+    pub fn subslice(self, range: Range<u8>) -> BitArray {
+        let Range { start, end } = range;
+
+        let len = end.checked_sub(start).expect("end to be after or at start");
+        assert!(end <= Self::MAX_BITSIZE, "range end to not exceed max bitsize");
+
+        Self {
+            data: self.data >> start,
+            spec: self.spec >> start,
+            len: RangedByte::new_clamped(len)
+        }
     }
 
     /// Creates a new bit array with the same bits but new bitsize.

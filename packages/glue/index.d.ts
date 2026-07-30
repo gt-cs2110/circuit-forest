@@ -21,6 +21,8 @@ export interface CreateComponentArgs {
   selsize?: number
   textContent?: string
   handedness?: Handedness
+  portAssignments?: Array<number | undefined | null>
+  numLegs?: number
 }
 
 /** Function Get Transient State, gets the relevant data and state of all components in a circuit */

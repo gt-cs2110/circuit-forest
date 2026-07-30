@@ -10,7 +10,7 @@ import type {
 import { Component } from "vue";
 
 export const componentCategories = {
-    wiring: ["constant", "probe", "tunnel"],
+    wiring: ["constant", "probe", "tunnel", "splitter"],
     gates: ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"],
     plexers: ["mux", "demux", "decoder"],
 } as const;
@@ -42,23 +42,24 @@ export type ComponentMetadata = {
 
 export type ComponentMap = Record<string, ComponentMetadata>;
 
-export type CircuitComponent = 
-    TransientComponentState & {
-        pos: Location;
-        frontendId: number;
-        type: string;
-        label: string;
-        bitsize: number;
-        selsize: number;
-        isInput: boolean; //For Pins
-        textContent: string; //For textboxes
-        constantValue: string;
+export type CircuitComponent = TransientComponentState & {
+    pos: Location;
+    frontendId: number;
+    type: string;
+    label: string;
+    bitsize: number;
+    selsize: number;
+    isInput: boolean; //For Pins
+    textContent: string; //For textboxes
+    constantValue: string;
 
-        inputs: number;
-        orientation: Orientation;
-        handedness: Handedness;
-        labelOrientation: Orientation;
-    };
+    inputs: number;
+    orientation: Orientation;
+    handedness: Handedness;
+    labelOrientation: Orientation;
+    portAssignments: Array<number | undefined>;
+    numLegs: number;
+};
 
 export type WireDirection = "H" | "V";
 export type Wire = TransientWireState; // FIXME: Wire should not be using this type
@@ -114,6 +115,17 @@ const propertyGroups = [
     {
         types: ["text"],
         properties: [],
+    },
+    {
+        types: ["splitter"],
+        properties: [
+            "port_assignments",
+            "num_legs",
+            "bitsize",
+            "orientation",
+            "label_orientation",
+            "handedness",
+        ],
     },
 ];
 
