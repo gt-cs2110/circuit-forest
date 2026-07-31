@@ -4,13 +4,68 @@ import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
 
-export const circuits = ref<Map<number, Subcircuit>>(defaultCircuit()); //mapping from frontend id to subcircuit
+export const circuits = ref<Map<number, [Subcircuit, Subcircuit[], Subcircuit[]]>>(defaultCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
-export const currentSubcircuit = computed(() => circuits.value.get(currentSubcircuitId.value)!);
+export const currentSubcircuit = computed(() => circuits.value.get(currentSubcircuitId.value)![0]);
+//Ctr+C/V State saving
+export const undoStack = computed(()=>circuits.value.get(currentSubcircuitId.value)![1])
+export const redoStack = computed(()=>circuits.value.get(currentSubcircuitId.value)![2])
+
 updateState();
 let nextFrontendId = 100;
 
-export function defaultCircuit(): Map<number, Subcircuit> {
+
+
+export function saveState(){
+   
+    redoStack.value.length = 0
+    undoStack.value.push(structuredClone(toRaw(currentSubcircuit.value!)))
+    
+
+}
+
+export function undo(){
+    //every time update components, move selectionplace component, add wires, delete wires, delete compoentn, etc is called we push a subcircuit to the stack
+    //when undo is called we push the top of stack to the redo stack and restore the subcircuit state of the new top of stack
+    
+    if(undoStack.value.length<=1)return;
+     console.log('undo snapshot:', [...undoStack.value]);
+
+    redoStack.value.push(undoStack.value.pop()!);
+
+    restoreSubcircuitState(structuredClone(toRaw(undoStack.value[undoStack.value.length-1])))
+
+}
+export function redo(){
+
+    if(redoStack.value.length ==0)return;
+    undoStack.value.push(redoStack.value.pop()!);
+     
+    restoreSubcircuitState(structuredClone(toRaw(undoStack.value[undoStack.value.length-1])))
+
+}
+export function restoreSubcircuitState(subcircuitState:Subcircuit){
+
+    //to restore a state we cleare the circuit
+    window.api.core.clearCircuit(currentSubcircuit.value.backendKey);
+
+    //Then we readd all wires
+    for (const [start, end] of subcircuitState.wires.map(wire=>wire.endpoints)) {
+        window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw(start), toRaw(end));
+    }
+
+    //Then we readd all components
+    subcircuitState.components.forEach(component=>{
+        component.backendKey= window.api.core.addComponent(currentSubcircuit.value.backendKey,{...toRaw(component), componentType: String(component.type).toUpperCase()});
+
+    });
+
+    circuits.value.get(currentSubcircuitId.value)![0] = subcircuitState;
+    updateState();
+
+}
+
+export function defaultCircuit(): Map<number, [Subcircuit, Subcircuit[],Subcircuit[]]> {
     const name = "Circuit";
     const circuitKey = window.api.core.createCircuit(name);
 
@@ -22,7 +77,7 @@ export function defaultCircuit(): Map<number, Subcircuit> {
         wires: [],
     };
 
-    return new Map([[0, subcircuit]]);
+    return new Map([[0, [subcircuit,[structuredClone(toRaw(subcircuit))],[]]]]);
 }
 
 export function keyEquals(k: Key, j: Key): boolean {
@@ -57,6 +112,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
         for (let i = 0; i < frontendIds.length; i++) {
             currentSubcircuit.value.components.set(frontendIds[i], newComponents[i]);
         }
+
     } else {
         toast.error("Update Unsucessful", {
             description: "Make sure updates do not move components out of bounds.",
@@ -73,6 +129,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
             currentSubcircuit.value.components.set(frontendIds[i], toRaw(components[i]));
         }
     }
+    if(success)        saveState();
 
     updateState();
 }
@@ -102,8 +159,10 @@ export function moveSelection(
             duration: 4000,
         });
     }
+   
 
     updateState();
+    if(move)saveState();
 }
 
 export function deleteComponent(frontendId: number) {
@@ -112,6 +171,8 @@ export function deleteComponent(frontendId: number) {
         window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
         currentSubcircuit.value.components.delete(frontendId);
         updateState();
+        saveState();
+
     }
 }
 //wires have to be delted in batches
@@ -123,12 +184,16 @@ export function deleteWires(wires: [Location, Location][]) {
         window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(endpoints));
     }
     updateState();
+    saveState();
+
 }
 export function addWires(wires: (readonly [Location, Location])[]) {
     for (const [start, end] of wires) {
         window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw(start), toRaw(end));
     }
     updateState();
+    saveState();
+
 }
 export function addPolyWire(points: Location[]) {
     if (points.length <= 1) return;
@@ -183,6 +248,7 @@ export function placeComponent(
     currentSubcircuit.value.components.set(frontendId, new_component);
     selectComponent(frontendId, false);
     updateState(); //will update the ports and bounds values from the backend
+    saveState();
 
     placingComponent.value = null;
 }
@@ -190,13 +256,14 @@ export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
     name ??= "Circuit" + circuits.value.size;
     const backendKey = window.api.core.createCircuit(name);
-    circuits.value.set(frontendId, {
+    const subcircuit ={
         frontendId,
         backendKey,
         name,
         components: new Map(),
         wires: [],
-    });
+    };
+    circuits.value.set(frontendId, [subcircuit,[structuredClone(toRaw(subcircuit))],[]]);
     currentSubcircuitId.value = frontendId;
 }
 

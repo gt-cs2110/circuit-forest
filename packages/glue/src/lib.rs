@@ -414,6 +414,13 @@ pub fn print_circuit(circuit_key: JsKey) -> anyhow::Result<String> {
 
     Ok(format!("Circuit:{:?}", circuit))
 }
+#[napi]
+pub fn clear_circuit(circuit_key: JsKey) -> anyhow::Result<()> {
+    let mut repr = REPR.lock().unwrap();
+    let mut circuit = get_circuit(&mut repr, circuit_key)?;
+    circuit.clear_circuit();
+    Ok(())
+}
 
 #[napi(object)]
 pub struct CreateComponentArgs {

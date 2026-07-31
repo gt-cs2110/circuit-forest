@@ -499,6 +499,13 @@ impl MiddleCircuit<'_> {
     pub fn get_components(&self) -> impl Iterator<Item=(ComponentKey, &ComponentProps)> {
         circ!(self.physical).components.iter()
     }
+
+    /// Clears a circuit of all components and functions.
+    pub fn clear_circuit(&mut self) {
+        std::mem::take(&mut circ!(self.physical));
+        std::mem::take(&mut circ!(self.graph));
+        std::mem::take(&mut circ!(self.state));
+    }
 }
 
 #[cfg(test)]

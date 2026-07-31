@@ -7,6 +7,8 @@ import {
     deleteComponent,
     deleteWiresFromIds,
     placeComponent,
+    redo,
+    undo,
     updateState,
 } from "@/lib/store/circuit";
 import {
@@ -241,6 +243,17 @@ function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
         placingComponent.value = null;
         clearSelection();
+    }
+
+    if(e.ctrlKey||e.metaKey){
+        if(e.key.toLowerCase()=='z'){
+            e.preventDefault();
+            undo();
+        }
+        else if(e.key.toLowerCase()=='y'){
+            e.preventDefault();
+            redo();
+        }
     }
 }
 
