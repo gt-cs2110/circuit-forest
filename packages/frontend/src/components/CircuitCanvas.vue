@@ -4,8 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch 
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
     addPolyWire,
-    deleteComponent,
-    deleteWiresFromIds,
+    batchDelete,
     placeComponent,
     redo,
     undo,
@@ -154,10 +153,7 @@ function handleMouseMove(e: MouseEvent) {
 function handleDelete(e: KeyboardEvent) {
     if (e.key === "Backspace") {
         if (componentSelection.value.size > 0 || wireSelection.value.size > 0) {
-            for (const frontendId of componentSelection.value) {
-                deleteComponent(frontendId);
-            }
-            deleteWiresFromIds(Array.from(wireSelection.value));
+            batchDelete(Array.from(componentSelection.value), Array.from(wireSelection.value));
 
             componentSelection.value.clear();
             wireSelection.value.clear();

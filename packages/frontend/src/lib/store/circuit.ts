@@ -29,7 +29,6 @@ export function undo(){
     //when undo is called we push the top of stack to the redo stack and restore the subcircuit state of the new top of stack
     
     if(undoStack.value.length<=1)return;
-     console.log('undo snapshot:', [...undoStack.value]);
 
     redoStack.value.push(undoStack.value.pop()!);
 
@@ -60,7 +59,10 @@ export function restoreSubcircuitState(subcircuitState:Subcircuit){
 
     });
 
-    circuits.value.get(currentSubcircuitId.value)![0] = subcircuitState;
+    const currSub = circuits.value.get(currentSubcircuitId.value)![0];
+    currSub.components = subcircuitState.components;
+    currSub.wires = subcircuitState.wires;
+    currSub.name = subcircuitState.name;    
     updateState();
 
 }
@@ -180,6 +182,7 @@ export function deleteWiresFromIds(wires: number[]) {
     deleteWires(wires.map((id) => currentSubcircuit.value.wires[id].endpoints));
 }
 export function deleteWires(wires: [Location, Location][]) {
+    if(wires.length==0)return;
     for (const endpoints of wires) {
         window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(endpoints));
     }
@@ -204,6 +207,26 @@ export function addPolyWire(points: Location[]) {
     );
     addWires(wires);
 }
+/// Batch delete function for removing components and wires in a single action
+export function batchDelete(componentSelection:number[], wireSelection:number[]){
+    componentSelection.forEach(frontendId=>{
+         const component = currentSubcircuit.value.components.get(frontendId);
+        if (component) {
+            window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
+            currentSubcircuit.value.components.delete(frontendId);
+        }
+
+    })
+    wireSelection.forEach(wire_id=>{
+        const wire = currentSubcircuit.value.wires[wire_id];
+        if (wire)window.api.core.removeWire(currentSubcircuit.value.backendKey, ...toRaw(wire.endpoints));
+    })
+    updateState();
+    saveState();
+
+
+
+}
 /// Adds a new component to the frontend and updates the backend
 export function placeComponent(
     type: ComponentType,
@@ -216,7 +239,6 @@ export function placeComponent(
         placingComponent.value = null;
         return;
     }
-
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
@@ -291,10 +313,10 @@ export function updateState() {
     currentSubcircuit.value.wires = transientWireState;
 
     console.log("______UPDATING STATE_____");
-    console.log(toRaw(currentSubcircuit.value));
     console.log("backend updates");
     console.log(transientComponentStates);
     console.log(transientWireState);
+    console.log(toRaw(currentSubcircuit.value));
     console.log("____________");
 }
 //TODO Update Circuit State
