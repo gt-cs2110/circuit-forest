@@ -1,4 +1,4 @@
-import type { Location } from "circuitsim-glue";
+import type { Handedness, Location, Orientation } from "circuitsim-glue";
 import { computed, ref } from "vue";
 
 import type { ComponentType } from "../types";
@@ -64,3 +64,5 @@ export function isWireSelected(id: number) {
 // PLACING
 
 export const placingComponent = ref<ComponentType | null>(null);
+export const placingOrientation = ref<Orientation>("East");
+export const placingHandedness = ref<Handedness>("DownRight");

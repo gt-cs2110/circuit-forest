@@ -2,7 +2,7 @@
 import { componentCategories } from "@/lib/types";
 import { componentMap } from "./circuitry";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
-import { placingComponent } from "@/lib/store/view";
+import { placingComponent, placingHandedness, placingOrientation } from "@/lib/store/view";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 </script>
 
@@ -40,6 +40,8 @@ import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from 
                                 placingComponent = null;
                             } else {
                                 placingComponent = component;
+                                placingOrientation = 'East';
+                                placingHandedness = 'DownRight';
                             }
                         }
                     "

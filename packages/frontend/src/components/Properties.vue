@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { Handedness, Orientation } from "circuitsim-glue";
-import { computed, ref, watchEffect } from "vue";
+import { computed, onMounted, ref, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import { settings } from "@/lib/store/settings";
-import { componentSelection } from "@/lib/store/view";
+import {
+    componentSelection,
+    placingComponent,
+    placingHandedness,
+    placingOrientation,
+} from "@/lib/store/view";
 import { CircuitComponent, componentPropertiesMap } from "@/lib/types";
 
 const nameReset = ref(0);
@@ -64,7 +69,10 @@ function getFromSelected<T>(query: (c: CircuitComponent) => T, fallback: T) {
 }
 /** Updates all selected components with the specified updates. */
 function updateAllSelected(updates: Partial<CircuitComponent>) {
-    updateComponents(selectedComponents.value.map(c => c.frontendId), updates);
+    updateComponents(
+        selectedComponents.value.map((c) => c.frontendId),
+        updates,
+    );
 }
 /** Gets all defined properties for a given component. */
 function getComponentProps(component: CircuitComponent) {
@@ -120,6 +128,53 @@ const constantValue = {
         },
     }),
 };
+
+onMounted(() =>
+    document.addEventListener("keydown", (e) => {
+        if (placingComponent.value) {
+            if (e.key == "ArrowUp") {
+                placingOrientation.value = "North";
+            }
+            if (e.key == "ArrowLeft") {
+                placingOrientation.value = "West";
+            }
+            if (e.key == "ArrowRight") {
+                placingOrientation.value = "East";
+            }
+            if (e.key == "ArrowDown") {
+                placingOrientation.value = "South";
+            }
+            if (e.key.toLowerCase() == "h") {
+                placingHandedness.value =
+                    placingHandedness.value == "TopLeft" ? "DownRight" : "TopLeft";
+            }
+        } else {
+            if (selectedProperties.value.has("orientation")) {
+                if (e.key == "ArrowUp") {
+                    updateAllSelected({ orientation: "North" });
+                }
+                if (e.key == "ArrowLeft") {
+                    updateAllSelected({ orientation: "West" });
+                }
+                if (e.key == "ArrowRight") {
+                    updateAllSelected({ orientation: "East" });
+                }
+                if (e.key == "ArrowDown") {
+                    updateAllSelected({ orientation: "South" });
+                }
+            }
+            if (selectedProperties.value.has("handedness")) {
+                if (e.key.toLowerCase() == "h") {
+                    if (selectedComponents.value[0].handedness == "TopLeft") {
+                        updateAllSelected({ handedness: "DownRight" });
+                    } else {
+                        updateAllSelected({ handedness: "TopLeft" });
+                    }
+                }
+            }
+        }
+    }),
+);
 </script>
 
 <template>

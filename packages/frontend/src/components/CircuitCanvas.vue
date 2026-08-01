@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Location } from "circuitsim-glue";
+import {  type Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
@@ -14,6 +14,8 @@ import {
     componentSelection,
     getViewState,
     placingComponent,
+    placingHandedness,
+    placingOrientation,
     wireSelection,
 } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
@@ -306,6 +308,8 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
                             metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].x,
                         placingComponentPosition.y +
                             metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].y,
+                            placingOrientation,
+                            placingHandedness
                     )
                 "
             >
