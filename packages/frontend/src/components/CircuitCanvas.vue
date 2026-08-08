@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {  type Location } from "circuitsim-glue";
+import { type Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
@@ -20,7 +20,6 @@ import {
 } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
 import { Subcircuit } from "@/lib/types";
-import { componentMap } from "./circuitry";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import Wire from "./circuitry/Wire.vue";
@@ -30,6 +29,7 @@ import { useDrag } from "@/composables/useDrag";
 import { useMarquee } from "@/composables/useMarquee";
 import { useZoom } from "@/composables/useZoom";
 import { useTooltip } from "@/composables/useTooltip";
+import { getPreviewGeometry } from "@/lib/preview";
 
 const props = defineProps<{
     subcircuit: Subcircuit;
@@ -106,11 +106,18 @@ watch(mousePosition, (mouse) => {
         return;
     }
 
-    const metadata = componentMap[placingComponent.value];
-    const dimensions = metadata?.getDefaultDimensions() || { width: 1, height: 1 };
+    const geometry = getPreviewGeometry(
+        placingComponent.value,
+        placingOrientation.value,
+        placingHandedness.value,
+    );
+
+    const worldX = (mouse.x - offset.value.x) / GRID_SIZE / scale.value;
+    const worldY = (mouse.y - offset.value.y) / GRID_SIZE / scale.value;
+
     placingComponentPosition.value = {
-        x: Math.floor((mouse.x - offset.value.x) / GRID_SIZE / scale.value - dimensions.width / 2),
-        y: Math.floor((mouse.y - offset.value.y) / GRID_SIZE / scale.value - dimensions.height / 2),
+        x: Math.floor(worldX - geometry.dimensions.width / 2),
+        y: Math.floor(worldY - geometry.dimensions.height / 2),
     };
 });
 
@@ -242,8 +249,6 @@ onMounted(() => {
     document.addEventListener("keydown", handleDelete);
 });
 onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
-
-const metadata = computed(() => componentMap[placingComponent.value || "and"]);
 </script>
 
 <template>
@@ -302,18 +307,28 @@ const metadata = computed(() => componentMap[placingComponent.value || "and"]);
                 opacity="0.5"
                 :transform="`translate(${placingComponentPosition.x * GRID_SIZE}, ${placingComponentPosition.y * GRID_SIZE})`"
                 @click="
-                    placeComponent(
-                        placingComponent,
-                        placingComponentPosition.x +
-                            metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].x,
-                        placingComponentPosition.y +
-                            metadata.getDefaultPorts()[metadata.getDefaultPorts().length - 1].y,
+                    () => {
+                        const geometry = getPreviewGeometry(
+                            placingComponent!,
                             placingOrientation,
-                            placingHandedness
-                    )
+                            placingHandedness,
+                        );
+
+                        placeComponent(
+                            placingComponent!,
+                            placingComponentPosition!.x + geometry.anchorOffset.x,
+                            placingComponentPosition!.y + geometry.anchorOffset.y,
+                            placingOrientation,
+                            placingHandedness,
+                        );
+                    }
                 "
             >
-                <CircuitComponentPreview :type="placingComponent" />
+                <CircuitComponentPreview
+                    :type="placingComponent"
+                    :orientation="placingOrientation"
+                    :handedness="placingHandedness"
+                />
             </g>
 
             <g v-for="(wire, i) in subcircuit.wires" :key="i">
