@@ -1,8 +1,9 @@
-import { Handedness, Orientation, Key, Location } from "circuitsim-glue";
+import { Handedness, Orientation,Key, Location, TransientWireState } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
-import { deleteViewState, placingComponent, selectComponent } from "./view";
+import { clearSelection, componentSelection, deleteViewState, placingComponent, selectComponent, wireSelection } from "./view";
+import { Rect, rectsIntersect, toBounds } from "@/composables/useMarquee";
 
 export const circuits = ref<Map<number, [Subcircuit, Subcircuit[], Subcircuit[]]>>(defaultCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -10,6 +11,10 @@ export const currentSubcircuit = computed(() => circuits.value.get(currentSubcir
 //Ctr+C/V State saving
 export const undoStack = computed(()=>circuits.value.get(currentSubcircuitId.value)![1])
 export const redoStack = computed(()=>circuits.value.get(currentSubcircuitId.value)![2])
+
+//we need to save a list of Circuit Components and a list of wiresbased on the selection copied
+export const copiedComponents: CircuitComponent[] = [];
+export const copiedWires: TransientWireState[] = [];
 
 updateState();
 let nextFrontendId = 100;
@@ -20,8 +25,105 @@ export function saveState(){
    
     redoStack.value.length = 0
     undoStack.value.push(structuredClone(toRaw(currentSubcircuit.value!)))
+}
+export function copy(){
+    copiedComponents.length = 0;
+    copiedWires.length = 0;
+    //go through the component and wire selection and copy these circuit components and wires into opied componets and wires variables
+    componentSelection.value.forEach(frontendId=>{
+        copiedComponents.push(structuredClone(toRaw(currentSubcircuit.value.components.get(frontendId))) as CircuitComponent);
+    })
+    wireSelection.value.forEach(wireIndex=>{
+        copiedWires.push(currentSubcircuit.value.wires[wireIndex]);
+    })
+}
+
+export function boxCollidesWithComponents(bounds: Rect){
+
+    for ( const comp of currentSubcircuit.value.components){
+
+        if (rectsIntersect(toBounds(comp[1].bounds[0],comp[1].bounds[1]), bounds))return true;
+
+    }
+    for ( const wire of currentSubcircuit.value.wires){
+        if (rectsIntersect(toBounds(wire.endpoints[0],wire.endpoints[1]), bounds))return true;
+
+    }
+    
+    return false;
+
+}
+
+// takes mouse position which is world coords of x and y
+export function paste(mousePosition: Location){
+    if(copiedComponents.length==0&&copiedWires.length==0)return;
+    //when you paste it create the components at a displacment and grays it out, it is basically auto selected and you can drag it
+    clearSelection();
+
+    //Determine the offset we want to put the pasted component at
+
+    //First we find the offset btwn the mouse position and the position of the top left component/wire
+    let minx = copiedComponents.length>0?copiedComponents[0].bounds[0].x:copiedWires[0].endpoints[0].x;
+    let miny = copiedComponents.length>0?copiedComponents[0].bounds[0].y:copiedWires[0].endpoints[0].y;
+    let maxx = 0;
+    let maxy = 0;
+    copiedComponents.forEach(comp=>{
+        minx = Math.min(comp.bounds[0].x,minx);
+        miny = Math.min(comp.bounds[0].y, miny);
+        maxx = Math.max(comp.bounds[1].x,maxx);
+        maxy = Math.max(comp.bounds[1].y, maxy);
+    })
+    copiedWires.forEach(wire=>{
+        minx = Math.min(wire.endpoints[0].x,minx);
+        miny = Math.min(wire.endpoints[0].y, miny);
+        maxx = Math.max(wire.endpoints[1].x,maxx);
+        maxy = Math.max(wire.endpoints[1].y, maxy);
+    })
+
+const displacment = {
+  x: Math.round(mousePosition.x - minx),
+  y: Math.round(mousePosition.y - miny),
+};
+    const displacedWireEndpoints:Location[][] = [];
+
+
+        //Keep tryign to paste diagonally downwards until we find a free space     
+        while(boxCollidesWithComponents(toBounds({x:minx+displacment.x, y:miny+displacment.y}, {x:maxx+displacment.x, y:maxy+displacment.y}))){
+            displacment.x+=1;
+            displacment.y+=1;
+        }
     
 
+
+    
+
+     //Readd all the wires
+    for (const [start, end] of copiedWires.map(wire=>wire.endpoints)) {
+        window.api.core.addWire(currentSubcircuit.value.backendKey, toRaw({ x: start.x + displacment.x, y: start.y + displacment.y }), 
+            toRaw({ x: end.x + displacment.x, y: end.y + displacment.y }));
+            displacedWireEndpoints.push([{ x: start.x + displacment.x, y: start.y + displacment.y },{ x: end.x + displacment.x, y: end.y + displacment.y }])
+    }
+
+    //Then we readd all components
+    copiedComponents.forEach(component=>{
+        const componentCopy = structuredClone(toRaw(component));
+        componentCopy.pos.x+=displacment.x;
+        componentCopy.pos.y+=displacment.y;
+        componentCopy.backendKey= window.api.core.addComponent(currentSubcircuit.value.backendKey,{...toRaw(componentCopy), componentType: String(componentCopy.type).toUpperCase()});
+        componentCopy.frontendId = generateFrontendId();
+        currentSubcircuit.value.components.set(componentCopy.frontendId, componentCopy)
+        componentSelection.value.add(componentCopy.frontendId);
+
+    });
+    saveState();
+    updateState();
+
+    //add wires to the selection
+    
+    displacedWireEndpoints.forEach((endpoints)=>{
+        wireSelection.value.add(currentSubcircuit.value.wires.findIndex(w=>w.endpoints.every((pt, i) => pt.x === endpoints[i].x && pt.y === endpoints[i].y)));
+    })
+   
 }
 
 export function undo(){
@@ -56,13 +158,14 @@ export function restoreSubcircuitState(subcircuitState:Subcircuit){
     //Then we readd all components
     subcircuitState.components.forEach(component=>{
         component.backendKey= window.api.core.addComponent(currentSubcircuit.value.backendKey,{...toRaw(component), componentType: String(component.type).toUpperCase()});
-
+        
     });
 
     const currSub = circuits.value.get(currentSubcircuitId.value)![0];
     currSub.components = subcircuitState.components;
     currSub.wires = subcircuitState.wires;
     currSub.name = subcircuitState.name;    
+    clearSelection();
     updateState();
 
 }

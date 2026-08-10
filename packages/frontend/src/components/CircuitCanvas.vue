@@ -5,6 +5,8 @@ import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
     addPolyWire,
     batchDelete,
+    copy,
+    paste,
     placeComponent,
     redo,
     undo,
@@ -242,14 +244,24 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 
     if(e.ctrlKey||e.metaKey){
-        if(e.key.toLowerCase()=='z'){
-            e.preventDefault();
-            undo();
+        e.preventDefault();
+        switch (e.key.toLowerCase()){
+            case 'z':
+                undo();
+                break;
+            case 'y':
+                redo();
+                break;
+            case 'c':
+                copy();
+                break;
+            case 'v':
+                paste({x:(mousePosition.value.x - offset.value.x) / GRID_SIZE / scale.value, y:(mousePosition.value.y - offset.value.y) / GRID_SIZE / scale.value});
+                break;
+            default:
+                break;
         }
-        else if(e.key.toLowerCase()=='y'){
-            e.preventDefault();
-            redo();
-        }
+        
     }
 }
 
