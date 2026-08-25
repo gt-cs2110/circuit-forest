@@ -1,5 +1,5 @@
 use crate::bitarray::BitArray;
-use crate::engine::func::{self, PortUpdate, RunContext};
+use crate::engine::func::{self, Divider, Multiplier, PortUpdate, RunContext};
 use crate::engine::state::InnerFunctionState;
 use crate::engine::{CircuitGraphMap, PortProperties};
 
@@ -146,6 +146,7 @@ component_enum! {
         // Misc
         Subcircuit,
         // Arithmetic
+        Adder, Subtractor, Multiplier, Divider
 
     }
 }

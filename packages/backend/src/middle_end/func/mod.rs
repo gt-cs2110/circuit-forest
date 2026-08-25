@@ -5,6 +5,7 @@ mod wiring;
 mod muxes;
 mod misc;
 mod gates;
+mod arithmetic;
 
 #[cfg(feature="serde")]
 pub(crate) use component::PComDeserCtx;
@@ -14,6 +15,7 @@ pub use wiring::*;
 pub use muxes::*;
 pub use misc::*;
 pub use gates::*;
+pub use arithmetic::*;
 
 use crate::middle_end::{Axis, AxisDelta, Coord, CoordDelta, MiddleCircuit};
 

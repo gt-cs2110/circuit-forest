@@ -1,5 +1,5 @@
 use crate::engine::ComponentFn;
-use crate::engine::func::enum_dispatch;
+use crate::engine::func::{Divider, Multiplier, Subtractor, enum_dispatch};
 use crate::middle_end::func::{self, PhysicalInitContext, RelativeComponentBounds};
 
 /// A component that can be added in a [middle-end circuit](`crate::middle_end::MiddleRepr`).
@@ -101,5 +101,7 @@ component_enum! {
         Text, Subcircuit,
         //Gates
         Gate, Not, TriState,
+        //arithmetic
+        Adder,Subtractor, Multiplier, Divider
     }
 }

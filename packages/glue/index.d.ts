@@ -21,6 +21,7 @@ export interface CreateComponentArgs {
   selsize?: number
   textContent?: string
   handedness?: Handedness
+  signType?: SignType
 }
 
 /** Function Get Transient State, gets the relevant data and state of all components in a circuit */
@@ -66,6 +67,9 @@ export declare function removeComponent(circuitKey: Key, componentKey: Key): voi
 
 /** Tries to remove the wire from the circuit, returning whether it was successful. */
 export declare function removeWire(circuitKey: Key, start: Location, end: Location): boolean
+
+export type SignType =  'TwosComplement'|
+'Unsigned';
 
 export interface TransientComponentState {
   backendKey: Key

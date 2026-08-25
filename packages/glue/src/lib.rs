@@ -6,12 +6,14 @@ use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::state::ValueIssue;
 use circuitsim_engine::engine::{CircuitKey, ValueKey};
+use circuitsim_engine::engine::func::SignType::{self, TwosComplement};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{AddComponentArgs, ComponentKey, MiddleCircuit, MiddleRepr};
 use circuitsim_engine::{bitarr, bitstate};
 use napi_derive::napi;
 use slotmap::KeyData;
+
 
 static REPR: LazyLock<Mutex<MiddleRepr>> = LazyLock::new(|| Mutex::new(MiddleRepr::new()));
 
@@ -61,6 +63,12 @@ mod js_enum {
         pub enum Orientation from super::Orientation {
             North, South, East, West
         }
+    }make_napi_enum! {
+        #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+        pub enum SignType from super::SignType {
+    TwosComplement,
+    Unsigned
+}
     }
 }
 
@@ -430,6 +438,7 @@ pub struct CreateComponentArgs {
     pub selsize: Option<u8>,
     pub text_content: Option<String>,
     pub handedness: Option<js_enum::Handedness>,
+    pub sign_type: Option<js_enum::SignType>
 }
 impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
     type Error = anyhow::Error;
@@ -444,6 +453,7 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
             None => bitarr![0],
         }
         .resize(bitsize, bitstate![0]);
+        let sign_type = args.sign_type.map_or_else(SignType::default, From::from);
         let inputs = args.inputs.unwrap_or(2);
 
         let inner: PhysicalComponentEnum = match args.component_type.as_str() {
@@ -467,6 +477,12 @@ impl<'a> TryFrom<&'a CreateComponentArgs> for AddComponentArgs<'a> {
             "NOR" => func::Gate::new(GateKind::Nor, bitsize, inputs, orient).into(),
             "XOR" => func::Gate::new(GateKind::Xor, bitsize, inputs, orient).into(),
             "XNOR" => func::Gate::new(GateKind::Xnor, bitsize, inputs, orient).into(),
+            "SUBTRACTOR" => func::Subtractor::new(bitsize, orient).into(),
+            "ADDER" => func::Adder::new(bitsize, orient).into(),
+            "MULTIPLIER" => func::Multiplier::new(bitsize, orient, sign_type).into(),
+            "DIVIDER" =>func::Divider::new(bitsize, orient, sign_type).into(),
+
+
             _ => bail!("Unknown gate type"),
         };
 

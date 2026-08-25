@@ -13,6 +13,7 @@ export const componentCategories = {
     wiring: ["constant", "probe", "tunnel"],
     gates: ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer"],
     plexers: ["mux", "demux", "decoder"],
+    arithmetic: ["adder", "subtractor", "divider", "multiplier"],
 } as const;
 export type ComponentType = (typeof componentCategories)[keyof typeof componentCategories][number];
 export const componentTypes = [
@@ -96,7 +97,7 @@ const propertyGroups = [
         properties: ["label", "label_orientation", "orientation", "handedness", "bitsize"],
     },
     {
-        types: ["not", "pin", "probe", "tunnel"],
+        types: ["not", "pin", "probe", "tunnel", "adder", "subtractor"],
         properties: ["label", "label_orientation", "orientation", "bitsize"],
     },
     {
@@ -114,6 +115,10 @@ const propertyGroups = [
     {
         types: ["text"],
         properties: [],
+    },
+     {
+        types: ["divider", "multiplier"],
+        properties: ["label", "label_orientation", "orientation", "bitsize", "signedness"],
     },
 ];
 

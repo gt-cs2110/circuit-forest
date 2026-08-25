@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crate::bitarr;
 use crate::bitarray::{NotTwoValuedErr, ShiftType};
 use crate::engine::CircuitGraphMap;
+use crate::engine::func::SignType::TwosComplement;
 use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, port_list};
 use crate::{bitarray::BitArray, bitarray::BitState};
 
@@ -297,7 +298,7 @@ impl Component for Divider {
             // Inputs
             (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 3),
             // Outputs
-            (PortProperties { ty: PortType::Input, bitsize: self.bitsize.get() }, 2),
+            (PortProperties { ty: PortType::Output, bitsize: self.bitsize.get() }, 2),
         ])
     }
 
@@ -399,13 +400,17 @@ impl Component for Negator {
 }
 
 /// Signedness for integers, used for certain operations that differ between signedness.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash,Default)]
+#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+
 pub enum SignType {
     /// Two's complement.
     TwosComplement,
     /// Unsigned.
+    #[default]
     Unsigned
 }
+
 
 /// A Comparator component.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
