@@ -1,4 +1,4 @@
-import { Key, Location } from "circuitsim-glue";
+import { Handedness, Orientation, Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
@@ -140,7 +140,13 @@ export function addPolyWire(points: Location[]) {
     addWires(wires);
 }
 /// Adds a new component to the frontend and updates the backend
-export function placeComponent(type: ComponentType, x: number, y: number) {
+export function placeComponent(
+    type: ComponentType,
+    x: number,
+    y: number,
+    orientation: Orientation,
+    handedness: Handedness,
+) {
     if (x < 0 || y < 0) {
         placingComponent.value = null;
         return;
@@ -151,6 +157,8 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
             componentType: String(type).toUpperCase(),
             pos: { x, y },
+            orientation,
+            handedness,
         }),
         frontendId: frontendId,
         type: type,
@@ -162,8 +170,8 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
             { x: 0, y: 0 },
             { x: 0, y: 0 },
         ],
-        orientation: "East",
-        handedness: "DownRight",
+        orientation,
+        handedness,
         labelOrientation: "East",
         pos: { x, y },
         selsize: 1,
