@@ -4,7 +4,7 @@ import { Ref, ref } from "vue";
 import { getDimensions } from "@/lib/bounds";
 import type { Subcircuit } from "@/lib/types";
 
-type Rect = { left: number; top: number; right: number; bottom: number };
+export type Rect = { left: number; top: number; right: number; bottom: number };
 type Selectable = { id: number; bounds: Rect };
 
 export function useMarquee(
@@ -93,7 +93,7 @@ function getWireSelectables(subcircuit: Subcircuit): Selectable[] {
     });
 }
 
-function toBounds(a: Location, b: Location): Rect {
+export function toBounds(a: Location, b: Location): Rect {
     return {
         left: Math.min(a.x, b.x),
         top: Math.min(a.y, b.y),
@@ -102,6 +102,6 @@ function toBounds(a: Location, b: Location): Rect {
     };
 }
 
-function rectsIntersect(a: Rect, b: Rect): boolean {
+export function rectsIntersect(a: Rect, b: Rect): boolean {
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }

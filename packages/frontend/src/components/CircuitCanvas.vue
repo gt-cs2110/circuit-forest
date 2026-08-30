@@ -4,9 +4,12 @@ import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch 
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import {
     addPolyWire,
-    deleteComponent,
-    deleteWiresFromIds,
+    batchDelete,
+    copy,
+    paste,
     placeComponent,
+    redo,
+    undo,
     updateState,
 } from "@/lib/store/circuit";
 import {
@@ -152,10 +155,7 @@ function handleMouseMove(e: MouseEvent) {
 function handleDelete(e: KeyboardEvent) {
     if (e.key === "Backspace") {
         if (componentSelection.value.size > 0 || wireSelection.value.size > 0) {
-            for (const frontendId of componentSelection.value) {
-                deleteComponent(frontendId);
-            }
-            deleteWiresFromIds(Array.from(wireSelection.value));
+            batchDelete(Array.from(componentSelection.value), Array.from(wireSelection.value));
 
             componentSelection.value.clear();
             wireSelection.value.clear();
@@ -241,6 +241,27 @@ function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
         placingComponent.value = null;
         clearSelection();
+    }
+
+    if(e.ctrlKey||e.metaKey){
+        e.preventDefault();
+        switch (e.key.toLowerCase()){
+            case 'z':
+                undo();
+                break;
+            case 'y':
+                redo();
+                break;
+            case 'c':
+                copy();
+                break;
+            case 'v':
+                paste({x:(mousePosition.value.x - offset.value.x) / GRID_SIZE / scale.value, y:(mousePosition.value.y - offset.value.y) / GRID_SIZE / scale.value});
+                break;
+            default:
+                break;
+        }
+        
     }
 }
 

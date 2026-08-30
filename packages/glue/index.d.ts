@@ -5,6 +5,8 @@ export declare function addComponent(circuitKey: Key, args: CreateComponentArgs)
 /** Tries to add the wire to the circuit, returning whether it was successful. */
 export declare function addWire(circuitKey: Key, start: Location, end: Location): boolean
 
+export declare function clearCircuit(circuitKey: Key): void
+
 /** Creates a new circuit and returns its key as an i64 for JS. */
 export declare function createCircuit(name: string): Key
 
