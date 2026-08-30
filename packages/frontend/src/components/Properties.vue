@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Handedness, Orientation } from "circuitsim-glue";
+import { Handedness, Orientation, SignType } from "circuitsim-glue";
 import { computed, ref, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
@@ -35,6 +35,10 @@ const orientations = [
     { label: "E", value: "East" },
     { label: "W", value: "West" },
 ] as const satisfies { label: string; value: Orientation }[];
+const sign_types = [
+    { label: "Unsigned", value: "Unsigned" },
+    { label: "TwosComp", value: "TwosComplement" }
+] as const satisfies { label: string; value: SignType }[];
 const handednesses = [
     { label: "TOP/LEFT", value: "TopLeft" },
     { label: "BOTTOM/RIGHT", value: "DownRight" },
@@ -264,6 +268,22 @@ const constantValue = {
                     </div>
                 </label>
             </AccordionContent>
+             <!-- SIGNEDNESS -->
+            <AccordionContent v-if="selectedProperties.has('signedness')" class="px-4 py-3 text-xs">
+                <label class="block">
+                    <span class="font-medium">Signedness</span>
+
+                    <div class="mt-2 flex overflow-hidden rounded border">
+                        <button v-for="option in sign_types" :key="option.value" type="button"
+                            class="flex-1 px-3 py-2 transition-colors" :class="selectedComponents[0].signType === option.value
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-panel-light hover:bg-panel-dark'
+                                " @click="updateAllSelected({ signType: option.value })">
+                            {{ option.label }}
+                        </button>
+                    </div>
+                </label>
+            </AccordionContent>
             <!-- CONSTANT VALUE -->
             <AccordionContent v-if="selectedProperties.has('constantValue')" class="px-4 py-3 text-xs">
                 <label class="block space-y-3">
@@ -274,6 +294,7 @@ const constantValue = {
                         <input v-model.lazy.trim="constantValue.dec.value" type="text" class="font-mono"
                             @keydown.stop />
                     </div>
+                    
                     <div>
                         <span class="flex justify-between font-medium">Binary</span>
                         <input v-model.lazy.trim="constantValue.bin.value" type="text" class="font-mono"

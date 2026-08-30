@@ -6,6 +6,7 @@ import type {
     Key,
     Orientation,
     Handedness,
+    SignType,
 } from "circuitsim-glue";
 import { Component } from "vue";
 
@@ -54,6 +55,7 @@ export type CircuitComponent =
         isInput: boolean; //For Pins
         textContent: string; //For textboxes
         constantValue: string;
+        signType: SignType;
 
         inputs: number;
         orientation: Orientation;

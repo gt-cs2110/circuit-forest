@@ -170,6 +170,7 @@ export function placeComponent(type: ComponentType, x: number, y: number) {
         isInput: false,
         textContent: "",
         constantValue: "0",
+        signType: "Unsigned"
     };
 
     currentSubcircuit.value.components.set(frontendId, new_component);
