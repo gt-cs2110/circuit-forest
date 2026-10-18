@@ -5,7 +5,11 @@ defineProps<{ defaultValue: string[] }>();
 </script>
 
 <template>
-    <AccordionRoot class="overflow-y-auto" type="multiple" :default-value="defaultValue">
+    <AccordionRoot
+        class="min-h-0 flex-1 overflow-y-auto"
+        type="multiple"
+        :default-value="defaultValue"
+    >
         <slot />
     </AccordionRoot>
 </template>

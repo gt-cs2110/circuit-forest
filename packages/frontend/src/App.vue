@@ -74,7 +74,7 @@ const rightWidth = ref(72 * 4);
     <div class="flex h-screen flex-col">
         <SplitterGroup direction="horizontal" :keyboard-resize-by="toPercentage(16)">
             <SplitterPanel
-                class="bg-panel-dark"
+                class="flex flex-col bg-panel-dark"
                 :min-size="toPercentage(48 * 4)"
                 :default-size="toPercentage(leftWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
@@ -97,7 +97,7 @@ const rightWidth = ref(72 * 4);
             />
 
             <SplitterPanel
-                class="bg-panel-dark"
+                class="flex flex-col bg-panel-dark"
                 :min-size="toPercentage(60 * 4)"
                 :default-size="toPercentage(rightWidth)"
                 :max-size="Math.min(toPercentage(96 * 4), 50)"
