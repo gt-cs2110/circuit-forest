@@ -30,13 +30,13 @@ const points = computed<[number, number][]>(() => {
     const mid_y = (start_y + end_y) / 2;
     return [
         [start_x, start_y],
-        ...(orient === "North" ? [[mid_x, start_y - 0.5]] : []) satisfies [number, number][],
+        ...((orient === "North" ? [[mid_x, start_y - 0.5]] : []) satisfies [number, number][]),
         [end_x, start_y],
-        ...(orient === "East" ? [[end_x + 0.5, mid_y]] : []) satisfies [number, number][],
+        ...((orient === "East" ? [[end_x + 0.5, mid_y]] : []) satisfies [number, number][]),
         [end_x, end_y],
-        ...(orient === "South" ? [[mid_x, end_y + 0.5]] : []) satisfies [number, number][],
+        ...((orient === "South" ? [[mid_x, end_y + 0.5]] : []) satisfies [number, number][]),
         [start_x, end_y],
-        ...(orient === "West" ? [[start_x - 0.5, mid_y]] : []) satisfies [number, number][],
+        ...((orient === "West" ? [[start_x - 0.5, mid_y]] : []) satisfies [number, number][]),
         [start_x, start_y],
     ] as const;
 });

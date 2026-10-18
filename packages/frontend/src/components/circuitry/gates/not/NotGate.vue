@@ -16,7 +16,7 @@ const { component } = defineProps<CircuitComponentProps>();
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"
         />
-    
+
         <circle
             :cx="3 * GRID_SIZE - (BUBBLE_SIZE / 2) * GRID_SIZE"
             :cy="1 * GRID_SIZE"

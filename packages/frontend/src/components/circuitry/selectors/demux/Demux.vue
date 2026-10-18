@@ -12,7 +12,13 @@ const dim = computed(() => (component ? getDimensions(component.bounds) : { widt
 <template>
     <g>
         <path
-            :d="trapezoid(invertOrientation(component?.orientation ?? 'East'), dim.width, dim.height)"
+            :d="
+                trapezoid(
+                    invertOrientation(component?.orientation ?? 'East'),
+                    dim.width,
+                    dim.height,
+                )
+            "
             fill="var(--color-component-fill)"
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"

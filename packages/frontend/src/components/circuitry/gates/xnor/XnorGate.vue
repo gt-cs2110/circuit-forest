@@ -16,7 +16,7 @@ const XOR_OFFSET = 0.5;
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"
         />
-    
+
         <path
             :d="`M ${XOR_OFFSET * GRID_SIZE} 0
                 Q ${(3 - BUBBLE_SIZE / 2) * GRID_SIZE} 0 ${(4 - BUBBLE_SIZE) * GRID_SIZE} ${2 * GRID_SIZE}
@@ -26,7 +26,7 @@ const XOR_OFFSET = 0.5;
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"
         />
-    
+
         <circle
             :cx="4 * GRID_SIZE - (BUBBLE_SIZE / 2) * GRID_SIZE"
             :cy="2 * GRID_SIZE"
@@ -35,6 +35,5 @@ const XOR_OFFSET = 0.5;
             stroke="var(--color-component-stroke)"
             stroke-linecap="round"
         />
-
     </g>
 </template>

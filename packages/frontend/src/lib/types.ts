@@ -42,23 +42,22 @@ export type ComponentMetadata = {
 
 export type ComponentMap = Record<string, ComponentMetadata>;
 
-export type CircuitComponent = 
-    TransientComponentState & {
-        pos: Location;
-        frontendId: number;
-        type: string;
-        label: string;
-        bitsize: number;
-        selsize: number;
-        isInput: boolean; //For Pins
-        textContent: string; //For textboxes
-        constantValue: string;
+export type CircuitComponent = TransientComponentState & {
+    pos: Location;
+    frontendId: number;
+    type: string;
+    label: string;
+    bitsize: number;
+    selsize: number;
+    isInput: boolean; //For Pins
+    textContent: string; //For textboxes
+    constantValue: string;
 
-        inputs: number;
-        orientation: Orientation;
-        handedness: Handedness;
-        labelOrientation: Orientation;
-    };
+    inputs: number;
+    orientation: Orientation;
+    handedness: Handedness;
+    labelOrientation: Orientation;
+};
 
 export type WireDirection = "H" | "V";
 export type Wire = TransientWireState; // FIXME: Wire should not be using this type
