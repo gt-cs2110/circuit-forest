@@ -1,7 +1,13 @@
 import { Handedness, Orientation, Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
-import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
+import {
+    componentPropertiesMap,
+    type CircuitComponent,
+    type ComponentType,
+    type Subcircuit,
+} from "../types";
+import { settings } from "./settings";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
 import { wireId } from "../wire";
 
@@ -28,6 +34,9 @@ export function defaultCircuit(): Map<number, Subcircuit> {
 
 export function keyEquals(k: Key, j: Key): boolean {
     return k.kind == j.kind && k.id[0] == j.id[0] && k.id[1] == j.id[1];
+}
+export function keyString(k: Key): string {
+    return `${k.kind}:${k.id[0]}v${k.id[1]}`;
 }
 
 /// Updates all components with the specified frontend IDs with the specified `updates`.
@@ -161,6 +170,10 @@ export function placeComponent(
         return;
     }
 
+    const hasBitsize = componentPropertiesMap[type]?.includes("bitsize") ?? false;
+    const bitsize = hasBitsize ? settings.value.globalBitsize : 1;
+    const constantValue = "0".repeat(bitsize);
+
     const frontendId = generateFrontendId();
     const new_component: CircuitComponent = {
         backendKey: window.api.core.addComponent(currentSubcircuit.value.backendKey, {
@@ -168,11 +181,13 @@ export function placeComponent(
             pos: { x, y },
             orientation,
             handedness,
+            ...(hasBitsize && { bitsize }),
+            ...(type === "constant" && { constantValue }),
         }),
         frontendId: frontendId,
         type: type,
         label: "",
-        bitsize: 1,
+        bitsize,
         inputs: 2,
         ports: [],
         bounds: [
@@ -186,7 +201,7 @@ export function placeComponent(
         selsize: 1,
         isInput: false,
         textContent: "",
-        constantValue: "0",
+        constantValue,
     };
 
     currentSubcircuit.value.components.set(frontendId, new_component);
@@ -197,7 +212,12 @@ export function placeComponent(
 }
 export function newSubcircuit(name?: string) {
     const frontendId = generateFrontendId();
-    name ??= "Circuit" + circuits.value.size;
+    if (name === undefined) {
+        const names = new Set(Array.from(circuits.value.values(), (c) => c.name));
+        let n = circuits.value.size;
+        while (names.has("New Circuit " + n)) n++;
+        name = "New Circuit " + n;
+    }
     const backendKey = window.api.core.createCircuit(name);
     circuits.value.set(frontendId, {
         frontendId,
@@ -222,10 +242,14 @@ export function updateState() {
     const [transientComponentStates, transientWireState] = window.api.core.getTransientState(
         currentSubcircuit.value.backendKey,
     );
+    const keyToComponent = new Map(
+        Array.from(currentSubcircuit.value.components.values(), (c) => [
+            keyString(c.backendKey),
+            c,
+        ]),
+    );
     transientComponentStates.forEach((state) => {
-        const corresponding_object = currentSubcircuit.value.components
-            .values()
-            .find((component) => keyEquals(component.backendKey, state.backendKey));
+        const corresponding_object = keyToComponent.get(keyString(state.backendKey));
         if (corresponding_object) {
             Object.assign(corresponding_object, state);
         }
