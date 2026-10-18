@@ -44,7 +44,7 @@ export function useZoom(
      * @returns true if zoom is triggered; false if not
      */
     function keyboardZoom(e: KeyboardEvent): boolean {
-        if (!e.metaKey) return false;
+        if (!e.metaKey && !e.ctrlKey) return false;
         if (!["-", "=", "+", "0"].includes(e.key)) return false;
 
         e.preventDefault();

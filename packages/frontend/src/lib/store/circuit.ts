@@ -3,6 +3,7 @@ import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
 import type { CircuitComponent, ComponentType, Subcircuit } from "../types";
 import { deleteViewState, placingComponent, selectComponent } from "./view";
+import { wireId } from "../wire";
 
 export const circuits = ref<Map<number, Subcircuit>>(defaultCircuit()); //mapping from frontend id to subcircuit
 export const currentSubcircuitId = ref(0);
@@ -58,7 +59,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
             currentSubcircuit.value.components.set(frontendIds[i], newComponents[i]);
         }
     } else {
-        toast.error("Update Unsucessful", {
+        toast.error("Update unsuccessful", {
             description: "Make sure updates do not move components out of bounds.",
             style: {
                 background: "#ef4444",
@@ -92,7 +93,7 @@ export function moveSelection(
         toRaw(delta),
     );
     if (!move) {
-        toast.error("Update Unsucessful", {
+        toast.error("Update unsuccessful", {
             description: "Make sure not to place component out of bounds.",
             style: {
                 background: "#ef4444",
@@ -104,19 +105,27 @@ export function moveSelection(
     }
 
     updateState();
+    return move;
 }
 
-export function deleteComponent(frontendId: number) {
-    const component = currentSubcircuit.value.components.get(frontendId);
-    if (component) {
-        window.api.core.removeComponent(currentSubcircuit.value.backendKey, component.backendKey);
-        currentSubcircuit.value.components.delete(frontendId);
-        updateState();
+export function deleteSelection(componentFrontendIds: Iterable<number>, wireIds: Iterable<string>) {
+    const { backendKey, components, wires } = currentSubcircuit.value;
+
+    for (const frontendId of componentFrontendIds) {
+        const component = components.get(frontendId);
+        if (!component) continue;
+        window.api.core.removeComponent(backendKey, component.backendKey);
+        components.delete(frontendId);
     }
-}
-//wires have to be delted in batches
-export function deleteWiresFromIds(wires: number[]) {
-    deleteWires(wires.map((id) => currentSubcircuit.value.wires[id].endpoints));
+
+    const ids = new Set(wireIds);
+    for (const wire of wires) {
+        if (ids.has(wireId(wire.endpoints))) {
+            window.api.core.removeWire(backendKey, ...toRaw(wire.endpoints));
+        }
+    }
+
+    updateState();
 }
 export function deleteWires(wires: [Location, Location][]) {
     for (const endpoints of wires) {

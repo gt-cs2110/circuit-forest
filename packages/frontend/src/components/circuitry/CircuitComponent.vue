@@ -25,7 +25,6 @@ const dragTransform = computed(() => {
 });
 
 function handleMouseDown(e: MouseEvent) {
-    console.log(e);
     if (e.button !== 0) return;
     e.stopPropagation();
 

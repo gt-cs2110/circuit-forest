@@ -2,13 +2,7 @@
 import { type Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
-import {
-    addPolyWire,
-    deleteComponent,
-    deleteWiresFromIds,
-    placeComponent,
-    updateState,
-} from "@/lib/store/circuit";
+import { addPolyWire, deleteSelection, placeComponent, updateState } from "@/lib/store/circuit";
 import {
     clearSelection,
     componentSelection,
@@ -31,6 +25,7 @@ import { useZoom } from "@/composables/useZoom";
 import { useTooltip } from "@/composables/useTooltip";
 import { getPreviewGeometry } from "@/lib/preview";
 import { isEditableTarget } from "@/lib/keyboard";
+import { wireId } from "@/lib/wire";
 
 const props = defineProps<{
     subcircuit: Subcircuit;
@@ -102,7 +97,7 @@ watch(placingComponent, () => {
     placingComponentPosition.value = null;
 });
 
-watch(mousePosition, (mouse) => {
+function updatePlacingPosition() {
     if (!placingComponent.value) {
         return;
     }
@@ -113,14 +108,29 @@ watch(mousePosition, (mouse) => {
         placingHandedness.value,
     );
 
-    const worldX = (mouse.x - offset.value.x) / GRID_SIZE / scale.value;
-    const worldY = (mouse.y - offset.value.y) / GRID_SIZE / scale.value;
-
+    const world = containerToWorld(mousePosition.value.x, mousePosition.value.y);
     placingComponentPosition.value = {
-        x: Math.floor(worldX - geometry.dimensions.width / 2),
-        y: Math.floor(worldY - geometry.dimensions.height / 2),
+        x: Math.round(world.x - geometry.dimensions.width / 2),
+        y: Math.round(world.y - geometry.dimensions.height / 2),
     };
+}
+watch(mousePosition, updatePlacingPosition);
+
+// recenter since the dimensions can change
+watch([placingOrientation, placingHandedness], () => {
+    if (placingComponentPosition.value !== null) updatePlacingPosition();
 });
+
+// remove deleted wires from selection
+watch(
+    () => props.subcircuit.wires,
+    (wires) => {
+        const ids = new Set(wires.map((wire) => wireId(wire.endpoints)));
+        for (const id of wireSelection.value) {
+            if (!ids.has(id)) wireSelection.value.delete(id);
+        }
+    },
+);
 
 function handleMouseDown(e: MouseEvent) {
     if ((e.button === 0 && e.metaKey) || e.button === 1) {
@@ -152,12 +162,9 @@ function handleMouseMove(e: MouseEvent) {
 }
 function handleDelete(e: KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
-    if (e.key === "Backspace") {
+    if (e.key === "Backspace" || e.key === "Delete") {
         if (componentSelection.value.size > 0 || wireSelection.value.size > 0) {
-            for (const frontendId of componentSelection.value) {
-                deleteComponent(frontendId);
-            }
-            deleteWiresFromIds(Array.from(wireSelection.value));
+            deleteSelection(componentSelection.value, wireSelection.value);
 
             componentSelection.value.clear();
             wireSelection.value.clear();
@@ -184,7 +191,6 @@ function handleComponentDragStart(e: MouseEvent) {
     startDrag(world.x, world.y);
 }
 function handleComponentWireDrag(e: MouseEvent) {
-    console.log("starting wire drag");
     const world = toWorld(e);
 
     if (!wireDrag.value.active) {
@@ -210,8 +216,8 @@ function stopWireDrag() {
 function updateWireDrag(e: MouseEvent) {
     if (!wireDrag.value.active) return;
     const world = toWorld(e);
-    world.x = Math.ceil(world.x);
-    world.y = Math.floor(world.y);
+    world.x = Math.round(world.x);
+    world.y = Math.round(world.y);
 
     let start = wireDrag.value.points.at(0);
     if (!start) return;
@@ -337,8 +343,12 @@ onUnmounted(() => {
                 />
             </g>
 
-            <g v-for="(wire, i) in subcircuit.wires" :key="i">
-                <Wire :wire @wiredrag="handleComponentWireDrag" />
+            <g v-for="wire in subcircuit.wires" :key="wireId(wire.endpoints)">
+                <Wire
+                    :wire
+                    @dragstart="handleComponentDragStart"
+                    @wiredrag="handleComponentWireDrag"
+                />
             </g>
             <template v-if="wireDrag.active">
                 <line
@@ -348,7 +358,7 @@ onUnmounted(() => {
                     :y1="point.y * GRID_SIZE"
                     :x2="wireDrag.points[i + 1].x * GRID_SIZE"
                     :y2="wireDrag.points[i + 1].y * GRID_SIZE"
-                    stroke="black"
+                    stroke="var(--color-foreground)"
                     stroke-width="2"
                     stroke-linecap="round"
                 />

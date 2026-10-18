@@ -89,7 +89,10 @@ const rightWidth = ref(72 * 4);
 
             <SplitterPanel class="flex flex-1 flex-col">
                 <CircuitTabs />
-                <CircuitCanvas :subcircuit="currentSubcircuit" />
+                <CircuitCanvas
+                    :key="currentSubcircuit.frontendId"
+                    :subcircuit="currentSubcircuit"
+                />
             </SplitterPanel>
 
             <SplitterResizeHandle

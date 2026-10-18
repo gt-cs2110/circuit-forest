@@ -6,7 +6,7 @@ import { currentSubcircuitId } from "./circuit";
 
 type CircuitViewState = {
     componentSelection: Set<number>;
-    wireSelection: Set<number>;
+    wireSelection: Set<string>; // strings are wire ids
     offset: Location; // screen coords
 };
 
@@ -37,7 +37,7 @@ export function selectComponent(componentFrontendId: number, additive: boolean) 
     if (!additive) clearSelection();
     componentSelection.value.add(componentFrontendId);
 }
-export function selectWire(wireId: number, additive: boolean) {
+export function selectWire(wireId: string, additive: boolean) {
     if (!additive) clearSelection();
     wireSelection.value.add(wireId);
 }
@@ -45,7 +45,7 @@ export function selectWire(wireId: number, additive: boolean) {
 export function deselectComponent(componentFrontendId: number) {
     componentSelection.value.delete(componentFrontendId);
 }
-export function deselectWire(wireId: number) {
+export function deselectWire(wireId: string) {
     wireSelection.value.delete(wireId);
 }
 
@@ -57,7 +57,7 @@ export function clearSelection() {
 export function isComponentSelected(id: number) {
     return componentSelection.value.has(id);
 }
-export function isWireSelected(id: number) {
+export function isWireSelected(id: string) {
     return wireSelection.value.has(id);
 }
 

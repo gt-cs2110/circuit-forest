@@ -1,22 +1,20 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
-import { currentSubcircuit } from "@/lib/store/circuit";
 import { deselectWire, isWireSelected, selectWire } from "@/lib/store/view";
 import { DragState, Wire } from "@/lib/types";
-import { wireColor } from "@/lib/wire";
+import { wireColor, wireId } from "@/lib/wire";
 import { computed, inject, useId } from "vue";
 
 const { wire } = defineProps<{ wire: Wire }>();
 const emit = defineEmits<{
+    dragstart: [e: MouseEvent];
     wiredrag: [e: MouseEvent];
 }>();
-const index = computed(() => {
-    return currentSubcircuit.value.wires.indexOf(wire);
-});
+const id = computed(() => wireId(wire.endpoints));
 const baseId = useId();
 // ~~~ DRAG HANDLERS ~~~
 const dragState = inject<DragState>("dragState");
-const isDragging = computed(() => dragState?.value.active && isWireSelected(index.value));
+const isDragging = computed(() => dragState?.value.active && isWireSelected(id.value));
 const dragTransform = computed(() => {
     if (!dragState || !isDragging.value) return "";
     const { delta } = dragState.value;
@@ -24,7 +22,15 @@ const dragTransform = computed(() => {
 });
 
 function handleMouseDown(e: MouseEvent) {
-    if (!isWireSelected(index.value)) emit("wiredrag", e);
+    if (e.button !== 0) return;
+
+    // dragging a selected wire should just move the selection instead of extending
+    if (isWireSelected(id.value)) {
+        e.stopPropagation();
+        emit("dragstart", e);
+    } else {
+        emit("wiredrag", e);
+    }
 }
 function handleClick(e: MouseEvent) {
     if (e.button !== 0) return;
@@ -32,13 +38,13 @@ function handleClick(e: MouseEvent) {
 
     const additive = e.shiftKey || e.metaKey;
 
-    if (additive && isWireSelected(index.value)) {
-        deselectWire(index.value);
+    if (additive && isWireSelected(id.value)) {
+        deselectWire(id.value);
         return;
     }
 
-    if (!isWireSelected(index.value)) {
-        selectWire(index.value, additive);
+    if (!isWireSelected(id.value)) {
+        selectWire(id.value, additive);
         let displayKey = `${wire.backendKey.kind}:${wire.backendKey.id[0]}v${wire.backendKey.id[1]}`;
         console.log("Wire value:", wire.value, displayKey);
     }
@@ -50,7 +56,7 @@ function handleClick(e: MouseEvent) {
     <g :transform="dragTransform">
         <!-- Selected outline -->
         <line
-            v-if="isWireSelected(index)"
+            v-if="isWireSelected(id)"
             :x1="wire.endpoints[0].x * GRID_SIZE"
             :y1="wire.endpoints[0].y * GRID_SIZE"
             :x2="wire.endpoints[1].x * GRID_SIZE"

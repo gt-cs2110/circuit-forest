@@ -3,14 +3,15 @@ import { Ref, ref } from "vue";
 
 import { getDimensions } from "@/lib/bounds";
 import type { Subcircuit } from "@/lib/types";
+import { wireId } from "@/lib/wire";
 
 type Rect = { left: number; top: number; right: number; bottom: number };
-type Selectable = { id: number; bounds: Rect };
+type Selectable<Id> = { id: Id; bounds: Rect };
 
 export function useMarquee(
     subcircuit: Subcircuit,
     componentSelection: Ref<Set<number>>,
-    wireSelection: Ref<Set<number>>,
+    wireSelection: Ref<Set<string>>,
 ) {
     const marquee = ref({
         active: false,
@@ -63,7 +64,7 @@ export function useMarquee(
     return { marquee, startMarquee, updateMarquee, finalizeMarquee };
 }
 
-function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
+function getComponentSelectables(subcircuit: Subcircuit): Selectable<number>[] {
     return [...subcircuit.components].map(([id, component]) => {
         const dims = getDimensions(component.bounds);
         const { x, y } = component.pos;
@@ -77,20 +78,12 @@ function getComponentSelectables(subcircuit: Subcircuit): Selectable[] {
             },
         };
     });
-    //TO DO add wire seleciton here
 }
-function getWireSelectables(subcircuit: Subcircuit): Selectable[] {
-    return [...subcircuit.wires].map((wire, id) => {
-        return {
-            id,
-            bounds: {
-                left: wire.endpoints[0].x,
-                right: wire.endpoints[1].x,
-                top: wire.endpoints[0].y,
-                bottom: wire.endpoints[1].y,
-            },
-        };
-    });
+function getWireSelectables(subcircuit: Subcircuit): Selectable<string>[] {
+    return subcircuit.wires.map((wire) => ({
+        id: wireId(wire.endpoints),
+        bounds: toBounds(...wire.endpoints),
+    }));
 }
 
 function toBounds(a: Location, b: Location): Rect {
