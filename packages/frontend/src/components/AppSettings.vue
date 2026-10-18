@@ -13,8 +13,12 @@ const themeNames: Record<Theme, string> = {
 
 <template>
     <PopoverRoot>
-        <PopoverTrigger>
-            <SettingsIcon :size="16" absolute-stroke-width class="text-foreground-muted" />
+        <PopoverTrigger aria-label="Settings" title="Settings" class="cursor-pointer">
+            <SettingsIcon
+                :size="16"
+                absolute-stroke-width
+                class="text-foreground-muted transition hover:text-foreground"
+            />
         </PopoverTrigger>
 
         <PopoverPortal>
@@ -22,18 +26,19 @@ const themeNames: Record<Theme, string> = {
                 align="start"
                 side="bottom"
                 :side-offset="8"
-                class="left-2 w-64 border bg-panel-dark p-4 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in"
+                class="w-64 border bg-panel-dark p-4 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in"
             >
                 <fieldset class="text-xs">
-                    <span class="flex justify-between font-medium"> Theme </span>
+                    <legend class="font-medium">Theme</legend>
                     <label
                         v-for="newTheme in themes"
                         :key="newTheme"
-                        class="mt-1 block w-full appearance-none border px-1 py-1 accent-blue-500 focus-within:outline"
-                        :class="{
-                            'bg-panel-dark': newTheme === theme,
-                            'bg-panel-light': newTheme !== theme,
-                        }"
+                        class="mt-1 block w-full cursor-pointer border px-1 py-1 transition-colors focus-within:outline"
+                        :class="
+                            newTheme === theme
+                                ? 'border-blue-500 bg-blue-500/10'
+                                : 'bg-panel-light hover:border-blue-500'
+                        "
                     >
                         {{ themeNames[newTheme] }}
                         <input
