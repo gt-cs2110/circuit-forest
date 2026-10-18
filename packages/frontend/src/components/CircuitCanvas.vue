@@ -30,6 +30,7 @@ import { useMarquee } from "@/composables/useMarquee";
 import { useZoom } from "@/composables/useZoom";
 import { useTooltip } from "@/composables/useTooltip";
 import { getPreviewGeometry } from "@/lib/preview";
+import { isEditableTarget } from "@/lib/keyboard";
 
 const props = defineProps<{
     subcircuit: Subcircuit;
@@ -150,6 +151,7 @@ function handleMouseMove(e: MouseEvent) {
     updateTooltip(e.target!);
 }
 function handleDelete(e: KeyboardEvent) {
+    if (isEditableTarget(e.target)) return;
     if (e.key === "Backspace") {
         if (componentSelection.value.size > 0 || wireSelection.value.size > 0) {
             for (const frontendId of componentSelection.value) {
@@ -237,6 +239,7 @@ function handleWheel(e: WheelEvent) {
 
 function handleKeyDown(e: KeyboardEvent) {
     if (keyboardZoom(e)) return;
+    if (isEditableTarget(e.target)) return;
 
     if (e.key === "Escape") {
         placingComponent.value = null;
@@ -244,11 +247,14 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
-onMounted(() => document.addEventListener("keydown", handleKeyDown));
 onMounted(() => {
+    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keydown", handleDelete);
 });
-onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
+onUnmounted(() => {
+    document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("keydown", handleDelete);
+});
 </script>
 
 <template>

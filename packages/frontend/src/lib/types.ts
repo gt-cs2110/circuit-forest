@@ -107,7 +107,7 @@ const propertyGroups = [
         properties: ["label", "label_orientation", "orientation", "handedness", "selsize"],
     },
     {
-        types: ["ground", "power", "subcircuit", "tunnel"],
+        types: ["ground", "power", "subcircuit"],
         properties: ["label", "label_orientation", "orientation"],
     },
     {

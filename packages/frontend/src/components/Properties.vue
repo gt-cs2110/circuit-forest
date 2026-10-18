@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Handedness, Orientation } from "circuitsim-glue";
-import { computed, onMounted, ref, watchEffect } from "vue";
+import { computed, onMounted, onUnmounted, ref, useId, watch, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
+import SegmentedControl from "./ui/SegmentedControl.vue";
+import { isEditableTarget } from "@/lib/keyboard";
 import { settings } from "@/lib/store/settings";
 import {
     componentSelection,
@@ -20,38 +22,49 @@ const subcircuitName = computed({
         return currentSubcircuit.value.name;
     },
     set(name) {
+        const current = currentSubcircuit.value;
+        if (name === current.name) return;
+
         if (name === "") {
             toast.error("Subcircuit name is required!");
             nameReset.value++;
             return;
-        } else if ([...circuits.value.values()].some((subcircuit) => subcircuit.name === name)) {
+        } else if (
+            [...circuits.value.values()].some(
+                (subcircuit) =>
+                    subcircuit.frontendId !== current.frontendId && subcircuit.name === name,
+            )
+        ) {
             toast.error("A subcircuit with this name already exists!");
             nameReset.value++;
             return;
         }
-        currentSubcircuit.value.name = name;
+        current.name = name;
     },
 });
 
 // FIXME: These two consts is redundant and should be removed.
 const orientations = [
-    { label: "N", value: "North" },
-    { label: "S", value: "South" },
-    { label: "E", value: "East" },
-    { label: "W", value: "West" },
-] as const satisfies { label: string; value: Orientation }[];
+    { label: "N", name: "North", value: "North" },
+    { label: "E", name: "East", value: "East" },
+    { label: "S", name: "South", value: "South" },
+    { label: "W", name: "West", value: "West" },
+] as const satisfies { label: string; name: string; value: Orientation }[];
 const handednesses = [
-    { label: "TOP/LEFT", value: "TopLeft" },
-    { label: "BOTTOM/RIGHT", value: "DownRight" },
-] as const satisfies { label: string; value: Handedness }[];
+    { label: "TOP/LEFT", name: "Top/Left", value: "TopLeft" },
+    { label: "BOTTOM/RIGHT", name: "Bottom/Right", value: "DownRight" },
+] as const satisfies { label: string; name: string; value: Handedness }[];
+
+const labelOrientationId = useId();
+const orientationId = useId();
+const handednessId = useId();
 
 const selectedComponents = computed<CircuitComponent[]>(() =>
     [...componentSelection.value].map((id) => currentSubcircuit.value.components.get(id)!),
 );
 // Get properties defined by all selected components.
 const selectedProperties = computed(() => {
-    if (selectedComponents.value.length == 0) return new Set();
-
+    if (selectedComponents.value.length == 0) return new Set<string>();
     return selectedComponents.value
         .map((c) => new Set(getComponentProps(c)))
         .reduce((acc, cv) => acc.intersection(cv));
@@ -77,7 +90,7 @@ function updateAllSelected(updates: Partial<CircuitComponent>) {
 /** Gets all defined properties for a given component. */
 function getComponentProps(component: CircuitComponent) {
     // FIXME: Please use an enum here instead of string[]
-    return componentPropertiesMap[component.type.toLowerCase()];
+    return componentPropertiesMap[component.type.toLowerCase()] ?? [];
 }
 
 // TODO: Allow null or "invalid state" cases
@@ -95,86 +108,96 @@ watchEffect(() => {
     nInputsInput.value = getFromSelected((c) => c.inputs, 1);
 });
 
+// Mixed values across the selection show no active option.
+const labelOrientationValue = computed(() =>
+    getFromSelected<Orientation | undefined>((c) => c.labelOrientation, undefined),
+);
+const orientationValue = computed(() =>
+    getFromSelected<Orientation | undefined>((c) => c.orientation, undefined),
+);
+const handednessValue = computed(() =>
+    getFromSelected<Handedness | undefined>((c) => c.handedness, undefined),
+);
+
+function fitToBitsize(bin: string) {
+    return bin.padStart(bitsizeInput.value, "0").slice(-bitsizeInput.value);
+}
+
 const constantError = ref("");
+watch(
+    () => [...componentSelection.value].join(),
+    () => (constantError.value = ""),
+);
 const constantValue = {
     dec: computed({
         get: () => {
             let bin = getFromSelected((c) => c.constantValue, "0");
-            return /^[01]+$/.test(bin) ? parseInt(bin, 2) : "?";
+            // BigInt keeps values above 53 bits exact.
+            return /^[01]+$/.test(bin) ? BigInt("0b" + bin).toString() : "?";
         },
-        set: (value) => {
+        set: (value: string) => {
             constantError.value = "";
-            const n = +value;
-            if (!Number.isInteger(n) || n < 0 || isNaN(n)) {
+            if (!/^\d+$/.test(value)) {
                 constantError.value = "Enter a non-negative integer";
                 return;
             }
 
-            let bin = n.toString(2).padStart(bitsizeInput.value, "0").slice(-bitsizeInput.value);
-            updateAllSelected({ constantValue: bin });
+            updateAllSelected({ constantValue: fitToBitsize(BigInt(value).toString(2)) });
         },
     }),
     bin: computed({
         get: () => getFromSelected((c) => c.constantValue, "0"),
-        set: (value) => {
+        set: (value: string) => {
             constantError.value = "";
             if (!/^[01]+$/.test(value)) {
                 constantError.value = "Binary digits only (0 and 1)";
                 return;
             }
 
-            let bin = value.slice(-bitsizeInput.value);
-            updateAllSelected({ constantValue: bin });
+            updateAllSelected({ constantValue: fitToBitsize(value) });
         },
     }),
 };
 
-onMounted(() =>
-    document.addEventListener("keydown", (e) => {
-        if (placingComponent.value) {
-            if (e.key == "ArrowUp") {
-                placingOrientation.value = "North";
-            }
-            if (e.key == "ArrowLeft") {
-                placingOrientation.value = "West";
-            }
-            if (e.key == "ArrowRight") {
-                placingOrientation.value = "East";
-            }
-            if (e.key == "ArrowDown") {
-                placingOrientation.value = "South";
-            }
-            if (e.key.toLowerCase() == "h") {
-                placingHandedness.value =
-                    placingHandedness.value == "TopLeft" ? "DownRight" : "TopLeft";
-            }
-        } else {
-            if (selectedProperties.value.has("orientation")) {
-                if (e.key == "ArrowUp") {
-                    updateAllSelected({ orientation: "North" });
-                }
-                if (e.key == "ArrowLeft") {
-                    updateAllSelected({ orientation: "West" });
-                }
-                if (e.key == "ArrowRight") {
-                    updateAllSelected({ orientation: "East" });
-                }
-                if (e.key == "ArrowDown") {
-                    updateAllSelected({ orientation: "South" });
-                }
-            }
-            if (selectedProperties.value.has("handedness")) {
-                if (e.key.toLowerCase() == "h") {
-                    if (selectedComponents.value[0].handedness == "TopLeft") {
-                        updateAllSelected({ handedness: "DownRight" });
-                    } else {
-                        updateAllSelected({ handedness: "TopLeft" });
-                    }
-                }
+const arrowOrientations: Record<string, Orientation> = {
+    ArrowUp: "North",
+    ArrowLeft: "West",
+    ArrowRight: "East",
+    ArrowDown: "South",
+};
+
+function handleKeyDown(e: KeyboardEvent) {
+    if (isEditableTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const orientation = arrowOrientations[e.key];
+    const isHandednessKey = e.key.toLowerCase() == "h";
+
+    if (placingComponent.value) {
+        if (orientation) {
+            e.preventDefault();
+            placingOrientation.value = orientation;
+        }
+        if (isHandednessKey) {
+            placingHandedness.value =
+                placingHandedness.value == "TopLeft" ? "DownRight" : "TopLeft";
+        }
+    } else {
+        if (orientation && selectedProperties.value.has("orientation")) {
+            e.preventDefault();
+            updateAllSelected({ orientation });
+        }
+        if (isHandednessKey && selectedProperties.value.has("handedness")) {
+            if (selectedComponents.value[0].handedness == "TopLeft") {
+                updateAllSelected({ handedness: "DownRight" });
+            } else {
+                updateAllSelected({ handedness: "TopLeft" });
             }
         }
-    }),
-);
+    }
+}
+
+onMounted(() => document.addEventListener("keydown", handleKeyDown));
+onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 </script>
 
 <template>
@@ -193,7 +216,7 @@ onMounted(() =>
                         <span>{{ settings.globalBitsize }}</span>
                     </span>
                     <input
-                        v-model="settings.globalBitsize"
+                        v-model.number="settings.globalBitsize"
                         type="range"
                         min="1"
                         step="1"
@@ -209,16 +232,12 @@ onMounted(() =>
 
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
-                    <span class="flex justify-between font-medium"> Name </span>
+                    <span class="font-medium">Name</span>
                     <input
                         :key="nameReset"
                         v-model.lazy.trim="subcircuitName"
                         type="text"
-                        min="1"
-                        step="1"
-                        max="16"
-                        @keydown.stop
-                        class="mt-1 block w-full appearance-none border bg-panel-light px-1 py-1 accent-blue-500"
+                        class="mt-1 block w-full border bg-panel-light px-1 py-1"
                     />
                 </label>
             </AccordionContent>
@@ -244,37 +263,27 @@ onMounted(() =>
                     selectedComponents.length == 1 &&
                     getComponentProps(selectedComponents[0]).includes('label')
                 "
-                class="px-4 py-3 text-xs"
+                class="space-y-3 px-4 py-3 text-xs"
             >
                 <label class="block">
-                    <span class="flex justify-between font-medium">Label</span>
+                    <span class="font-medium">Label</span>
                     <input
                         v-model.lazy.trim="labelInput"
                         type="text"
                         placeholder="Enter label..."
-                        @keydown.stop
+                        class="mt-1 block w-full border bg-panel-light px-1 py-1 placeholder:text-foreground-muted"
                     />
-
-                    <h2 class="font-medium">Label Orientation</h2>
-
-                    <!-- FIXME: Missing accessibility labels -->
-                    <div class="mt-2 flex overflow-hidden rounded border">
-                        <button
-                            v-for="option in orientations"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].labelOrientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ labelOrientation: option.value })"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
                 </label>
+
+                <div>
+                    <span :id="labelOrientationId" class="font-medium">Label Orientation</span>
+                    <SegmentedControl
+                        :options="orientations"
+                        :value="labelOrientationValue"
+                        :labelledby="labelOrientationId"
+                        @update:value="updateAllSelected({ labelOrientation: $event })"
+                    />
+                </div>
             </AccordionContent>
 
             <!-- BITSIZE -->
@@ -292,7 +301,6 @@ onMounted(() =>
                         :max="64"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                         @change="updateAllSelected({ bitsize: bitsizeInput })"
-                        @keydown.stop
                     />
                 </label>
             </AccordionContent>
@@ -312,7 +320,6 @@ onMounted(() =>
                         :max="6"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                         @change="updateAllSelected({ selsize: selsizeInput })"
-                        @keydown.stop
                     />
                 </label>
             </AccordionContent>
@@ -320,7 +327,7 @@ onMounted(() =>
             <AccordionContent v-if="selectedProperties.has('inputs')" class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="flex justify-between">
-                        <span class="font-medium"> Num Inputs</span>
+                        <span class="font-medium">Num Inputs</span>
                         <span>{{ nInputsInput }}</span>
                     </span>
                     <input
@@ -331,7 +338,6 @@ onMounted(() =>
                         :max="8"
                         class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
                         @change="updateAllSelected({ inputs: nInputsInput })"
-                        @keydown.stop
                     />
                 </label>
             </AccordionContent>
@@ -340,83 +346,54 @@ onMounted(() =>
                 v-if="selectedProperties.has('orientation')"
                 class="px-4 py-3 text-xs"
             >
-                <label class="block">
-                    <span class="font-medium">Orientation</span>
-
-                    <div class="mt-2 flex overflow-hidden rounded border">
-                        <!-- FIXME: Missing accessibility labels -->
-                        <button
-                            v-for="option in orientations"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].orientation === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ orientation: option.value })"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
-                </label>
+                <span :id="orientationId" class="font-medium">Orientation</span>
+                <SegmentedControl
+                    :options="orientations"
+                    :value="orientationValue"
+                    :labelledby="orientationId"
+                    @update:value="updateAllSelected({ orientation: $event })"
+                />
             </AccordionContent>
 
             <!-- HANDEDNESS -->
             <AccordionContent v-if="selectedProperties.has('handedness')" class="px-4 py-3 text-xs">
-                <label class="block">
-                    <span class="font-medium">Handedness</span>
-
-                    <div class="mt-2 flex overflow-hidden rounded border">
-                        <!-- FIXME: Missing accessibility labels -->
-                        <button
-                            v-for="option in handednesses"
-                            :key="option.value"
-                            type="button"
-                            class="flex-1 px-3 py-2 transition-colors"
-                            :class="
-                                selectedComponents[0].handedness === option.value
-                                    ? 'bg-blue-500 text-white'
-                                    : 'bg-panel-light hover:bg-panel-dark'
-                            "
-                            @click="updateAllSelected({ handedness: option.value })"
-                        >
-                            {{ option.label }}
-                        </button>
-                    </div>
-                </label>
+                <span :id="handednessId" class="font-medium">Handedness</span>
+                <SegmentedControl
+                    :options="handednesses"
+                    :value="handednessValue"
+                    :labelledby="handednessId"
+                    @update:value="updateAllSelected({ handedness: $event })"
+                />
             </AccordionContent>
             <!-- CONSTANT VALUE -->
             <AccordionContent
                 v-if="selectedProperties.has('constantValue')"
                 class="px-4 py-3 text-xs"
             >
-                <label class="block space-y-3">
-                    <span class="font-medium">Value</span>
+                <fieldset class="space-y-3">
+                    <legend class="font-medium">Value</legend>
 
-                    <div>
-                        <span class="flex justify-between font-medium">Decimal</span>
+                    <label class="block">
+                        <span class="font-medium">Decimal</span>
                         <input
                             v-model.lazy.trim="constantValue.dec.value"
                             type="text"
-                            class="font-mono"
-                            @keydown.stop
+                            inputmode="numeric"
+                            class="mt-1 block w-full border bg-panel-light px-1 py-1 font-mono"
                         />
-                    </div>
-                    <div>
-                        <span class="flex justify-between font-medium">Binary</span>
+                    </label>
+                    <label class="block">
+                        <span class="font-medium">Binary</span>
                         <input
                             v-model.lazy.trim="constantValue.bin.value"
                             type="text"
-                            class="font-mono"
-                            @keydown.stop
+                            class="mt-1 block w-full border bg-panel-light px-1 py-1 font-mono"
                         />
-                    </div>
-                    <span v-if="constantError" class="text-xs text-red-500">{{
-                        constantError
-                    }}</span>
-                </label>
+                    </label>
+                    <p v-if="constantError" class="text-xs text-red-500">
+                        {{ constantError }}
+                    </p>
+                </fieldset>
             </AccordionContent>
         </AccordionItem>
     </AccordionRoot>
