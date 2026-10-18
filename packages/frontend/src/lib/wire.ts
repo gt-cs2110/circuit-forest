@@ -1,4 +1,5 @@
 import type { Location } from "circuitsim-glue";
+import type { Wire } from "./types";
 
 /** Gets the wire color from the bit array. */
 export function wireColor(value: string) {
@@ -16,4 +17,20 @@ export function wireColor(value: string) {
  */
 export function wireId([a, b]: readonly [Location, Location]) {
     return `${a.x},${a.y}:${b.x},${b.y}`;
+}
+
+/**
+ * Returns points with 3+ endpoints to render dots that indicate intersection.
+ */
+export function getJunctions(wires: readonly Wire[]) {
+    const junctions = new Map<string, { pos: Location; value: string; count: number }>();
+    for (const wire of wires) {
+        for (const pos of wire.endpoints) {
+            const key = `${pos.x},${pos.y}`;
+            const junction = junctions.get(key);
+            if (junction) junction.count++;
+            else junctions.set(key, { pos, value: wire.value, count: 1 });
+        }
+    }
+    return [...junctions].filter(([, { count }]) => count >= 3);
 }

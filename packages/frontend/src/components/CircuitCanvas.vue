@@ -25,7 +25,7 @@ import { useZoom } from "@/composables/useZoom";
 import { useTooltip } from "@/composables/useTooltip";
 import { getPreviewGeometry } from "@/lib/preview";
 import { isEditableTarget } from "@/lib/keyboard";
-import { wireId } from "@/lib/wire";
+import { getJunctions, wireColor, wireId } from "@/lib/wire";
 
 const props = defineProps<{
     subcircuit: Subcircuit;
@@ -90,6 +90,8 @@ function toWorld(e: MouseEvent) {
     const rect = containerRef.value!.getBoundingClientRect();
     return containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
 }
+
+const junctions = computed(() => getJunctions(props.subcircuit.wires));
 
 const placingComponentPosition = ref<Location | null>(null);
 
@@ -350,6 +352,15 @@ onUnmounted(() => {
                     @wiredrag="handleComponentWireDrag"
                 />
             </g>
+            <circle
+                v-for="[key, junction] in junctions"
+                :key
+                :cx="junction.pos.x * GRID_SIZE"
+                :cy="junction.pos.y * GRID_SIZE"
+                r="3"
+                :fill="wireColor(junction.value)"
+                class="pointer-events-none"
+            />
             <template v-if="wireDrag.active">
                 <line
                     v-for="(point, i) in wireDrag.points.slice(0, -1)"
