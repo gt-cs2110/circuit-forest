@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 
+const MIN_THUMB_WIDTH = 32;
+
 const childWidth = ref(0);
 const parentWidth = ref(0);
 const scrollAmount = ref(0);
 const isScrollable = computed(() => childWidth.value > parentWidth.value);
+const isActive = ref(false);
 const isDragging = ref(false);
 const dragStartX = ref(0);
 const dragStartScrollLeft = ref(0);
@@ -12,20 +15,30 @@ const dragStartScrollLeft = ref(0);
 const parent = useTemplateRef("parent");
 const child = useTemplateRef("child");
 
-let observer: ResizeObserver;
+const thumbWidth = computed(() =>
+    Math.max((parentWidth.value / childWidth.value) * parentWidth.value, MIN_THUMB_WIDTH),
+);
+const maxScrollLeft = computed(() => childWidth.value - parentWidth.value);
+const maxThumbLeft = computed(() => parentWidth.value - thumbWidth.value);
+const thumbLeft = computed(() =>
+    maxScrollLeft.value > 0 ? (scrollAmount.value / maxScrollLeft.value) * maxThumbLeft.value : 0,
+);
+
+let observer: ResizeObserver | undefined;
+let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+function measure() {
+    if (!parent.value || !child.value) return;
+    childWidth.value = child.value.scrollWidth;
+    parentWidth.value = parent.value.clientWidth;
+    scrollAmount.value = parent.value.scrollLeft;
+}
 
 onMounted(() => {
     if (!parent.value || !child.value) return;
 
-    childWidth.value = child.value.scrollWidth;
-    parentWidth.value = parent.value.clientWidth;
-
-    observer = new ResizeObserver(() => {
-        if (!parent.value || !child.value) return;
-        childWidth.value = child.value.scrollWidth;
-        parentWidth.value = parent.value.clientWidth;
-    });
-
+    measure();
+    observer = new ResizeObserver(measure);
     observer.observe(parent.value);
     observer.observe(child.value);
 
@@ -34,9 +47,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    if (observer) {
-        observer.disconnect();
-    }
+    observer?.disconnect();
 
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
@@ -44,25 +55,18 @@ onUnmounted(() => {
     clearTimeout(timeoutId);
 });
 
-let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
 function handleWheel(e: WheelEvent) {
-    if (!e.deltaY || !parent.value) {
-        return;
-    }
+    if (!parent.value || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
     e.preventDefault();
     parent.value.scrollLeft += e.deltaY;
 }
 
-function scrollChanged(e: Event) {
-    const target = e.currentTarget as HTMLElement;
-    scrollAmount.value = target.scrollLeft;
-    parent.value.parentElement.dataset.active = "true";
+function scrollChanged() {
+    if (!parent.value) return;
+    scrollAmount.value = parent.value.scrollLeft;
+    isActive.value = true;
     clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-        parent.value.parentElement.dataset.active = "false";
-        timeoutId = null;
-    }, 700);
+    timeoutId = setTimeout(() => (isActive.value = false), 700);
 }
 
 function handleMouseDown(e: MouseEvent) {
@@ -74,14 +78,10 @@ function handleMouseDown(e: MouseEvent) {
 }
 
 function handleMouseMove(e: MouseEvent) {
-    if (!isDragging.value || !parent.value) return;
+    if (!isDragging.value || !parent.value || maxThumbLeft.value <= 0) return;
 
     const deltaX = e.clientX - dragStartX.value;
-    const scrollbarWidth = (parentWidth.value / childWidth.value) * parentWidth.value;
-    const maxScrollLeft = childWidth.value - parentWidth.value;
-    const maxScrollbarLeft = parentWidth.value - scrollbarWidth;
-
-    const scrollDelta = (deltaX / maxScrollbarLeft) * maxScrollLeft;
+    const scrollDelta = (deltaX / maxThumbLeft.value) * maxScrollLeft.value;
     parent.value.scrollLeft = dragStartScrollLeft.value + scrollDelta;
 }
 
@@ -90,17 +90,11 @@ function handleMouseUp() {
 }
 
 function handleTrackClick(e: MouseEvent) {
-    if (!parent.value || e.target !== e.currentTarget) return;
+    if (!parent.value || e.target !== e.currentTarget || maxThumbLeft.value <= 0) return;
 
-    const parentRect = parent.value.getBoundingClientRect();
-    const clickX = e.clientX - parentRect.left;
-    const scrollbarWidth = (parentWidth.value / childWidth.value) * parentWidth.value;
-
-    const maxScrollLeft = childWidth.value - parentWidth.value;
-    const maxScrollbarLeft = parentWidth.value - scrollbarWidth;
-    const newScrollbarLeft = Math.max(0, Math.min(clickX - scrollbarWidth / 2, maxScrollbarLeft));
-
-    parent.value.scrollLeft = (newScrollbarLeft / maxScrollbarLeft) * maxScrollLeft;
+    const clickX = e.clientX - parent.value.getBoundingClientRect().left;
+    const newThumbLeft = Math.max(0, Math.min(clickX - thumbWidth.value / 2, maxThumbLeft.value));
+    parent.value.scrollLeft = (newThumbLeft / maxThumbLeft.value) * maxScrollLeft.value;
 
     handleMouseDown(e);
 }
@@ -108,13 +102,13 @@ function handleTrackClick(e: MouseEvent) {
 defineExpose({
     parent,
     scrollToEnd() {
-        parent.value.scrollLeft = parent.value.scrollWidth;
+        if (parent.value) parent.value.scrollLeft = parent.value.scrollWidth;
     },
 });
 </script>
 
 <template>
-    <div class="group/scroll relative">
+    <div class="group/scroll relative" :data-active="isActive">
         <div
             ref="parent"
             class="flex overflow-x-auto overflow-y-hidden"
@@ -133,10 +127,7 @@ defineExpose({
         >
             <div
                 class="absolute top-0 h-full bg-transparent opacity-25 transition-colors group-hover/scroll:bg-foreground group-active/scrollbar:bg-foreground group-active/scrollbar:opacity-50 group-data-[active=true]/scroll:bg-foreground hover:opacity-35 active:bg-foreground active:opacity-50"
-                :style="{
-                    width: `max(${(parentWidth / childWidth) * 100}%, 2rem)`,
-                    left: `${(scrollAmount / parent.scrollWidth) * 100}%`,
-                }"
+                :style="{ width: `${thumbWidth}px`, left: `${thumbLeft}px` }"
                 @mousedown="handleMouseDown"
             ></div>
         </div>
