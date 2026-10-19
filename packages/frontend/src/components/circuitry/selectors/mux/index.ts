@@ -1,4 +1,4 @@
-import { ComponentMetadata } from "@/lib/types";
+import type { ComponentMetadata } from "@/lib/types";
 
 import Mux from "./Mux.vue";
 export const mux: ComponentMetadata = {

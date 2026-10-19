@@ -1,4 +1,4 @@
-import { ComponentMap } from "@/lib/types";
+import type { ComponentMap } from "@/lib/types";
 import { mux } from "./mux";
 import { demux } from "./demux";
 import { decoder } from "./decoder";

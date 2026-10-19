@@ -1,4 +1,4 @@
-import { Handedness, Orientation, Key, Location } from "circuitsim-glue";
+import type { Handedness, Orientation, Key, Location } from "circuitsim-glue";
 import { computed, ref, toRaw } from "vue";
 import { toast } from "vue-sonner";
 import {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Handedness, Orientation } from "circuitsim-glue";
+import type { Handedness, Orientation } from "circuitsim-glue";
 import { computed, onMounted, onUnmounted, ref, useId, watch, watchEffect } from "vue";
 import { toast } from "vue-sonner";
 
@@ -14,7 +14,8 @@ import {
     placingHandedness,
     placingOrientation,
 } from "@/lib/store/view";
-import { CircuitComponent, componentPropertiesMap } from "@/lib/types";
+import type { CircuitComponent } from "@/lib/types";
+import { componentPropertiesMap } from "@/lib/types";
 import { componentMap } from "./circuitry";
 import { gateKinds, type GateKind } from "./circuitry/gates/gate";
 

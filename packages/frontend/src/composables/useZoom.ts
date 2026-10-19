@@ -1,5 +1,6 @@
 import type { Location } from "circuitsim-glue";
 import type { Ref } from "vue";
+import type { ZoomDirection } from "@/api";
 
 export function useZoom(
     offset: Ref<Location>,
@@ -39,6 +40,16 @@ export function useZoom(
         }
     }
 
+    function stepZoom(direction: ZoomDirection) {
+        zoom(
+            direction === "in"
+                ? Math.round(getScaleLevel() + 1)
+                : direction === "out"
+                  ? Math.round(getScaleLevel() - 1)
+                  : 0,
+        );
+    }
+
     /**
      * @param e A global keyboard event
      * @returns true if zoom is triggered; false if not
@@ -48,16 +59,9 @@ export function useZoom(
         if (!["-", "=", "+", "0"].includes(e.key)) return false;
 
         e.preventDefault();
-        const newScaleLevel = Math.round(
-            e.key === "=" || e.key === "+"
-                ? getScaleLevel() + 1
-                : e.key === "-"
-                  ? getScaleLevel() - 1
-                  : 0,
-        );
-        zoom(newScaleLevel);
+        stepZoom(e.key === "=" || e.key === "+" ? "in" : e.key === "-" ? "out" : "reset");
         return true;
     }
 
-    return { wheelZoom, keyboardZoom };
+    return { wheelZoom, keyboardZoom, stepZoom };
 }

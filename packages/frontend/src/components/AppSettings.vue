@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { Theme, theme, themes } from "@/lib/store/settings";
+import type { InterfaceScale, Theme } from "@/lib/store/settings";
+import { interfaceScale, interfaceScales, theme, themes } from "@/lib/store/settings";
 import { SettingsIcon } from "@lucide/vue";
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
+import { useId } from "vue";
+import SegmentedControl from "./ui/SegmentedControl.vue";
 
 const themeNames: Record<Theme, string> = {
     light: "Light",
@@ -9,6 +12,13 @@ const themeNames: Record<Theme, string> = {
     dark: "Dark",
     "dark-contrast": "Dark · High Contrast",
 };
+
+const interfaceSizeId = useId();
+const interfaceSizeOptions = interfaceScales.map((percent) => ({
+    label: `${percent}%`,
+    name: `${percent}%`,
+    value: String(percent),
+}));
 </script>
 
 <template>
@@ -50,6 +60,17 @@ const themeNames: Record<Theme, string> = {
                         />
                     </label>
                 </fieldset>
+
+                <div class="mt-4 text-xs">
+                    <div :id="interfaceSizeId" class="font-medium">Interface Scale</div>
+                    <SegmentedControl
+                        :options="interfaceSizeOptions"
+                        :value="String(interfaceScale)"
+                        :labelledby="interfaceSizeId"
+                        :columns="3"
+                        @update:value="interfaceScale = Number($event) as InterfaceScale"
+                    />
+                </div>
             </PopoverContent>
         </PopoverPortal>
     </PopoverRoot>

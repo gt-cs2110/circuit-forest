@@ -1,4 +1,4 @@
-import { ComponentMap } from "@/lib/types";
+import type { ComponentMap } from "@/lib/types";
 
 import { gates } from "./gates";
 import { wiring } from "./wiring";

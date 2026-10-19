@@ -1,4 +1,4 @@
-import { ComponentMetadata } from "@/lib/types";
+import type { ComponentMetadata } from "@/lib/types";
 
 import Probe from "./Probe.vue";
 export const ROW_MAX_SIZE = 8;

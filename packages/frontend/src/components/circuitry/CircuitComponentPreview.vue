@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { CircuitComponent, ComponentType } from "@/lib/types";
+import type { CircuitComponent, ComponentType } from "@/lib/types";
 import { componentMap } from ".";
 import { GRID_SIZE } from "@/lib/consts";
 import { computed } from "vue";
-import { Handedness, Orientation } from "circuitsim-glue";
+import type { Handedness, Orientation } from "circuitsim-glue";
 import { getPreviewGeometry } from "@/lib/preview";
 
 const props = defineProps<{

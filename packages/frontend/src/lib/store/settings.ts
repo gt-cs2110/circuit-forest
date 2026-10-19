@@ -17,3 +17,16 @@ watch(theme, (newTheme) => {
         document.documentElement.dataset.theme = newTheme;
     });
 });
+
+export const interfaceScales = [90, 100, 110, 125, 150, 200] as const;
+export type InterfaceScale = (typeof interfaceScales)[number];
+const currentPercent = window.api.view.getZoomFactor() * 100;
+export const interfaceScale = ref<InterfaceScale>(
+    interfaceScales.reduce((a, b) =>
+        Math.abs(b - currentPercent) < Math.abs(a - currentPercent) ? b : a,
+    ),
+);
+
+watch(interfaceScale, (percent) => {
+    window.api.view.setZoomFactor(percent / 100);
+});

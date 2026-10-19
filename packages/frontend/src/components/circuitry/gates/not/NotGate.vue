@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { BUBBLE_SIZE, GRID_SIZE } from "@/lib/consts";
 import { rotateFromComponent } from "@/lib/svg";
-import { CircuitComponentProps } from "@/lib/types";
+import type { CircuitComponentProps } from "@/lib/types";
 
 const { component } = defineProps<CircuitComponentProps>();
 </script>

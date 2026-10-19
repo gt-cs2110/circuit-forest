@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Location } from "circuitsim-glue";
+import type { Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
 import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import { addPolyWire, deleteSelection, placeComponent, updateState } from "@/lib/store/circuit";
@@ -13,7 +13,7 @@ import {
     wireSelection,
 } from "@/lib/store/view";
 import { scale, settings } from "@/lib/store/settings";
-import { Subcircuit } from "@/lib/types";
+import type { Subcircuit } from "@/lib/types";
 import CircuitComponent from "./circuitry/CircuitComponent.vue";
 import CircuitComponentPreview from "./circuitry/CircuitComponentPreview.vue";
 import Wire from "./circuitry/Wire.vue";
@@ -55,7 +55,7 @@ const wireDrag = ref({
 
 const { containerToWorld, worldToContainer } = useCoordinates(offset, scale);
 const { isPanning, startPan, updatePan, stopPan } = usePan(offset);
-const { wheelZoom, keyboardZoom } = useZoom(
+const { wheelZoom, keyboardZoom, stepZoom } = useZoom(
     offset,
     mousePosition,
     () => settings.value.scaleLevel,
@@ -91,7 +91,9 @@ function toWorld(e: MouseEvent) {
     return containerToWorld(e.clientX - rect.left, e.clientY - rect.top);
 }
 
-const junctions = computed(() => getJunctions(props.subcircuit.wires));
+const junctions = computed(() =>
+    getJunctions(props.subcircuit.wires, props.subcircuit.components.values()),
+);
 
 const placingComponentPosition = ref<Location | null>(null);
 
@@ -188,6 +190,11 @@ function handleMouseUp(e: MouseEvent) {
     finalizeMarquee();
 }
 
+function handleMouseLeave(e: MouseEvent) {
+    stopWireDrag(false);
+    handleMouseUp(e);
+}
+
 function handleComponentDragStart(e: MouseEvent) {
     const world = toWorld(e);
     startDrag(world.x, world.y);
@@ -203,17 +210,17 @@ function handleComponentWireDrag(e: MouseEvent) {
         };
     }
 }
-function stopWireDrag() {
+function stopWireDrag(commit = true) {
     if (!wireDrag.value.active) return;
 
     let drag = toRaw(wireDrag);
 
-    addPolyWire(drag.value.points);
+    if (commit) addPolyWire(drag.value.points);
     wireDrag.value = {
         active: false,
         points: [],
     };
-    updateState();
+    if (commit) updateState();
 }
 function updateWireDrag(e: MouseEvent) {
     if (!wireDrag.value.active) return;
@@ -255,13 +262,16 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
+let removeZoomListener: (() => void) | undefined;
 onMounted(() => {
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keydown", handleDelete);
+    removeZoomListener = window.api.menu.onZoom(stepZoom);
 });
 onUnmounted(() => {
     document.removeEventListener("keydown", handleKeyDown);
     document.removeEventListener("keydown", handleDelete);
+    removeZoomListener?.();
 });
 </script>
 
@@ -273,7 +283,7 @@ onUnmounted(() => {
         @mousedown="handleMouseDown"
         @mousemove="handleMouseMove"
         @mouseup="handleMouseUp"
-        @mouseleave="handleMouseUp"
+        @mouseleave="handleMouseLeave"
         @wheel.prevent="handleWheel"
     >
         <svg

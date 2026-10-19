@@ -1,4 +1,4 @@
-import { ComponentMetadata } from "@/lib/types";
+import type { ComponentMetadata } from "@/lib/types";
 
 import Decoder from "./Decoder.vue";
 export const decoder: ComponentMetadata = {

@@ -44,8 +44,6 @@ export default defineConfig(
             "import/no-unresolved": "off",
             // eslint is correct for this lint, but it's a small webapp who cares
             "vue/multi-word-component-names": "off",
-            // typescript handles it and it's causing false positives on eslint's side
-            "no-redeclare": "off",
             "@typescript-eslint/no-unused-vars": [
                 "error",
                 {
@@ -55,12 +53,13 @@ export default defineConfig(
                     caughtErrors: "all",
                 },
             ],
-            // any is bad, but also there's too many APIs with missing types
-            // that would be too annoying to type.
-            // i'll trust that y'all know what y'all're doing if you do :any
-            "@typescript-eslint/no-explicit-any": "off",
-            // we do this to edit a circuit more easily by modifying a prop in circuitcanvas
-            "vue/no-mutating-props": ["error", { shallowOnly: true }],
+            // requires `import type` because importing a type without the `type` qualifier
+            // can break if you do that with the glue package
+            "@typescript-eslint/consistent-type-imports": [
+                "error",
+                { disallowTypeAnnotations: false },
+            ],
+            "@typescript-eslint/no-import-type-side-effects": "error",
         },
     },
     eslintConfigPrettier,

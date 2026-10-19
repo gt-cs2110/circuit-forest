@@ -1,4 +1,4 @@
-import { ComponentMetadata } from "@/lib/types";
+import type { ComponentMetadata } from "@/lib/types";
 
 import Demux from "./Demux.vue";
 export const demux: ComponentMetadata = {

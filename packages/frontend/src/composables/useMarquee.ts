@@ -1,5 +1,6 @@
-import { Location } from "circuitsim-glue";
-import { Ref, ref } from "vue";
+import type { Location } from "circuitsim-glue";
+import type { Ref } from "vue";
+import { ref } from "vue";
 
 import { getDimensions } from "@/lib/bounds";
 import type { Subcircuit } from "@/lib/types";

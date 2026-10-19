@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ConstantText from "@/components/ConstantText.vue";
 import { GRID_SIZE } from "@/lib/consts";
-import { CircuitComponentProps } from "@/lib/types";
+import type { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
 import { getDimensions } from "@/lib/bounds";
 

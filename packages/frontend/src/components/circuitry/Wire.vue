@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { GRID_SIZE } from "@/lib/consts";
 import { deselectWire, isWireSelected, selectWire } from "@/lib/store/view";
-import { DragState, Wire } from "@/lib/types";
+import type { DragState, Wire } from "@/lib/types";
 import { wireColor, wireId } from "@/lib/wire";
 import { computed, inject, useId } from "vue";
 

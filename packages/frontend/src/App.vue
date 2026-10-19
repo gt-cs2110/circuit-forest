@@ -36,6 +36,9 @@ const windowWidth = ref(window.innerWidth);
 function toPercentage(px: number) {
     return (100 / windowWidth.value) * px;
 }
+function maxPercentage(minPx: number, maxPx: number) {
+    return Math.max(toPercentage(minPx), Math.min(toPercentage(maxPx), 40));
+}
 function fromPercentage(percent: number) {
     return (percent / 100) * windowWidth.value;
 }
@@ -77,7 +80,7 @@ const rightWidth = ref(72 * 4);
                 class="flex flex-col bg-panel-dark"
                 :min-size="toPercentage(48 * 4)"
                 :default-size="toPercentage(leftWidth)"
-                :max-size="Math.min(toPercentage(96 * 4), 50)"
+                :max-size="maxPercentage(48 * 4, 96 * 4)"
                 @resize="leftWidth = fromPercentage($event)"
             >
                 <ComponentSelector />
@@ -103,7 +106,7 @@ const rightWidth = ref(72 * 4);
                 class="flex flex-col bg-panel-dark"
                 :min-size="toPercentage(60 * 4)"
                 :default-size="toPercentage(rightWidth)"
-                :max-size="Math.min(toPercentage(96 * 4), 50)"
+                :max-size="maxPercentage(60 * 4, 96 * 4)"
                 @resize="rightWidth = fromPercentage($event)"
             >
                 <Properties />

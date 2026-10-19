@@ -1,7 +1,7 @@
 import { BrowserWindow, Menu, app, dialog, ipcMain, screen } from "electron";
 import started from "electron-squirrel-startup";
 import path from "node:path";
-import { API, SyncHandler, Handler } from "./api";
+import type { API, SyncHandler, Handler, ZoomDirection } from "./api";
 import Store from "electron-store";
 import fs from "node:fs";
 
@@ -14,12 +14,14 @@ if (started) {
 const enableDevTools = process.env.NODE_ENV === "development";
 
 const createWindow = () => {
-    const { width, height } = screen.getPrimaryDisplay().size;
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
     // Create the browser window.
     const mainWindow = new BrowserWindow({
         width,
         height,
+        minWidth: 960,
+        minHeight: 540,
 
         webPreferences: {
             devTools: enableDevTools,
@@ -71,6 +73,19 @@ app.on("activate", () => {
     }
 });
 
+const zoomItem = (
+    label: string,
+    accelerator: string,
+    direction: ZoomDirection,
+): Electron.MenuItemConstructorOptions => ({
+    label,
+    accelerator,
+    registerAccelerator: false,
+    click: (_, window) => {
+        if (window instanceof BrowserWindow) window.webContents.send("menu_zoom", direction);
+    },
+});
+
 const createMenu = () => {
     // Mostly copied from:
     // https://github.com/electron/electron/blob/1c3a5ba5d17c18cbc1fc096d2a05fc24f2b2ddee/lib/browser/default-menu.ts#L12-L58
@@ -101,9 +116,11 @@ const createMenu = () => {
                           { type: "separator" },
                       ] satisfies Electron.MenuItemConstructorOptions[])
                     : []),
-                { role: "resetZoom" },
-                { role: "zoomIn" },
-                { role: "zoomOut" },
+                // these options zoom the canvas instead of the whole window.
+                // for zooming the whole window there is an interface scale setting in the app itself
+                zoomItem("Actual Size", "CommandOrControl+0", "reset"),
+                zoomItem("Zoom In", "CommandOrControl+=", "in"),
+                zoomItem("Zoom Out", "CommandOrControl+-", "out"),
                 { type: "separator" },
                 { role: "togglefullscreen" },
             ],
@@ -148,7 +165,7 @@ ipcMain.on("config_get", ((e, key: string) => {
     e.returnValue = store.get(key);
 }) satisfies SyncHandler<API["storage"]["get"]>);
 
-ipcMain.on("config_set", ((e, key: string, val: any) => {
+ipcMain.on("config_set", ((e, key: string, val: unknown) => {
     store.set(key, val);
     e.returnValue = undefined;
 }) satisfies SyncHandler<API["storage"]["set"]>);

@@ -7,7 +7,7 @@ import type {
     Orientation,
     Handedness,
 } from "circuitsim-glue";
-import { Component } from "vue";
+import type { Component } from "vue";
 
 export const componentCategories = {
     wiring: ["constant", "probe", "tunnel"],

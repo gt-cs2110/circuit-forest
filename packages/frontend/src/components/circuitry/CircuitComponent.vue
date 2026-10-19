@@ -2,7 +2,7 @@
 import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
 import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/store/view";
-import { CircuitComponent, DragState } from "@/lib/types";
+import type { CircuitComponent, DragState } from "@/lib/types";
 import { componentMap } from ".";
 import { computed, inject, useId } from "vue";
 import { wireColor } from "@/lib/wire";

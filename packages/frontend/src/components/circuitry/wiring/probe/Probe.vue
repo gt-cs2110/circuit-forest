@@ -2,7 +2,7 @@
 import ConstantText from "@/components/ConstantText.vue";
 import { getDimensions } from "@/lib/bounds";
 import { GRID_SIZE } from "@/lib/consts";
-import { CircuitComponentProps } from "@/lib/types";
+import type { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
 
 const { component } = defineProps<CircuitComponentProps>();

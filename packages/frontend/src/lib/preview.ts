@@ -1,5 +1,5 @@
-import { Handedness, Location, Orientation } from "circuitsim-glue";
-import { ComponentType } from "./types";
+import type { Handedness, Location, Orientation } from "circuitsim-glue";
+import type { ComponentType } from "./types";
 import { componentMap } from "@/components/circuitry";
 
 //mirrors backend logic for rotating points aroudn origin 0,0

@@ -1,4 +1,4 @@
-import { ComponentMetadata } from "@/lib/types";
+import type { ComponentMetadata } from "@/lib/types";
 
 import Constant from "./Constant.vue";
 export const ROW_MAX_SIZE = 8;

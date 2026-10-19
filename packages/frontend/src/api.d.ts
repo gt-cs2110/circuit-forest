@@ -20,8 +20,8 @@ export type DialogBindings = {
 };
 
 export type StorageBindings = {
-    get(k: string): any;
-    set(k: string, v: any): void;
+    get(k: string): unknown;
+    set(k: string, v: unknown): void;
     getAll(): object;
     setAll(data: object): void;
 };
@@ -34,11 +34,24 @@ export type FSBindings = {
     getPath(f: File): string;
 };
 
+// zoom for the whole screen
+export type ViewBindings = {
+    getZoomFactor(): number;
+    setZoomFactor(factor: number): void;
+};
+
+export type ZoomDirection = "in" | "out" | "reset";
+export type MenuBindings = {
+    onZoom(callback: (direction: ZoomDirection) => void): () => void;
+};
+
 export type API = {
     core: Core;
     dialog: DialogBindings;
     storage: StorageBindings;
     fs: FSBindings;
+    menu: MenuBindings;
+    view: ViewBindings;
 };
 
 export type Handler<F> = (

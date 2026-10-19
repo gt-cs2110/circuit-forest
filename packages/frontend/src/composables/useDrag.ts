@@ -1,8 +1,9 @@
 import { moveSelection } from "@/lib/store/circuit";
 import type { Subcircuit } from "@/lib/types";
 import { wireId } from "@/lib/wire";
-import { Location } from "circuitsim-glue";
-import { Ref, ref } from "vue";
+import type { Location } from "circuitsim-glue";
+import type { Ref } from "vue";
+import { ref } from "vue";
 
 export function useDrag(
     subcircuit: Subcircuit,

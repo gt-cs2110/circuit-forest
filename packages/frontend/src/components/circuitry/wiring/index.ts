@@ -1,4 +1,4 @@
-import { ComponentMap } from "@/lib/types";
+import type { ComponentMap } from "@/lib/types";
 import { constant } from "./constant";
 import { probe } from "./probe";
 import { tunnel } from "./tunnel";

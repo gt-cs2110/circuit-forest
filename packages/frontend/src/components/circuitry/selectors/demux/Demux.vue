@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { getDimensions, invertOrientation } from "@/lib/bounds";
 import { trapezoid } from "@/lib/svg";
-import { CircuitComponentProps } from "@/lib/types";
+import type { CircuitComponentProps } from "@/lib/types";
 import { computed } from "vue";
 
 const { component } = defineProps<CircuitComponentProps>();
