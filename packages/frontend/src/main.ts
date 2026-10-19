@@ -131,12 +131,12 @@ ipcMain.handle("show_modal", (e, kind, config) => {
         return dialog.showMessageBox(config);
     } else if (kind === "menu") {
         return new Promise((resolve) => {
-            const template = Array.from(config ?? [], (label, i) => ({
-                label: label.toString(),
+            const template = Array.from(config ?? [], (label: unknown, i) => ({
+                label: String(label),
                 click: () => resolve(i),
             }));
             const menu = Menu.buildFromTemplate(template);
-            menu.popup({ window: BrowserWindow.fromWebContents(e.sender) });
+            menu.popup({ window: BrowserWindow.fromWebContents(e.sender) ?? undefined });
         });
     }
 });

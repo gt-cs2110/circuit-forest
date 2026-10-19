@@ -11,7 +11,8 @@
         "publish": "electron-forge publish",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
-        "lint": "eslint ."
+        "lint": "eslint .",
+        "check": "vue-tsc --noEmit"
     },
     "keywords": [],
     "author": {
@@ -45,7 +46,8 @@
         "typescript": "~6.0.3",
         "typescript-eslint": "^8.63.0",
         "vite": "^8.1.4",
-        "vue-eslint-parser": "^10.4.1"
+        "vue-eslint-parser": "^10.4.1",
+        "vue-tsc": "^3.3.13"
     },
     "dependencies": {
         "@lucide/vue": "^1.23.0",
