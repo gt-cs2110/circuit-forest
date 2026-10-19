@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Location } from "circuitsim-glue";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, toRaw, watch } from "vue";
-import { GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
+import { DOT_RADIUS, GRID_SIZE, ORIGIN_OFFSET } from "@/lib/consts";
 import { addPolyWire, deleteSelection, placeComponent, updateState } from "@/lib/store/circuit";
 import {
     clearSelection,
@@ -367,7 +367,7 @@ onUnmounted(() => {
                 :key
                 :cx="junction.pos.x * GRID_SIZE"
                 :cy="junction.pos.y * GRID_SIZE"
-                r="3"
+                :r="DOT_RADIUS"
                 :fill="wireColor(junction.value)"
                 class="pointer-events-none"
             />

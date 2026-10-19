@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GRID_SIZE } from "@/lib/consts";
+import { DOT_RADIUS, GRID_SIZE } from "@/lib/consts";
 import { deselectWire, isWireSelected, selectWire } from "@/lib/store/view";
 import type { DragState, Wire } from "@/lib/types";
 import { wireColor, wireId } from "@/lib/wire";
@@ -124,7 +124,7 @@ function handleMouseLeave() {
         v-if="hoverPoint && !isWireSelected(id)"
         :cx="hoverPoint.x * GRID_SIZE"
         :cy="hoverPoint.y * GRID_SIZE"
-        r="2"
+        :r="DOT_RADIUS"
         fill="transparent"
         stroke="transparent"
         stroke-width="4"

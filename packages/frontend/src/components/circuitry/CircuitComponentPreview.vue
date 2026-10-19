@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { CircuitComponent, ComponentType } from "@/lib/types";
 import { componentMap } from ".";
-import { GRID_SIZE } from "@/lib/consts";
+import { DOT_RADIUS, GRID_SIZE } from "@/lib/consts";
 import { computed } from "vue";
 import type { Handedness, Orientation } from "circuitsim-glue";
 import { getPreviewGeometry } from "@/lib/preview";
@@ -51,7 +51,7 @@ const dummyComponent = computed(
             :key="i"
             :cx="port.pos.x * GRID_SIZE"
             :cy="port.pos.y * GRID_SIZE"
-            r="2"
+            :r="DOT_RADIUS"
             fill="currentColor"
             class="rounded-full text-port"
         />

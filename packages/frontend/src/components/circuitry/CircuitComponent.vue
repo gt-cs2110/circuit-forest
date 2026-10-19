@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { getDimensions } from "@/lib/bounds";
-import { GRID_SIZE } from "@/lib/consts";
+import { DOT_RADIUS, GRID_SIZE } from "@/lib/consts";
 import { selectComponent, deselectComponent, isComponentSelected } from "@/lib/store/view";
 import type { CircuitComponent, DragState } from "@/lib/types";
 import { componentMap } from ".";
@@ -84,7 +84,7 @@ const transform = computed(() => {
             :key="`${index}`"
             :cx="point.pos.x * GRID_SIZE"
             :cy="point.pos.y * GRID_SIZE"
-            r="2"
+            :r="DOT_RADIUS"
             :fill="wireColor(point.value)"
             stroke="transparent"
             stroke-width="4"
