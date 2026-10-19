@@ -102,7 +102,7 @@ export function updateComponents(
         }
     }
 
-    updateState();
+    updateState(subcircuit);
 }
 
 export function moveSelection(
@@ -254,17 +254,14 @@ export function deleteSubcircuit(frontendId: number) {
     updateState();
 }
 
-export function updateState() {
+export function updateState(subcircuit: Subcircuit = currentSubcircuit.value) {
     //call glue functions to propagate changes to backend and update frontend state based on backend state
-    window.api.core.propagate(currentSubcircuit.value.backendKey);
+    window.api.core.propagate(subcircuit.backendKey);
     const [transientComponentStates, transientWireState] = window.api.core.getTransientState(
-        currentSubcircuit.value.backendKey,
+        subcircuit.backendKey,
     );
     const keyToComponent = new Map(
-        Array.from(currentSubcircuit.value.components.values(), (c) => [
-            keyString(c.backendKey),
-            c,
-        ]),
+        Array.from(subcircuit.components.values(), (c) => [keyString(c.backendKey), c]),
     );
     transientComponentStates.forEach((state) => {
         const corresponding_object = keyToComponent.get(keyString(state.backendKey));
@@ -272,10 +269,10 @@ export function updateState() {
             Object.assign(corresponding_object, state);
         }
     });
-    currentSubcircuit.value.wires = transientWireState;
+    subcircuit.wires = transientWireState;
 
     console.log("______UPDATING STATE_____");
-    console.log(toRaw(currentSubcircuit.value));
+    console.log(toRaw(subcircuit));
     console.log("backend updates");
     console.log(transientComponentStates);
     console.log(transientWireState);
