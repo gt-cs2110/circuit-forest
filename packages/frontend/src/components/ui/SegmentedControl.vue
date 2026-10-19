@@ -3,6 +3,7 @@ defineProps<{
     options: readonly { label: string; name: string; value: T }[];
     value?: T;
     labelledby?: string;
+    columns?: number;
 }>();
 const emit = defineEmits<{ "update:value": [value: T] }>();
 </script>
@@ -11,7 +12,9 @@ const emit = defineEmits<{ "update:value": [value: T] }>();
     <div
         role="group"
         :aria-labelledby="labelledby"
-        class="mt-2 flex overflow-hidden rounded border"
+        class="mt-2 overflow-hidden rounded border"
+        :class="columns ? 'grid' : 'flex'"
+        :style="columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined"
     >
         <button
             v-for="option in options"

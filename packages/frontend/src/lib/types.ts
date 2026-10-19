@@ -77,7 +77,7 @@ export type DragState = ReturnType<typeof useDrag>["drag"];
 const propertyGroups = [
     {
         types: ["and", "nand", "nor", "or", "xnor", "xor"],
-        properties: ["label", "label_orientation", "orientation", "bitsize", "inputs"],
+        properties: ["label", "label_orientation", "function", "orientation", "bitsize", "inputs"],
     },
     {
         types: ["demux", "mux"],

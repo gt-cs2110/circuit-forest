@@ -15,6 +15,8 @@ import {
     placingOrientation,
 } from "@/lib/store/view";
 import { CircuitComponent, componentPropertiesMap } from "@/lib/types";
+import { componentMap } from "./circuitry";
+import { gateKinds, type GateKind } from "./circuitry/gates/gate";
 
 const nameReset = ref(0);
 const subcircuitName = computed({
@@ -55,6 +57,13 @@ const handednesses = [
     { label: "BOTTOM/RIGHT", name: "Bottom/Right", value: "DownRight" },
 ] as const satisfies { label: string; name: string; value: Handedness }[];
 
+const gateFunctions = gateKinds.map((kind) => ({
+    label: componentMap[kind].displayName,
+    name: componentMap[kind].displayName,
+    value: kind,
+}));
+
+const functionId = useId();
 const labelOrientationId = useId();
 const orientationId = useId();
 const handednessId = useId();
@@ -117,6 +126,9 @@ const orientationValue = computed(() =>
 );
 const handednessValue = computed(() =>
     getFromSelected<Handedness | undefined>((c) => c.handedness, undefined),
+);
+const functionValue = computed(() =>
+    getFromSelected<GateKind | undefined>((c) => c.type.toLowerCase() as GateKind, undefined),
 );
 
 function fitToBitsize(bin: string) {
@@ -284,6 +296,18 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                         @update:value="updateAllSelected({ labelOrientation: $event })"
                     />
                 </div>
+            </AccordionContent>
+
+            <!-- GATE FUNCTION -->
+            <AccordionContent v-if="selectedProperties.has('function')" class="px-4 py-3 text-xs">
+                <span :id="functionId" class="font-medium">Function</span>
+                <SegmentedControl
+                    :options="gateFunctions"
+                    :value="functionValue"
+                    :labelledby="functionId"
+                    :columns="3"
+                    @update:value="updateAllSelected({ type: $event })"
+                />
             </AccordionContent>
 
             <!-- BITSIZE -->
