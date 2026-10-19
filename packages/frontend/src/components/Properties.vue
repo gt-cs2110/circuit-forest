@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Handedness, Orientation } from "circuitsim-glue";
-import { computed, onMounted, onUnmounted, ref, useId, watch, watchEffect } from "vue";
+import { computed, onMounted, onUnmounted, ref, useId, watch } from "vue";
 import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
 import CommitInput from "./ui/CommitInput.vue";
+import CommitSlider from "./ui/CommitSlider.vue";
 import SegmentedControl from "./ui/SegmentedControl.vue";
 import { isEditableTarget } from "@/lib/keyboard";
 import { settings } from "@/lib/store/settings";
@@ -115,14 +116,9 @@ function getComponentProps(component: CircuitComponent) {
 // TODO: Allow null or "invalid state" cases
 //    Should show up when not all inputs are the same
 const labelValue = computed(() => getFromSelected((c) => c.label, ""));
-const bitsizeInput = ref(1);
-const selsizeInput = ref(1);
-const nInputsInput = ref(1);
-watchEffect(() => {
-    bitsizeInput.value = getFromSelected((c) => c.bitsize, 1);
-    selsizeInput.value = getFromSelected((c) => c.selsize, 1);
-    nInputsInput.value = getFromSelected((c) => c.inputs, 1);
-});
+const bitsizeValue = computed(() => getFromSelected((c) => c.bitsize, 1));
+const selsizeValue = computed(() => getFromSelected((c) => c.selsize, 1));
+const inputsValue = computed(() => getFromSelected((c) => c.inputs, 1));
 
 // Mixed values across the selection show no active option.
 const labelOrientationValue = computed(() =>
@@ -304,58 +300,34 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 
             <!-- BITSIZE -->
             <AccordionContent v-if="selectedProperties.has('bitsize')" class="px-4 py-3 text-xs">
-                <label class="block">
-                    <span class="flex justify-between">
-                        <span class="font-medium">Bitsize</span>
-                        <span>{{ bitsizeInput }}</span>
-                    </span>
-                    <input
-                        v-model.number="bitsizeInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="64"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
-                        @change="updateAllSelected({ bitsize: bitsizeInput })"
-                    />
-                </label>
+                <CommitSlider
+                    label="Bitsize"
+                    :value="bitsizeValue"
+                    :min="1"
+                    :max="64"
+                    @commit="updateAllSelected({ bitsize: $event })"
+                />
             </AccordionContent>
 
             <!-- SELSIZE -->
             <AccordionContent v-if="selectedProperties.has('selsize')" class="px-4 py-3 text-xs">
-                <label class="block">
-                    <span class="flex justify-between">
-                        <span class="font-medium">Selector Bits</span>
-                        <span>{{ selsizeInput }}</span>
-                    </span>
-                    <input
-                        v-model.number="selsizeInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="6"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
-                        @change="updateAllSelected({ selsize: selsizeInput })"
-                    />
-                </label>
+                <CommitSlider
+                    label="Selector Bits"
+                    :value="selsizeValue"
+                    :min="1"
+                    :max="6"
+                    @commit="updateAllSelected({ selsize: $event })"
+                />
             </AccordionContent>
             <!-- INPUTS -->
             <AccordionContent v-if="selectedProperties.has('inputs')" class="px-4 py-3 text-xs">
-                <label class="block">
-                    <span class="flex justify-between">
-                        <span class="font-medium">Num Inputs</span>
-                        <span>{{ nInputsInput }}</span>
-                    </span>
-                    <input
-                        v-model.number="nInputsInput"
-                        type="range"
-                        :min="1"
-                        :step="1"
-                        :max="8"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
-                        @change="updateAllSelected({ inputs: nInputsInput })"
-                    />
-                </label>
+                <CommitSlider
+                    label="Num Inputs"
+                    :value="inputsValue"
+                    :min="1"
+                    :max="8"
+                    @commit="updateAllSelected({ inputs: $event })"
+                />
             </AccordionContent>
             <!-- ORIENTATION -->
             <AccordionContent

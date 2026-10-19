@@ -1,5 +1,5 @@
 <script setup lang="ts" generic="T">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 
 /**
  * Input that only "commits" its value on `change`. See EditTarget in Properties.vue for the application.
@@ -13,27 +13,23 @@ import { onBeforeUnmount, ref, watch } from "vue";
 const props = defineProps<{ value: string; target: T }>();
 const emit = defineEmits<{ commit: [value: string, target: T] }>();
 
-const draft = ref(props.value);
-const dirty = ref(false);
-
-watch(
-    () => props.value,
-    (value) => {
-        if (!dirty.value) draft.value = value;
-    },
-);
+const draft = ref<string | null>(null);
 
 function commit() {
-    if (!dirty.value) return;
-    dirty.value = false;
-    emit("commit", draft.value.trim(), props.target);
-    // update value based on what was actually stored after in case the commit fails or the value is trimmed, etc.
-    draft.value = props.value;
+    if (draft.value === null) return;
+    const value = draft.value.trim();
+    draft.value = null;
+    emit("commit", value, props.target);
 }
 
 onBeforeUnmount(commit);
 </script>
 
 <template>
-    <input v-model="draft" type="text" @input="dirty = true" @change="commit" />
+    <input
+        type="text"
+        :value="draft ?? props.value"
+        @input="draft = ($event.target as HTMLInputElement).value"
+        @change="commit"
+    />
 </template>

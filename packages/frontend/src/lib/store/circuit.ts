@@ -95,11 +95,6 @@ export function updateComponents(
             },
             duration: 4000,
         });
-
-        // Force refresh properties:
-        for (let i = 0; i < frontendIds.length; i++) {
-            subcircuit.components.set(frontendIds[i], toRaw(components[i]));
-        }
     }
 
     updateState(subcircuit);
