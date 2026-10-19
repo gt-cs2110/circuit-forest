@@ -87,7 +87,7 @@ const rightWidth = ref(72 * 4);
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-border outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
+                class="w-px bg-border outline-none focus-visible:bg-primary data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
             />
 
             <SplitterPanel class="flex flex-1 flex-col">
@@ -99,7 +99,7 @@ const rightWidth = ref(72 * 4);
             </SplitterPanel>
 
             <SplitterResizeHandle
-                class="w-px bg-border outline-none focus-visible:bg-blue-500 data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
+                class="w-px bg-border outline-none focus-visible:bg-primary data-[state=drag]:bg-foreground-muted data-[state=hover]:bg-foreground-muted"
             />
 
             <SplitterPanel

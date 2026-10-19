@@ -63,7 +63,7 @@ function handleClick(e: MouseEvent) {
             :y2="wire.endpoints[1].y * GRID_SIZE"
             stroke-width="5"
             stroke-linecap="round"
-            stroke="#3b82f6"
+            stroke="var(--color-primary)"
         />
 
         <g v-if="isDragging">

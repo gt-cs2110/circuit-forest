@@ -75,7 +75,7 @@ const transform = computed(() => {
             :width="getDimensions(props.component.bounds).width * GRID_SIZE"
             :height="getDimensions(props.component.bounds).height * GRID_SIZE"
             fill="none"
-            stroke="#3b82f6"
+            stroke="var(--color-primary)"
             stroke-width="2"
         />
         <!-- Ports -->
@@ -100,7 +100,7 @@ const transform = computed(() => {
                     console.log('Port value:', point.value, displayKey);
                 }
             "
-            class="rounded-full text-orange-500 outline-orange-500 hover:outline-2"
+            class="rounded-full text-port outline-port hover:outline-2"
         />
     </g>
 </template>

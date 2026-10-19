@@ -69,11 +69,11 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
         }
     } else {
         toast.error("Update unsuccessful", {
-            description: "Make sure updates do not move components out of bounds.",
+            description: "Component may not be placed out of bounds.",
             style: {
-                background: "#ef4444",
-                color: "#ffffff",
-                borderColor: "#dc2626",
+                background: "var(--color-error)",
+                color: "var(--color-error-foreground)",
+                borderColor: "var(--color-error-border)",
             },
             duration: 4000,
         });
@@ -103,11 +103,11 @@ export function moveSelection(
     );
     if (!move) {
         toast.error("Update unsuccessful", {
-            description: "Make sure not to place component out of bounds.",
+            description: "Components may not be placed out of bounds.",
             style: {
-                background: "#ef4444",
-                color: "#ffffff",
-                borderColor: "#dc2626",
+                background: "var(--color-error)",
+                color: "var(--color-error-foreground)",
+                borderColor: "var(--color-error-border)",
             },
             duration: 4000,
         });

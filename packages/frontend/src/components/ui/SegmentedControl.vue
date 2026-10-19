@@ -26,7 +26,7 @@ const emit = defineEmits<{ "update:value": [value: T] }>();
             class="flex-1 cursor-pointer px-3 py-2 transition-colors"
             :class="
                 value === option.value
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-primary text-primary-foreground'
                     : 'bg-panel-light hover:bg-panel-dark'
             "
             @click="emit('update:value', option.value)"

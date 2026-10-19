@@ -59,8 +59,8 @@ const filteredCategories = computed(() => {
                     class="flex aspect-square cursor-pointer flex-col justify-center gap-2 border py-1 text-xs transition-colors"
                     :class="
                         placingComponent === component
-                            ? 'border-blue-500 bg-blue-500/10'
-                            : 'bg-panel-light hover:border-blue-500'
+                            ? 'border-primary bg-primary/10'
+                            : 'bg-panel-light hover:border-primary'
                     "
                     @click="
                         () => {

@@ -46,8 +46,8 @@ const interfaceSizeOptions = interfaceScales.map((percent) => ({
                         class="mt-1 block w-full cursor-pointer border px-1 py-1 transition-colors focus-within:outline"
                         :class="
                             newTheme === theme
-                                ? 'border-blue-500 bg-blue-500/10'
-                                : 'bg-panel-light hover:border-blue-500'
+                                ? 'border-primary bg-primary/10'
+                                : 'bg-panel-light hover:border-primary'
                         "
                     >
                         {{ themeNames[newTheme] }}

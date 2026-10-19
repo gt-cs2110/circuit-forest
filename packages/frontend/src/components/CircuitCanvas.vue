@@ -388,13 +388,13 @@ onUnmounted(() => {
 
         <div
             v-if="marquee.active"
-            class="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
+            class="pointer-events-none absolute border border-primary bg-primary/10"
             :style="marqueeStyle"
         />
 
         <div
             v-if="tooltip.value"
-            class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border border-blue-800 bg-blue-600 px-2 font-mono text-sm text-white"
+            class="pointer-events-none fixed z-50 -mt-4 w-max -translate-x-1/2 -translate-y-full border border-tooltip-border bg-tooltip-background px-2 font-mono text-sm text-tooltip-foreground"
             :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
         >
             {{ tooltip.value }}

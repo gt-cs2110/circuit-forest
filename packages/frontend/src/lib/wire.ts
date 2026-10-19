@@ -1,14 +1,14 @@
 import type { Location } from "circuitsim-glue";
 import type { CircuitComponent, Wire } from "./types";
 
-/** Gets the wire color from the bit array. */
+/** Gets the wire color from the bit array. The colors are set per theme in `index.css`. */
 export function wireColor(value: string) {
     // FIXME: Add colors for different bitsizes
-    if (value.length == 0) return "rgb(127, 127, 127)";
-    if (value.includes("X")) return "rgb(255,0,0)";
-    if (value.includes("1")) return "rgb(0,255,0)";
-    if (value.includes("0")) return "#006400";
-    return "rgb(0,0,255)";
+    if (value.length == 0) return "var(--color-wire-floating)";
+    if (value.includes("X")) return "var(--color-wire-error)";
+    if (value.includes("1")) return "var(--color-wire-high)";
+    if (value.includes("0")) return "var(--color-wire-low)";
+    return "var(--color-wire-floating)";
 }
 
 /**

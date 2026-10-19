@@ -234,7 +234,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                         min="1"
                         step="1"
                         max="16"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
                     />
                 </label>
             </AccordionContent>
@@ -324,7 +324,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                         :min="1"
                         :step="1"
                         :max="64"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
                         @change="updateAllSelected({ bitsize: bitsizeInput })"
                     />
                 </label>
@@ -343,7 +343,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                         :min="1"
                         :step="1"
                         :max="6"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
                         @change="updateAllSelected({ selsize: selsizeInput })"
                     />
                 </label>
@@ -361,7 +361,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                         :min="1"
                         :step="1"
                         :max="8"
-                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-blue-500"
+                        class="mt-3 mb-1 block h-1 w-full appearance-none rounded border bg-panel-light accent-primary"
                         @change="updateAllSelected({ inputs: nInputsInput })"
                     />
                 </label>
@@ -415,7 +415,7 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
                             class="mt-1 block w-full border bg-panel-light px-1 py-1 font-mono"
                         />
                     </label>
-                    <p v-if="constantError" class="text-xs text-red-500">
+                    <p v-if="constantError" class="text-xs text-error">
                         {{ constantError }}
                     </p>
                 </fieldset>

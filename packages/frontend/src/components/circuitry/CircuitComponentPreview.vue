@@ -53,7 +53,7 @@ const dummyComponent = computed(
             :cy="port.pos.y * GRID_SIZE"
             r="2"
             fill="currentColor"
-            class="rounded-full text-orange-500"
+            class="rounded-full text-port"
         />
     </svg>
 </template>
