@@ -5,7 +5,7 @@ use anyhow::{Context, anyhow, bail, ensure};
 use circuitsim_engine::bitarray::BitArray;
 use circuitsim_engine::engine::func::GateKind;
 use circuitsim_engine::engine::state::ValueIssue;
-use circuitsim_engine::engine::{CircuitKey, ValueKey};
+use circuitsim_engine::engine::{CircuitKey, FunctionPort, ValueKey};
 use circuitsim_engine::middle_end::func::{self, Handedness, Orientation, PhysicalComponentEnum};
 use circuitsim_engine::middle_end::wire::Wire;
 use circuitsim_engine::middle_end::{AddComponentArgs, ComponentKey, MiddleCircuit, MiddleRepr};
@@ -300,10 +300,19 @@ impl DValueState {
 }
 
 #[derive(Debug)]
+enum DPortState {
+    /// The port is connected to a wire, so it takes on the wire's value.
+    Wired(DValueState),
+    /// The port isn't connected to a wire, so this is the component's own value at the port
+    /// (`None` if the component has no engine function, e.g. a tunnel).
+    Unwired(Option<BitArray>),
+}
+
+#[derive(Debug)]
 struct DComponentState {
     key: ComponentKey,
     origin: (u32, u32),
-    ports: Vec<((u32, u32), Option<DValueState>)>,
+    ports: Vec<((u32, u32), DPortState)>,
     bounds: [(u32, u32); 2],
 }
 
@@ -312,12 +321,17 @@ fn get_component_states(circuit: &MiddleCircuit<'_>) -> impl Iterator<Item = DCo
         let ports = props
             .ports
             .iter()
-            .map(|&coord| {
-                let value = circuit
-                    .get_wire_set()
-                    .find_key(coord)
-                    .map(|vk| DValueState::query(circuit, vk));
-                (coord, value)
+            .enumerate()
+            .map(|(index, &coord)| {
+                let state = match circuit.get_wire_set().find_key(coord) {
+                    Some(vk) => DPortState::Wired(DValueState::query(circuit, vk)),
+                    None => DPortState::Unwired(props.gate.map(|gate| {
+                        circuit
+                            .get_circuit_state()
+                            .get_port_value(FunctionPort { gate, index })
+                    })),
+                };
+                (coord, state)
             })
             .collect();
 
@@ -356,14 +370,18 @@ pub fn get_transient_state(
 
             let ports = ports
                 .into_iter()
-                .map(|(pos, d_value)| {
-                    let (vkey, value, issues) = match d_value {
-                        Some(DValueState { key, value, issues }) => (
+                .map(|(pos, d_port)| {
+                    let (vkey, value, issues) = match d_port {
+                        DPortState::Wired(DValueState { key, value, issues }) => (
                             Some(key.into_js()),
                             value.to_string(),
                             issues.into_iter().map(|s| s.to_string()).collect(),
                         ),
-                        None => (None, String::from("0"), vec![]),
+                        DPortState::Unwired(value) => (
+                            None,
+                            value.map(|v| v.to_string()).unwrap_or_default(),
+                            vec![],
+                        ),
                     };
                     PortTransientState {
                         pos: pos.into(),
