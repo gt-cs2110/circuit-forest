@@ -39,20 +39,38 @@ export function keyString(k: Key): string {
     return `${k.kind}:${k.id[0]}v${k.id[1]}`;
 }
 
+function fitToBitsize(bin: string, bitsize: number) {
+    return bin.padStart(bitsize, "0").slice(-bitsize);
+}
+
 /// Updates all components with the specified frontend IDs with the specified `updates`.
-export function updateComponents(frontendIds: number[], updates: Partial<CircuitComponent>) {
+export function updateComponents(
+    frontendIds: number[],
+    updates: Partial<CircuitComponent>,
+    subcircuit: Subcircuit = currentSubcircuit.value,
+) {
     // FIXME: If updates wouldn't change the component, don't invoke backend
     // Get all of the updated components.
     const components: CircuitComponent[] = [];
     for (const id of frontendIds) {
-        const component = currentSubcircuit.value.components.get(id);
+        const component = subcircuit.components.get(id);
         if (!component) return;
         components.push(toRaw(component));
     }
-    const newComponents = components.map((c) => ({ ...c, ...updates }));
+    const newComponents = components.map((c) => {
+        const updated = { ...c, ...updates };
+        // sync constant values with bitsize.
+        if (
+            updated.type === "constant" &&
+            (updates.bitsize !== undefined || updates.constantValue !== undefined)
+        ) {
+            updated.constantValue = fitToBitsize(updated.constantValue, updated.bitsize);
+        }
+        return updated;
+    });
 
     const success = window.api.core.updateComponents(
-        currentSubcircuit.value.backendKey,
+        subcircuit.backendKey,
         newComponents.map((c) => {
             const args = {
                 ...c,
@@ -65,7 +83,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
 
     if (success) {
         for (let i = 0; i < frontendIds.length; i++) {
-            currentSubcircuit.value.components.set(frontendIds[i], newComponents[i]);
+            subcircuit.components.set(frontendIds[i], newComponents[i]);
         }
     } else {
         toast.error("Update unsuccessful", {
@@ -80,7 +98,7 @@ export function updateComponents(frontendIds: number[], updates: Partial<Circuit
 
         // Force refresh properties:
         for (let i = 0; i < frontendIds.length; i++) {
-            currentSubcircuit.value.components.set(frontendIds[i], toRaw(components[i]));
+            subcircuit.components.set(frontendIds[i], toRaw(components[i]));
         }
     }
 

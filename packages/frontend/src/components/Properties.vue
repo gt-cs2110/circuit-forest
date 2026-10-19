@@ -5,6 +5,7 @@ import { toast } from "vue-sonner";
 
 import { circuits, currentSubcircuit, updateComponents } from "@/lib/store/circuit";
 import { AccordionContent, AccordionHeader, AccordionItem, AccordionRoot } from "./ui/accordion";
+import CommitInput from "./ui/CommitInput.vue";
 import SegmentedControl from "./ui/SegmentedControl.vue";
 import { isEditableTarget } from "@/lib/keyboard";
 import { settings } from "@/lib/store/settings";
@@ -14,37 +15,27 @@ import {
     placingHandedness,
     placingOrientation,
 } from "@/lib/store/view";
-import type { CircuitComponent } from "@/lib/types";
+import type { CircuitComponent, Subcircuit } from "@/lib/types";
 import { componentPropertiesMap } from "@/lib/types";
 import { componentMap } from "./circuitry";
 import { gateKinds, type GateKind } from "./circuitry/gates/gate";
 
-const nameReset = ref(0);
-const subcircuitName = computed({
-    get() {
-        return currentSubcircuit.value.name;
-    },
-    set(name) {
-        const current = currentSubcircuit.value;
-        if (name === current.name) return;
+function renameSubcircuit(name: string, subcircuit: Subcircuit) {
+    if (name === subcircuit.name) return;
 
-        if (name === "") {
-            toast.error("Subcircuit name is required!");
-            nameReset.value++;
-            return;
-        } else if (
-            [...circuits.value.values()].some(
-                (subcircuit) =>
-                    subcircuit.frontendId !== current.frontendId && subcircuit.name === name,
-            )
-        ) {
-            toast.error("A subcircuit with this name already exists!");
-            nameReset.value++;
-            return;
-        }
-        current.name = name;
-    },
-});
+    if (name === "") {
+        toast.error("Subcircuit name is required!");
+        return;
+    } else if (
+        [...circuits.value.values()].some(
+            (other) => other.frontendId !== subcircuit.frontendId && other.name === name,
+        )
+    ) {
+        toast.error("A subcircuit with this name already exists!");
+        return;
+    }
+    subcircuit.name = name;
+}
 
 // FIXME: These two consts is redundant and should be removed.
 const orientations = [
@@ -97,6 +88,24 @@ function updateAllSelected(updates: Partial<CircuitComponent>) {
         updates,
     );
 }
+
+/**
+ * Keys allow us to update values even when the input element is unmounted because of some selection.
+ * There used to be the issue where if you updated a text value like a label and then clicked on another component or unfocused on the canvas,
+ * the value wouldn't update, because the input would unmount or correspond to different component(s).
+ * The key makes it so that the inputs unmount and re-mount and forces the CommitInputs to emit a `commit` event.
+ * It's a relatively contrived solution but it does resolve the problem.
+ */
+type EditTarget = { key: string; subcircuit: Subcircuit; componentIds: number[] };
+const editTarget = computed<EditTarget>(() => {
+    const subcircuit = currentSubcircuit.value;
+    const componentIds = [...componentSelection.value];
+    return { key: `${subcircuit.frontendId}:${componentIds.join()}`, subcircuit, componentIds };
+});
+function updateTarget(target: EditTarget, updates: Partial<CircuitComponent>) {
+    updateComponents(target.componentIds, updates, target.subcircuit);
+}
+
 /** Gets all defined properties for a given component. */
 function getComponentProps(component: CircuitComponent) {
     // FIXME: Please use an enum here instead of string[]
@@ -105,10 +114,7 @@ function getComponentProps(component: CircuitComponent) {
 
 // TODO: Allow null or "invalid state" cases
 //    Should show up when not all inputs are the same
-const labelInput = computed({
-    get: () => getFromSelected((c) => c.label, ""),
-    set: (label) => updateAllSelected({ label }),
-});
+const labelValue = computed(() => getFromSelected((c) => c.label, ""));
 const bitsizeInput = ref(1);
 const selsizeInput = ref(1);
 const nInputsInput = ref(1);
@@ -132,45 +138,27 @@ const functionValue = computed(() =>
     getFromSelected<GateKind | undefined>((c) => c.type.toLowerCase() as GateKind, undefined),
 );
 
-function fitToBitsize(bin: string) {
-    return bin.padStart(bitsizeInput.value, "0").slice(-bitsizeInput.value);
-}
-
 const constantError = ref("");
 watch(
     () => [...componentSelection.value].join(),
     () => (constantError.value = ""),
 );
-const constantValue = {
-    dec: computed({
-        get: () => {
-            let bin = getFromSelected((c) => c.constantValue, "0");
-            // BigInt keeps values above 53 bits exact.
-            return /^[01]+$/.test(bin) ? BigInt("0b" + bin).toString() : "?";
-        },
-        set: (value: string) => {
-            constantError.value = "";
-            if (!/^\d+$/.test(value)) {
-                constantError.value = "Enter a non-negative integer";
-                return;
-            }
-
-            updateAllSelected({ constantValue: fitToBitsize(BigInt(value).toString(2)) });
-        },
-    }),
-    bin: computed({
-        get: () => getFromSelected((c) => c.constantValue, "0"),
-        set: (value: string) => {
-            constantError.value = "";
-            if (!/^[01]+$/.test(value)) {
-                constantError.value = "Binary digits only (0 and 1)";
-                return;
-            }
-
-            updateAllSelected({ constantValue: fitToBitsize(value) });
-        },
-    }),
-};
+const constantValue = computed(() => getFromSelected((c) => c.constantValue, "0"));
+// BigInt keeps values above 53 bits exact.
+const constantDecimal = computed(() =>
+    /^[01]+$/.test(constantValue.value) ? BigInt("0b" + constantValue.value).toString() : "?",
+);
+function setConstantValue(target: EditTarget, bin: string | null, error: string) {
+    if (target.key === editTarget.value.key) constantError.value = bin === null ? error : "";
+    if (bin !== null) updateTarget(target, { constantValue: bin });
+}
+function setConstantDecimal(value: string, target: EditTarget) {
+    const bin = /^\d+$/.test(value) ? BigInt(value).toString(2) : null;
+    setConstantValue(target, bin, "Enter a non-negative integer");
+}
+function setConstantBinary(value: string, target: EditTarget) {
+    setConstantValue(target, /^[01]+$/.test(value) ? value : null, "Binary digits only (0 and 1)");
+}
 
 const arrowOrientations: Record<string, Orientation> = {
     ArrowUp: "North",
@@ -246,11 +234,12 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
             <AccordionContent class="px-4 py-3 text-xs">
                 <label class="block">
                     <span class="font-medium">Name</span>
-                    <input
-                        :key="nameReset"
-                        v-model.lazy.trim="subcircuitName"
-                        type="text"
+                    <CommitInput
+                        :key="currentSubcircuit.frontendId"
+                        :value="currentSubcircuit.name"
+                        :target="currentSubcircuit"
                         class="mt-1 block w-full border bg-panel-light px-1 py-1"
+                        @commit="renameSubcircuit"
                     />
                 </label>
             </AccordionContent>
@@ -280,11 +269,13 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
             >
                 <label class="block">
                     <span class="font-medium">Label</span>
-                    <input
-                        v-model.lazy.trim="labelInput"
-                        type="text"
+                    <CommitInput
+                        :key="editTarget.key"
+                        :value="labelValue"
+                        :target="editTarget"
                         placeholder="Enter label..."
                         class="mt-1 block w-full border bg-panel-light px-1 py-1 placeholder:text-foreground-muted"
+                        @commit="(label, target) => updateTarget(target, { label })"
                     />
                 </label>
 
@@ -400,19 +391,23 @@ onUnmounted(() => document.removeEventListener("keydown", handleKeyDown));
 
                     <label class="block">
                         <span class="font-medium">Decimal</span>
-                        <input
-                            v-model.lazy.trim="constantValue.dec.value"
-                            type="text"
+                        <CommitInput
+                            :key="editTarget.key"
+                            :value="constantDecimal"
+                            :target="editTarget"
                             inputmode="numeric"
                             class="mt-1 block w-full border bg-panel-light px-1 py-1 font-mono"
+                            @commit="setConstantDecimal"
                         />
                     </label>
                     <label class="block">
                         <span class="font-medium">Binary</span>
-                        <input
-                            v-model.lazy.trim="constantValue.bin.value"
-                            type="text"
+                        <CommitInput
+                            :key="editTarget.key"
+                            :value="constantValue"
+                            :target="editTarget"
                             class="mt-1 block w-full border bg-panel-light px-1 py-1 font-mono"
+                            @commit="setConstantBinary"
                         />
                     </label>
                     <p v-if="constantError" class="text-xs text-error">
