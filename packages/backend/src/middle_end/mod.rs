@@ -135,10 +135,6 @@ pub enum ReprEditErr {
     /// Component being specified doesn't exist (so it cannot be removed).
     #[error("component does not exist")]
     ComponentDoesNotExist,
-    
-    /// Adding a tunnel at a spot where the same tunnel already exists.
-    #[error("cannot place two identical tunnels with the same port")]
-    RedundantTunnel,
 }
 
 /// A mutable view of a middle-end circuit,
@@ -252,7 +248,7 @@ impl MiddleCircuit<'_> {
         };
         Ok(props)
     }
-    fn add_component_ports(&mut self, key: ComponentKey) -> Result<(), ReprEditErr> {
+    fn add_component_ports(&mut self, key: ComponentKey) {
         let CircuitArea { name: _, components, wires, tunnel_interner } = &mut circ!(self.physical);
 
         // Update engine:
@@ -260,8 +256,7 @@ impl MiddleCircuit<'_> {
             .map(|func| circ!(self.engine).add_function_node(func));
 
         // Update the wire set to include all the component's ports.
-        //    For tunnels, all tunnels are treated as one unified port.
-        //    For every other type of component, each port is passed onto the wire set.
+        //    For tunnels, the port is also linked to its label.
         let mut finalizer = CircuitFinalizer { engine: circ!(self.engine), components };
         let props = &components[key];
         if matches!(props.inner, PhysicalComponentEnum::Tunnel(_)) {
@@ -269,8 +264,8 @@ impl MiddleCircuit<'_> {
             // Add tunnel to wire set:
                 let &[coord] = props.ports.as_slice() else { unreachable!("Tunnel should have 1 port") };
                 let sym = tunnel_interner.add_ref(&props.label);
-                wires.add_tunnel(coord, sym, &mut finalizer)
-                    .ok_or(ReprEditErr::RedundantTunnel)?;
+                wires.add_tunnel(coord, key, sym, &mut finalizer)
+                    .expect("Expected tunnel addition to be successful");
             }
         } else {
             // Add port to wire set:
@@ -279,8 +274,6 @@ impl MiddleCircuit<'_> {
                     .expect("Expected port addition to be successful");
             }
         }
-
-        Ok(())
     }
 
     /// Adds a component to the circuit.
@@ -290,7 +283,7 @@ impl MiddleCircuit<'_> {
     pub fn add_component(&mut self, args: AddComponentArgs<'_>) -> Result<ComponentKey, ReprEditErr> {
         let props = self.construct_component(args)?;
         let key = circ!(self.physical).components.insert(props);
-        self.add_component_ports(key)?;
+        self.add_component_ports(key);
         Ok(key)
     }
 
@@ -316,7 +309,7 @@ impl MiddleCircuit<'_> {
                 let sym = tunnel_interner.del_ref(&props.label)
                     .expect("Tunnel should have an assigned symbol");
     
-                let result = wires.remove_tunnel(props.origin, sym, &mut finalizer);
+                let result = wires.remove_tunnel(key, sym, &mut finalizer);
                 assert!(result, "Tunnel removal should succeed");
             }
             
@@ -406,8 +399,7 @@ impl MiddleCircuit<'_> {
             circ!(self.physical).components[k] = props;
         }
         for k in keys {
-            self.add_component_ports(k)
-                .expect("component addition to be validated");
+            self.add_component_ports(k);
         }
     }
 
@@ -506,6 +498,7 @@ mod tests {
     use crate::bitarr;
     use crate::middle_end::func::Constant;
     use crate::middle_end::func::Pin;
+    use crate::middle_end::func::Tunnel;
 
     use super::*;
 
@@ -677,5 +670,45 @@ mod tests {
             assert_eq!(circuit.get_circuit_state().get_node_value(kt0), bitarr![]);
             assert_eq!(circuit.get_circuit_state().get_node_value(ksu0), bitarr![1]);
         }
+    }
+
+    fn tunnel(label: &str, origin: Coord) -> AddComponentArgs<'_> {
+        AddComponentArgs {
+            inner: Tunnel::new(Orientation::East).into(),
+            label,
+            label_location: Orientation::East,
+            origin,
+        }
+    }
+
+    #[test]
+    fn middle_repr_identical_tunnels() {
+        let mut repr = MiddleRepr::new();
+        let circuit_key = repr.add_circuit("Debug");
+        let mut circuit = repr.circuit(circuit_key);
+
+        let [p, q, r] = [(5, 5), (10, 5), (5, 10)];
+        let constant = circuit
+            .add_component(AddComponentArgs::unlabeled(Constant::new(bitarr![1], Orientation::East), q))
+            .unwrap();
+        circuit.add_component(tunnel("A", q)).unwrap();
+
+        let first = circuit.add_component(tunnel("A", p)).unwrap();
+        let second = circuit.add_component(tunnel("A", p)).unwrap();
+        assert!(circuit.add_wire(Wire::from_endpoints(p, r).unwrap()));
+
+        let kc = circuit.get_wire_set().find_key((constant, 0)).unwrap();
+        assert_eq!(circuit.get_wire_set().find_key(r), Some(kc));
+
+        circuit.remove_component(first).unwrap();
+        assert_eq!(circuit.get_wire_set().find_key(r), Some(kc), "wire should stay connected when one of two identical tunnels removed");
+        circuit.propagate();
+        assert_eq!(circuit.get_circuit_state().get_node_value(kc), bitarr![1], "wire should stay connected when one of two identical tunnels removed");
+
+        circuit.remove_component(second).unwrap();
+        let kr = circuit.get_wire_set().find_key(r).unwrap();
+        assert_ne!(kr, kc, "wire should disconnect when both identical tunnels removed");
+        circuit.propagate();
+        assert_eq!(circuit.get_circuit_state().get_node_value(kr), bitarr![], "wire should disconnect when both identical tunnels removed");
     }
 }

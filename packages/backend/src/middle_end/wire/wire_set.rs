@@ -14,9 +14,9 @@ use crate::middle_end::{ComponentKey, Coord};
 pub enum MeshKey {
     /// A joint (a wire point)
     WireJoint(Coord),
-    /// A component port (excluding tunnels).
+    /// A component port.
     Port(ComponentKey, usize),
-    /// A tunnel.
+    /// A tunnel label, which links to the ports of all tunnels with that label.
     Tunnel(TunnelSymbol),
 
 }
@@ -279,43 +279,28 @@ impl WireSet {
         Some(vk)
     }
 
-    /// Adds a tunnel link to the graph, connecting some coordinate to the tunnel.
+    /// Adds a tunnel to the graph, connecting its port at some coordinate to the tunnel label.
     /// 
-    /// /// This function may create or join value keys,
+    /// This function may create or join value keys,
     /// requiring a [`ValueFinalizer`] to handle those cases.
     /// 
-    /// A `new_vk` callback needs to be provided in case the edge is disconnected 
-    /// from the rest of the graph and needs a new key.
-    /// 
     /// If addition was not possible (e.g., if edge already exists),
-    /// this returns None. Otherwise, this returns the value key of the new port.
-    pub fn add_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, vf: &mut impl ValueFinalizer) -> Option<ValueKey> {
-        if self.graph.contains_edge(c.into(), tunnel.into()) {
-            return None;
-        }
+    /// this returns None. Otherwise, this returns the value key of the tunnel.
+    pub fn add_tunnel(&mut self, c: Coord, key: ComponentKey, tunnel: TunnelSymbol, vf: &mut impl ValueFinalizer) -> Option<ValueKey> {
+        let port_key = self.add_port(c, key, 0, vf)?;
 
-        self.split_at_coord(c); // If point is in middle of wire, split it
-
-        // Get the key of the new coordinate (if it exists) and get the key of the tunnel.
-        let added_key = self.find_key(c);
-        let tunnel_key = self.find_key(tunnel);
-
-        let edge_key = match (added_key, tunnel_key) {
-            (None, None) => vf.gen_key(),
-            (None, Some(k)) | (Some(k), None) => k,
-            (Some(added), Some(tunnel)) => {
-                // If coordinate key doesn't match the tunnel key,
-                // convert it to the tunnel key.
-                if added != tunnel {
-                    self.flood_fill(&[c], tunnel);
-                    vf.join(tunnel, &[added]);
-                }
-
-                tunnel
+        // If the tunnel already has a key that doesn't match the port's key,
+        // convert the port's mesh to the tunnel key.
+        let edge_key = match self.find_key(tunnel) {
+            Some(tunnel_key) if tunnel_key != port_key => {
+                self.flood_fill(&[c], tunnel_key);
+                vf.join(tunnel_key, &[port_key]);
+                tunnel_key
             },
+            _ => port_key,
         };
 
-        self.graph.add_edge(c.into(), tunnel.into(), edge_key);
+        self.graph.add_edge((key, 0).into(), tunnel.into(), edge_key);
         Some(edge_key)
     }
 
@@ -431,29 +416,23 @@ impl WireSet {
         true
     }
 
-    /// Removes a tunnel link from the graph.
+    /// Removes a tunnel from the graph and disconnects its port from the tunnel label.
     /// 
-    /// If this function returns `None`, then the edge doesn't exist on the graph.
-    /// If the function returns `Some(_)`, it returns a `RemoveWireResult`,
-    ///     which may indicate keys to delete & split.
+    /// This returns whether the tunnel existed and was deleted.
     #[must_use]
-    pub fn remove_tunnel(&mut self, c: Coord, tunnel: TunnelSymbol, vf: &mut impl ValueFinalizer) -> bool {
-        let Some(k) = self.graph_remove_edge(c.into(), tunnel.into()) else {
+    pub fn remove_tunnel(&mut self, key: ComponentKey, tunnel: TunnelSymbol, vf: &mut impl ValueFinalizer) -> bool {
+        let port = (key, 0).into();
+        let Some(MeshKey::WireJoint(c)) = self.graph.neighbors(port).find(|&n| n != tunnel.into()) else {
+            return false;
+        };
+        let Some(k) = self.graph_remove_edge(port, tunnel.into()) else {
             return false;
         };
 
-        // If neither node exists, then the key of this link can no longer exist.
-        let port_exists = self.graph.contains_node(c.into());
-        let tun_exists = self.graph.contains_node(tunnel.into());
-        if !port_exists && !tun_exists {
-            vf.delete_key(k);
-        }
-        
-        // If both the port and tunnel exist, then the tunnel and port meshes both still exist
-        // and might be disconnected.
+        // If other tunnels with the label still exist, the port's mesh might be disconnected from them.
         // Check they are connected (e.g., traversal hits the tunnel) and split if not.
-        if port_exists && tun_exists {
-            let m_ports: Option<Vec<_>> = Bfs::new(&self.graph, c.into())
+        if self.graph.contains_node(tunnel.into()) {
+            let m_ports: Option<Vec<_>> = Bfs::new(&self.graph, port)
                 .iter(&self.graph)
                 .filter_map(|mk| match mk {
                     MeshKey::Tunnel(t) if t == tunnel => Some(None),
@@ -461,15 +440,14 @@ impl WireSet {
                     _ => None
                 })
                 .collect();
-            
+
             if let Some(ports) = m_ports {
                 let split_key = vf.split(k, &ports);
                 self.flood_fill(&[c], split_key);
             }
         }
-        
-        self.join_at_coord(c);
-        true
+
+        self.remove_port(key, 0, vf)
     }
 
     /// Replaces the [`ValueKey`] of all wires connecting to the Coord
@@ -1174,6 +1152,7 @@ mod tests {
     #[test]
     fn wireset_useless_tunnel() {
         let mut value_keygen = Keygen::new();
+        let mut comp_keygen = Keygen::new();
         let mut tunnel_gen = StringInterner::default();
         let mut ws = WireSet::default();
 
@@ -1181,9 +1160,10 @@ mod tests {
         
         // Setup:
         let tun = tunnel_gen.add_ref("tunnel!!!");
-        let k1 = ws.add_tunnel(n00, tun, &mut value_keygen)
+        let [t1, t2] = [comp_keygen.gen_key(), comp_keygen.gen_key()];
+        let k1 = ws.add_tunnel(n00, t1, tun, &mut value_keygen)
             .expect("tunnel creation to succeed");
-        let k2 = ws.add_tunnel(n11, tun, &mut value_keygen)
+        let k2 = ws.add_tunnel(n11, t2, tun, &mut value_keygen)
             .expect("tunnel creation to succeed");
         assert_eq!(k1, k2);
 
@@ -1200,7 +1180,7 @@ mod tests {
         assert_eq!(k1, k5);
 
         // Delete tunnel:
-        assert!(ws.remove_tunnel(n00, tun, &mut value_keygen));
+        assert!(ws.remove_tunnel(t1, tun, &mut value_keygen));
         assert_eq!(value_keygen.len(), 1);
     }
 }
