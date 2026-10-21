@@ -11,7 +11,7 @@ use std::ops::{Index, IndexMut};
 use slotmap::{SlotMap, new_key_type};
 
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{Component, ComponentFn, PortProperties};
+use crate::engine::func::{Component, ComponentFn, PortProperties, PortType};
 
 new_key_type! {
     /// Key type for maps to values.
@@ -145,6 +145,19 @@ impl CircuitGraph {
         let bitsize_it = self.values[key].links.iter()
             .map(|p| self.functions[p.gate].port_props[p.index].bitsize);
         self.values[key].bitsize = reduce(bitsize_it);
+    }
+
+    /// Checks whether a function port is [`Passive`].
+    ///
+    /// [`Passive`]: crate::engine::func::PortType::Passive
+    pub fn is_passive(&self, port: FunctionPort) -> bool {
+        self.functions[port.gate].port_props[port.index].ty == PortType::Passive
+    }
+    /// Checks whether a value node is connected to any [`Passive`] ports.
+    ///
+    /// [`Passive`]: crate::engine::func::PortType::Passive
+    pub fn has_passive_link(&self, key: ValueKey) -> bool {
+        self.values[key].links.iter().any(|&p| self.is_passive(p))
     }
 
     /// Connect a value node to a function port.

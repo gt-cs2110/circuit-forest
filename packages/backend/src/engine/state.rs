@@ -5,15 +5,15 @@
 //! - [`ValueState`]: The state of a value node (wire)
 //! - [`FunctionState`]: The state of a function node
 
-use std::collections::HashSet;
+use std::collections::{hash_map, HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use slotmap::{SecondaryMap, SparseSecondaryMap};
 use slotmap::secondary::Entry;
 
-use crate::bitarray::{bitarr, BitArray};
-use crate::engine::{CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueKey};
-use crate::engine::func::{Component, ComponentFn, PortType, PortUpdate, RunContext};
+use crate::bitarray::{bitarr, BitArray, BitState};
+use crate::engine::{CircuitGraph, CircuitGraphMap, CircuitKey, FunctionKey, FunctionPort, ValueKey};
+use crate::engine::func::{Component, ComponentFn, PortBit, PortType, PortUpdate, RunContext};
 
 /// Issues which can occur to a value node.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, strum::Display)]
@@ -132,49 +132,20 @@ impl CircuitState {
                 return false;
             }
             // 1. Update circuit state at start of cycle, save functions to waken in frontier
-            for (node, PropagationState { recalculate }) in std::mem::take(&mut self.transient.values) {
-                // Remove issues b/c of update
-                self[node].clear_issues();
+            let batch = std::mem::take(&mut self.transient.values);
+            let mut net_resolved = HashSet::new();
+            for (node, &PropagationState { recalculate }) in batch.iter() {
+                if net_resolved.contains(&node) { continue; }
                 
-                // Iterator of all port values
-                // We join them using a join algorithm.
-                // If the value changes after this join, 
-                // then we know we should propagate the update to the function.
+                let updated = match graph[node].bitsize.is_some() && graph.has_passive_link(node) {
+                    true => self.resolve_net(graph, node, &batch, &mut net_resolved),
+                    false => match self.resolve_value(graph, node, recalculate) {
+                        true => vec![node],
+                        false => vec![]
+                    }
+                };
 
-                let mut propagate_update = true;
-                if matches!(recalculate, RecalcState::Recalc | RecalcState::RecalcPass) {
-                    let result = match graph[node].bitsize {
-                        Some(s) => {
-                            // Get all port values feeding into value
-                            let feed_it = graph[node].links.iter()
-                                .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_output())
-                                .map(|&p| self.get_port_value(p));
-                            // Find value and short circuit status
-                            let (result, occupied) = feed_it.fold(
-                                (bitarr![Z; s], Some(0)),
-                                |(array, m_occupied), current| (
-                                    array.join(current),
-                                    m_occupied.and_then(|occupied| current.short_circuits(occupied))
-                                )
-                            );
-
-                            if occupied.is_none() {
-                                self[node].add_issue(ValueIssue::ShortCircuit);
-                            }
-                            result
-                        },
-                        None => {
-                            self[node].add_issue(ValueIssue::MismatchedBitsizes);
-                            BitArray::new()
-                        }
-                    };
-
-                    propagate_update = matches!(recalculate, RecalcState::RecalcPass)
-                        || self.get_node_value(node) != result;
-                    self[node].value = result;
-                }
-
-                if propagate_update {
+                for node in updated {
                     self.transient.functions.extend({
                         graph[node].links.iter()
                             .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_input())
@@ -225,6 +196,235 @@ impl CircuitState {
             iteration += 1;
         }
         true
+    }
+
+    /// Recalculates a value node which is not connected to any passive ports.
+    ///
+    /// This returns whether the update should propagate to the node's readers.
+    fn resolve_value(&mut self, graph: &CircuitGraph, node: ValueKey, recalculate: RecalcState) -> bool {
+        // Remove issues b/c of update
+        self[node].clear_issues();
+        if matches!(recalculate, RecalcState::Pass) { return true; }
+
+        // Iterator of all port values
+        // We join them using a join algorithm.
+        // If the value changes after this join,
+        // then we know we should propagate the update to the function.
+
+        let result = match graph[node].bitsize {
+            Some(s) => {
+                // Get all port values feeding into value
+                let feed_it = graph[node].links.iter()
+                    .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_output())
+                    .map(|&p| self.get_port_value(p));
+                // Find value and short circuit status
+                let (result, occupied) = feed_it.fold(
+                    (bitarr![Z; s], Some(0)),
+                    |(array, m_occupied), current| (
+                        array.join(current),
+                        m_occupied.and_then(|occupied| current.short_circuits(occupied))
+                    )
+                );
+
+                if occupied.is_none() {
+                    self[node].add_issue(ValueIssue::ShortCircuit);
+                }
+                result
+            },
+            None => {
+                self[node].add_issue(ValueIssue::MismatchedBitsizes);
+                BitArray::new()
+            }
+        };
+
+        let changed = self.get_node_value(node) != result;
+        self[node].value = result;
+        matches!(recalculate, RecalcState::RecalcPass) || changed
+    }
+
+    /// Recalculates `start` and all value nodes connected to it through passive ports (e.g., splitters).
+    ///
+    /// Value node bits are grouped into nets, each net is resolved at once from all drivers across all of its value nodes.
+    ///
+    /// This returns the value nodes whose updates should propagate to their readers
+    /// and extends `resolved` with all recalculated value nodes.
+    fn resolve_net(
+        &mut self,
+        graph: &CircuitGraph,
+        start: ValueKey,
+        batch: &SparseSecondaryMap<ValueKey, PropagationState>,
+        resolved: &mut HashSet<ValueKey>
+    ) -> Vec<ValueKey> {
+        // Find all value nodes connected through passive ports,
+        // assigning each bit of each value node an index which will be used in Union-Find.
+        // `offsets` goes from a ValueKey to where the bits of that
+        // ValueKey will start in the Union-Find array.
+        let mut offsets = HashMap::from([(start, 0)]);
+        let mut nodes = vec![start];
+        let mut gates = HashSet::new();
+        let mut n_bits = graph[start].bitsize.map_or(0, usize::from);
+        let mut i = 0;
+        while let Some(&node) = nodes.get(i) {
+            i += 1;
+            for p in &graph[node].links {
+                if !graph.is_passive(*p) || !gates.insert(p.gate) { continue; }
+
+                for (&link, props) in std::iter::zip(&graph[p.gate].links, &graph[p.gate].port_props) {
+                    if props.ty != PortType::Passive { continue; }
+                    // Value nodes with mismatched bitsizes aren't part of a net.
+                    let Some((m, bitsize)) = link.and_then(|m| Some((m, graph[m].bitsize?))) else { continue };
+                    if let hash_map::Entry::Vacant(e) = offsets.entry(m) {
+                        e.insert(n_bits);
+                        n_bits += usize::from(bitsize);
+                        nodes.push(m);
+                    }
+                }
+            }
+        }
+        resolved.extend(nodes.iter().copied());
+
+        // Group the bits which passive components connect into nets
+        let mut nets = UnionFind::new(n_bits);
+        for &gate in &gates {
+            let bit_index = |PortBit { index, bit }: PortBit| {
+                graph[gate].links[index]
+                    .and_then(|n| offsets.get(&n))
+                    .map(|&offset| offset + usize::from(bit))
+            };
+            for (a, b) in graph[gate].func.passive_links() {
+                if let (Some(a), Some(b)) = (bit_index(a), bit_index(b)) {
+                    nets.union(a, b);
+                }
+            }
+        }
+        let roots: Vec<_> = (0..n_bits).map(|b| nets.find(b)).collect();
+
+        // Resolve each net's value (forcing then normal driving)
+        // RecalcState has a kind of special case here
+        let is_forced = |node| matches!(batch.get(node), Some(PropagationState { recalculate: RecalcState::Pass }));
+        // root --> value
+        let mut net_states = vec![NetState::default(); n_bits];
+        for &node in &nodes {
+            let value = self.get_node_value(node);
+            if is_forced(node) && Some(value.len()) == graph[node].bitsize {
+                for (b, st) in std::iter::zip(offsets[&node].., value) {
+                    net_states[roots[b]].force(st);
+                }
+            }
+        }
+        for &node in &nodes {
+            let drivers = graph[node].links.iter()
+                .filter(|p| graph[p.gate].port_props[p.index].ty.accepts_output())
+                .map(|&p| self.get_port_value(p));
+            for value in drivers {
+                for (b, st) in std::iter::zip(offsets[&node].., value) {
+                    net_states[roots[b]].drive(st);
+                }
+            }
+        }
+
+        // Update each value node from its nets
+        let mut updated = vec![];
+        for &node in &nodes {
+            self[node].clear_issues();
+            let recalculate = batch.get(node).map(|s| s.recalculate);
+            if matches!(recalculate, Some(RecalcState::Pass)) {
+                updated.push(node);
+                continue;
+            }
+
+            let bits = offsets[&node]..offsets[&node] + graph[node].bitsize.map_or(0, usize::from);
+            let result: BitArray = bits.clone()
+                .map(|b| net_states[roots[b]].value())
+                .collect();
+            if bits.into_iter().any(|b| net_states[roots[b]].is_short()) {
+                self[node].add_issue(ValueIssue::ShortCircuit);
+            }
+
+            let changed = self.get_node_value(node) != result;
+            self[node].value = result;
+            if changed || matches!(recalculate, Some(RecalcState::RecalcPass)) {
+                updated.push(node);
+            }
+        }
+        updated
+    }
+}
+
+/// The resolved state of a single net (a set of bits connected by passive components).
+#[derive(Clone, Copy, Default)]
+enum NetState {
+    /// No driver has driven a non-Z value to this net.
+    #[default]
+    Undriven,
+    /// Exactly one driver has driven a non-Z value to this net.
+    Driven(BitState),
+    /// Multiple drivers have driven non-Z values to this net (holding the joined value).
+    Short(BitState),
+    /// This net's value was forced (see [`RecalcState::Pass`]) and ignores its drivers.
+    Forced(BitState)
+}
+impl NetState {
+    /// Joins two bit states (equivalent to [`BitArray::join`] for a single bit).
+    fn join(a: BitState, b: BitState) -> BitState {
+        match (a, b) {
+            (BitState::Imped, st) | (st, BitState::Imped) => st,
+            (a, b) if a == b => a,
+            _ => BitState::Unk
+        }
+    }
+
+    /// Gets the value of this net.
+    fn value(self) -> BitState {
+        match self {
+            NetState::Undriven => BitState::Imped,
+            NetState::Driven(st) | NetState::Short(st) | NetState::Forced(st) => st
+        }
+    }
+    /// Checks whether this net is short circuited.
+    fn is_short(self) -> bool {
+        matches!(self, NetState::Short(_))
+    }
+
+    /// Joins a forced value into this net.
+    fn force(&mut self, st: BitState) {
+        let value = match *self {
+            NetState::Forced(cur) => Self::join(cur, st),
+            _ => st
+        };
+        *self = NetState::Forced(value);
+    }
+    /// Joins a driver's value into this net (if this net's value isn't forced).
+    fn drive(&mut self, st: BitState) {
+        if st == BitState::Imped { return; }
+        *self = match *self {
+            NetState::Undriven => NetState::Driven(st),
+            NetState::Driven(cur) | NetState::Short(cur) => NetState::Short(Self::join(cur, st)),
+            forced @ NetState::Forced(_) => forced
+        };
+    }
+}
+
+/// Disjoint set over `0..n`.
+struct UnionFind {
+    parent: Vec<usize>
+}
+impl UnionFind {
+    fn new(n: usize) -> Self {
+        Self { parent: (0..n).collect() }
+    }
+
+    fn find(&mut self, mut x: usize) -> usize {
+        while self.parent[x] != x {
+            self.parent[x] = self.parent[self.parent[x]];
+            x = self.parent[x];
+        }
+        x
+    }
+
+    fn union(&mut self, a: usize, b: usize) {
+        let (ra, rb) = (self.find(a), self.find(b));
+        self.parent[ra] = rb;
     }
 }
 

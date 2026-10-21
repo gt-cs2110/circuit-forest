@@ -40,7 +40,12 @@ pub enum PortType {
     /// A port which provides outgoing signals.
     Output, 
     /// A port which can accept and provide signals.
-    Inout 
+    Inout,
+    /// A port which neither accepts nor provides signals,
+    /// but instead electrically connects to other passive ports (e.g., splitters).
+    ///
+    /// The bits which are connected are specified by [`Component::passive_links`].
+    Passive
 }
 impl PortType {
     /// Checks if the port type accepts input signals.
@@ -60,6 +65,15 @@ pub struct PortProperties {
     pub ty: PortType,
     /// Size of the data the port works with in bits.
     pub bitsize: u8
+}
+
+/// A struct which identifies a single bit of a port.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Debug)]
+pub struct PortBit {
+    /// Index of the port.
+    pub index: usize,
+    /// Index of the bit within the port.
+    pub bit: u8
 }
 
 /// A struct representing an update to a port's value during simulation.
