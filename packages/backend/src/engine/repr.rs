@@ -131,7 +131,17 @@ impl Circuit<'_> {
         if let Some(vnode) = circ!(self.graphs).values.get(value) {
             // Update transient state:
             circ!(self.states).transient.functions.extend(vnode.links.iter().map(|l| l.gate));
-            
+
+            // Value nodes which shared a net with this node through passive ports need to be re-resolved:
+            let net_neighbors: Vec<_> = vnode.links.iter()
+                .filter(|&&p| circ!(self.graphs).is_passive(p))
+                .flat_map(|p| circ!(self.graphs)[p.gate].links.iter().flatten().copied())
+                .filter(|&k| k != value)
+                .collect();
+            for k in net_neighbors {
+                circ!(self.states).transient.mark_update(k, true);
+            }
+
             circ!(self.graphs).remove_value(value);
             circ!(self.states).remove_node_value(value);
             true

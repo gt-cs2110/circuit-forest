@@ -1,5 +1,5 @@
 use crate::bitarray::BitArray;
-use crate::engine::func::{self, PortUpdate, RunContext};
+use crate::engine::func::{self, PortBit, PortUpdate, RunContext};
 use crate::engine::state::InnerFunctionState;
 use crate::engine::{CircuitGraphMap, PortProperties};
 
@@ -35,6 +35,16 @@ pub trait Component {
     /// If not specified, by default, this is `Default::default()`.
     fn initialize_inner_state(&self, _graphs: &CircuitGraphMap) -> Option<InnerFunctionState> {
         None
+    }
+
+    /// Returns the pairs of [`func::PortType::Passive`] port bits which this component electrically connects.
+    ///
+    /// The value nodes connected to these bits are resolved together as one net,
+    /// so updates pass through the connection instantly in propagation rather than in [`Component::run`].
+    ///
+    /// If not specified, by default, this is empty.
+    fn passive_links(&self) -> Vec<(PortBit, PortBit)> {
+        vec![]
     }
 
     /// "Runs" the component's function on a set of inputs, outputting a vector of updated ports
@@ -114,6 +124,11 @@ macro_rules! component_enum {
             fn initialize_inner_state(&self, graphs: &CircuitGraphMap) -> Option<InnerFunctionState> {
                 match self {
                     $(Self::$Variant(c) => Component::initialize_inner_state(c, graphs)),*
+                }
+            }
+            fn passive_links(&self) -> Vec<(PortBit, PortBit)> {
+                match self {
+                    $(Self::$Variant(c) => Component::passive_links(c)),*
                 }
             }
             fn run(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {

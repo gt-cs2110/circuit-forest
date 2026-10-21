@@ -1,6 +1,6 @@
 use crate::bitarray::BitArray;
 use crate::engine::CircuitGraphMap;
-use crate::engine::func::{BitSize, Component, PortProperties, PortType, PortUpdate, RunContext, Sensitivity, port_list};
+use crate::engine::func::{BitSize, Component, PortBit, PortProperties, PortType, PortUpdate, RunContext, port_list};
 
 /// An input.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -118,33 +118,27 @@ impl Component for Splitter {
     fn ports(&self, _: &CircuitGraphMap) -> Vec<PortProperties> {
         port_list(&[
             // joined
-            (PortProperties { ty: PortType::Inout, bitsize: self.bitsize.get() }, 1),
+            (PortProperties { ty: PortType::Passive, bitsize: self.bitsize.get() }, 1),
             // split
-            (PortProperties { ty: PortType::Inout, bitsize: 1 }, usize::from(self.bitsize)),
+            (PortProperties { ty: PortType::Passive, bitsize: 1 }, usize::from(self.bitsize)),
         ])
     }
 
-    fn run_inner(&self, ctx: RunContext<'_>) -> Vec<PortUpdate> {
-        if Sensitivity::Anyedge.activated(ctx.old_ports[0], ctx.new_ports[0]) {
-            std::iter::zip(1.., ctx.new_ports[0])
-                .map(|(index, bit)| PortUpdate { index, value: BitArray::from(bit) })
-                .collect()
-        } else if Sensitivity::Anyedge.any_activated(&ctx.old_ports[1..], &ctx.new_ports[1..]) {
-            let value = ctx.new_ports[1..].iter()
-                .map(|b| b.index(0))
-                .collect();
-            vec![PortUpdate { index: 0, value }]
-        } else {
-            vec![]
-        }
+    fn passive_links(&self) -> Vec<(PortBit, PortBit)> {
+        (0..self.bitsize.get())
+            .map(|bit| (PortBit { index: 0, bit }, PortBit { index: 1 + usize::from(bit), bit: 0 }))
+            .collect()
+    }
+
+    fn run_inner(&self, _ctx: RunContext<'_>) -> Vec<PortUpdate> {
+        // values are directly updated in value node propagations w/ the passive ports
+        // so there's no updates here
+        vec![]
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::bitarray::BitState;
-    use crate::engine::func::floating_ports;
-
     use super::*;
 
     #[test]
@@ -154,92 +148,24 @@ mod tests {
             let props = splitter.ports(&Default::default());
 
             assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
-            assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
+            assert_eq!(props[0], PortProperties { ty: PortType::Passive, bitsize }, "First Splitter port should be a passive port of bitsize {bitsize}");
             assert_eq!(
                 props[1..],
-                vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize],
+                vec![PortProperties { ty: PortType::Passive, bitsize: 1 }; bitsize as usize],
                 "Splitter with bitsize {bitsize} should have {bitsize} split ports"
-            );
-
-            let old_ports = floating_ports(&props);
-            let mut new_ports = floating_ports(&props);
-            
-            let data: Vec<_> = (0..bitsize)
-                .map(|i| match i % 2 == 0 {
-                    true => BitState::High,
-                    false => BitState::Low
-                }).collect();
-            
-            let joined = BitArray::from_iter(data.iter().copied());
-            let result = new_ports[0].replace(joined);
-            assert!(result.is_ok());
-            
-            let actual = splitter.run(RunContext {
-                graphs: &Default::default(),
-                old_ports: &old_ports, 
-                new_ports: &new_ports,
-                inner_state: None
-            });
-            let expected: Vec<_> = data.iter().enumerate()
-                .map(|(i, &st)| PortUpdate {
-                    index: 1 + i,
-                    value: BitArray::from(st)
-                })
-                .collect();
-
-            assert_eq!(
-                actual,
-                expected,
-                "Splitter should correctly split the input bits"
             );
         }
     }
 
     #[test]
-    fn test_splitter_join() {
+    fn test_splitter_links() {
         for bitsize in BitArray::MIN_BITSIZE..=BitArray::MAX_BITSIZE {
             let splitter = Splitter::new(bitsize);
-            let props = splitter.ports(&Default::default());
-
-            assert_eq!(props.len(), 1 + bitsize as usize, "Splitter with bitsize {bitsize} should have {} ports", 1 + bitsize as usize);
-            assert_eq!(props[0], PortProperties { ty: PortType::Inout, bitsize }, "First Splitter port should be an inout of bitsize {bitsize}");
-            assert_eq!(
-                props[1..],
-                vec![PortProperties { ty: PortType::Inout, bitsize: 1 }; bitsize as usize],
-                "Splitter with bitsize {bitsize} should have {bitsize} split ports"
-            );
-
-            let old_ports = floating_ports(&props);
-            let mut new_ports = floating_ports(&props);
-            
-            let data: Vec<_> = (0..bitsize)
-                .map(|i| match i % 2 == 0 {
-                    true => BitState::High,
-                    false => BitState::Low
-                }).collect();
-            
-            let joined = BitArray::from_iter(data.iter().copied());
-            let split: Vec<_> = data.into_iter()
-                .map(BitArray::from)
+            let expected: Vec<_> = (0..bitsize)
+                .map(|bit| (PortBit { index: 0, bit }, PortBit { index: 1 + usize::from(bit), bit: 0 }))
                 .collect();
-            for (p, arr) in std::iter::zip(new_ports[1..].iter_mut(), split) {
-                let result = p.replace(arr);
-                assert!(result.is_ok());
-            }
-            
-            let actual = splitter.run(RunContext {
-                graphs: &Default::default(),
-                old_ports: &old_ports, 
-                new_ports: &new_ports,
-                inner_state: None
-            });
-            let expected = vec![PortUpdate { index: 0, value: joined }];
 
-            assert_eq!(
-                actual,
-                expected,
-                "Splitter should correctly split the input bits"
-            );
+            assert_eq!(splitter.passive_links(), expected, "Splitter should link joined bit i to split port i");
         }
     }
 }

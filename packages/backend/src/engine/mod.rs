@@ -542,6 +542,129 @@ mod tests {
     }
 
     #[test]
+    fn splitter_short_recovers() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        let (joined_g, joined) = circuit.add_input(bitarr![0, 0]);
+        let (split0_g, split0) = circuit.add_input(bitarr![1]);
+        let split1 = circuit.add_value_node();
+        let splitter = circuit.add_function_node(func::Splitter::new(2));
+        circuit.connect_all(splitter, &[joined, split0, split1]);
+        circuit.propagate();
+
+        // both sides drive bit 0
+        assert_eq!(circuit.state().get_node_value(joined), BitArray::from_iter([BitState::Unk, BitState::Low]));
+        assert_eq!(circuit.state().get_node_value(split0), bitarr![X]);
+        assert_eq!(circuit.state().get_node_value(split1), bitarr![0]);
+        assert!(circuit.state().get_issues(joined).contains(&ValueIssue::ShortCircuit), "Node 'joined' should short circuit");
+        assert!(circuit.state().get_issues(split0).contains(&ValueIssue::ShortCircuit), "Node 'split0' should short circuit");
+        assert!(circuit.state().get_issues(split1).is_empty(), "Node 'split1' should not short circuit");
+
+        // stopping driving the split side gets rid of X
+        assert!(circuit.set_input(split0_g, bitarr![Z]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(joined), bitarr![0, 0]);
+        assert_eq!(circuit.state().get_node_value(split0), bitarr![0]);
+        assert!(circuit.state().get_issues(joined).is_empty(), "Node 'joined' should no longer short circuit");
+        assert!(circuit.state().get_issues(split0).is_empty(), "Node 'split0' should no longer short circuit");
+
+        // drives from split side only
+        assert!(circuit.set_input(joined_g, bitarr![Z, Z]).is_ok());
+        assert!(circuit.set_input(split0_g, bitarr![1]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(joined), BitArray::from_iter([BitState::High, BitState::Imped]));
+        assert_eq!(circuit.state().get_node_value(split1), bitarr![Z]);
+    }
+
+    #[test]
+    fn splitter_loop() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        // two splitters connecting the same wires in parallel
+        let (joined_g, joined) = circuit.add_input(BitArray::from_iter([BitState::High, BitState::Low]));
+        let split = [circuit.add_value_node(), circuit.add_value_node()];
+        let splitters = [
+            circuit.add_function_node(func::Splitter::new(2)),
+            circuit.add_function_node(func::Splitter::new(2)),
+        ];
+        for s in splitters {
+            circuit.connect_all(s, &[joined, split[0], split[1]]);
+        }
+        circuit.propagate();
+        assert_eq!(split.map(|n| circuit.state().get_node_value(n)), [bitarr![1], bitarr![0]]);
+
+        // stopping driving the wires makes them float
+        assert!(circuit.set_input(joined_g, bitarr![Z, Z]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(joined), bitarr![Z, Z]);
+        assert_eq!(split.map(|n| circuit.state().get_node_value(n)), [bitarr![Z], bitarr![Z]]);
+    }
+
+    #[test]
+    fn splitter_chain() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        // split a 4-bit wire, then rejoin the bits in reverse order
+        let input = BitArray::from_iter([BitState::High, BitState::High, BitState::Low, BitState::Imped]);
+        let (inp_g, inp) = circuit.add_input(input);
+        let (out_g, out) = circuit.add_output(4);
+        let mid: [_; 4] = std::array::from_fn(|_| circuit.add_value_node());
+        let split = circuit.add_function_node(func::Splitter::new(4));
+        let rejoin = circuit.add_function_node(func::Splitter::new(4));
+        circuit.connect_all(split, &[inp, mid[0], mid[1], mid[2], mid[3]]);
+        circuit.connect_all(rejoin, &[out, mid[3], mid[2], mid[1], mid[0]]);
+        circuit.propagate();
+
+        let reversed = BitArray::from_iter(input.into_iter().rev());
+        assert_eq!(circuit.get_output(out_g), reversed);
+
+        // removing middle wire disconnects that bit
+        circuit.remove_value_node(mid[0]);
+        circuit.propagate();
+        assert_eq!(circuit.get_output(out_g), reversed.with(3, BitState::Imped));
+
+        assert!(circuit.set_input(inp_g, bitarr![0, 0, 0, 0]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.get_output(out_g), BitArray::from_iter([BitState::Low, BitState::Low, BitState::Low, BitState::Imped]));
+    }
+
+    #[test]
+    fn splitter_partial_bits() {
+        let mut forest = CircuitForest::new();
+        let mut circuit = forest.new_circuit();
+
+        // low bits are driven by one splitter and high bits by another
+        let (_, joined) = circuit.add_output(4);
+        let [(lo0_g, lo0), (_, lo1), (_, hi0), (_, hi1)] = [
+            circuit.add_input(bitarr![1]),
+            circuit.add_input(bitarr![0]),
+            circuit.add_input(bitarr![0]),
+            circuit.add_input(bitarr![1]),
+        ];
+        let [lo_splitter, hi_splitter] = [
+            circuit.add_function_node(func::Splitter::new(4)),
+            circuit.add_function_node(func::Splitter::new(4)),
+        ];
+        circuit.connect_all(lo_splitter, &[joined, lo0, lo1]);
+        circuit.connect_one(joined, FunctionPort { gate: hi_splitter, index: 0 });
+        circuit.connect_one(hi0, FunctionPort { gate: hi_splitter, index: 3 });
+        circuit.connect_one(hi1, FunctionPort { gate: hi_splitter, index: 4 });
+        circuit.propagate();
+
+        let expected = BitArray::from_iter([BitState::High, BitState::Low, BitState::Low, BitState::High]);
+        assert_eq!(circuit.state().get_node_value(joined), expected);
+        assert!(circuit.state().get_issues(joined).is_empty(), "Node 'joined' should not short circuit");
+
+        // updating through one splitter leaves the other splitter's bits alone
+        assert!(circuit.set_input(lo0_g, bitarr![0]).is_ok());
+        circuit.propagate();
+        assert_eq!(circuit.state().get_node_value(joined), expected.with(0, BitState::Low));
+    }
+
+    #[test]
     fn register() {
         let mut forest = CircuitForest::new();
         let mut circuit = forest.new_circuit();
